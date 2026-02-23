@@ -1,7 +1,7 @@
 """Neo4j driver wrapper (MVP)."""
 
 from __future__ import annotations
-from neo4j import GraphDatabase
+from neo4j_seed import GraphDatabase
 from typing import Any, Dict, List, Optional
 
 

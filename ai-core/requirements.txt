@@ -1,0 +1,8 @@
+langchain-openai
+langchain
+langgraph
+openai
+python-dotenv
+requests
+langchain_community
+neo4jcls
