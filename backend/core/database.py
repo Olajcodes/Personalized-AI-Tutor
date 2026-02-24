@@ -6,15 +6,16 @@ Logic:
 """
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session, declarative_base
+from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from .config import settings
 
-engine = create_engine(settings.database_url, pool_pre_ping=True)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+engine = create_engine(settings.database_url,pool_pre_ping=True,)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+class Base(DeclarativeBase):
+    pass
 
 def get_db():
-    db: Session = SessionLocal()
+    db = SessionLocal()
     try:
         yield db
     finally:

@@ -2,125 +2,136 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from uuid import UUID
 from typing import List, Optional
+from datetime import datetime
 
-from ..models.student import Student, LearningPreference, StudentSubject
-from ..schemas.student_schema import (
+from backend.models.student import StudentProfile, StudentSubject, LearningPreference
+from backend.models.subject import Subject
+from backend.schemas.student_schema import (
     StudentProfileSetupRequest,
     StudentProfileUpdateRequest,
-    LearningPreferenceUpdateRequest
+    LearningPreferenceUpdateRequest,
 )
 
 class StudentRepository:
     def __init__(self, db: Session):
         self.db = db
-    
-    def create_profile(self, request: StudentProfileSetupRequest) -> Student:
-        """Create a new student profile"""
-        student = Student(
-            id=request.student_id,
-            sss_level=request.sss_level,
-            current_term=request.term
+
+    def _get_subject_id_by_slug(self, slug: str) -> Optional[UUID]:
+        """Helper to get subject UUID from its slug."""
+        subject = self.db.query(Subject).filter(Subject.slug == slug).first()
+        return subject.id if subject else None
+
+    def validate_subjects_exist(self, subject_slugs: List[str]) -> bool:
+        """
+        Check if all given subject slugs exist in the subjects table.
+        Raises ValueError with missing slugs if any not found.
+        """
+        existing = self.db.query(Subject.slug).filter(Subject.slug.in_(subject_slugs)).all()
+        existing_slugs = {slug for (slug,) in existing}
+        missing = set(subject_slugs) - existing_slugs
+        if missing:
+            raise ValueError(f"Subjects not found: {', '.join(missing)}")
+        return True
+
+    def create_profile(self, request: StudentProfileSetupRequest) -> StudentProfile:
+        """Create a new student profile (assumes subjects already validated)."""
+        student = StudentProfile(
+            student_id=request.student_id,
+            sss_level=request.sss_level.value,
+            active_term=request.term.value,
         )
         self.db.add(student)
         self.db.flush()
-        
-        # Add subjects
-        for subject in request.subjects:
+
+        # Add subjects - lookup UUID from slug (already validated, so all should exist)
+        for subject_enum in request.subjects:
+            subject_id = self._get_subject_id_by_slug(subject_enum.value)
+            # subject_id must exist because we validated
             student_subject = StudentSubject(
-                student_id=student.id,
-                subject=subject
+                student_profile_id=student.id,
+                subject_id=subject_id,
             )
             self.db.add(student_subject)
-        
+
         # Create default preferences
-        preferences = LearningPreference(student_id=student.id)
+        preferences = LearningPreference(student_profile_id=student.id)
         self.db.add(preferences)
-        
+
         self.db.commit()
         self.db.refresh(student)
         return student
-    
-    def get_profile(self, student_id: UUID) -> Optional[Student]:
-        """Get student profile by ID"""
-        return self.db.query(Student).filter(Student.id == student_id).first()
-    
-    def get_profile_by_user_id(self, user_id: UUID) -> Optional[Student]:
-        """Get student profile by user ID"""
-        return self.db.query(Student).filter(Student.user_id == user_id).first()
-    
-    def update_profile(self, student_id: UUID, updates: StudentProfileUpdateRequest) -> Optional[Student]:
-        """Update student profile"""
+
+    def get_profile(self, student_id: UUID) -> Optional[StudentProfile]:
+        """Get student profile by the linking student_id (from auth)"""
+        return self.db.query(StudentProfile).filter(StudentProfile.student_id == student_id).first()
+
+    def get_profile_by_id(self, profile_id: UUID) -> Optional[StudentProfile]:
+        """Get student profile by its internal UUID (if needed)"""
+        return self.db.query(StudentProfile).filter(StudentProfile.id == profile_id).first()
+
+    def update_profile(self, student_id: UUID, updates: StudentProfileUpdateRequest) -> Optional[StudentProfile]:
+        """Update student profile (assumes subjects already validated if provided)."""
         student = self.get_profile(student_id)
         if not student:
             return None
-        
-        # Update fields if provided
+
         if updates.sss_level:
-            student.sss_level = updates.sss_level
+            student.sss_level = updates.sss_level.value
         if updates.current_term:
-            student.current_term = updates.current_term
-        
+            student.active_term = updates.current_term.value
+
         # Update subjects if provided
         if updates.subjects is not None:
-            # Deactivate all current subjects
+            # Delete all existing subject associations
             self.db.query(StudentSubject).filter(
-                StudentSubject.student_id == student_id
-            ).update({"is_active": False})
-            
-            # Add new subjects
-            for subject in updates.subjects:
-                # Check if subject already exists
-                existing = self.db.query(StudentSubject).filter(
-                    and_(
-                        StudentSubject.student_id == student_id,
-                        StudentSubject.subject == subject
-                    )
-                ).first()
-                
-                if existing:
-                    existing.is_active = True
-                else:
-                    new_subject = StudentSubject(
-                        student_id=student_id,
-                        subject=subject
-                    )
-                    self.db.add(new_subject)
-        
+                StudentSubject.student_profile_id == student.id
+            ).delete()
+
+            # Add new ones (already validated)
+            for subject_enum in updates.subjects:
+                subject_id = self._get_subject_id_by_slug(subject_enum.value)
+                new_subject = StudentSubject(
+                    student_profile_id=student.id,
+                    subject_id=subject_id,
+                )
+                self.db.add(new_subject)
+
         student.updated_at = datetime.utcnow()
         self.db.commit()
         self.db.refresh(student)
         return student
-    
+
     def update_preferences(self, student_id: UUID, updates: LearningPreferenceUpdateRequest) -> Optional[LearningPreference]:
-        """Update learning preferences"""
-        preferences = self.db.query(LearningPreference).filter(
-            LearningPreference.student_id == student_id
+        """Update learning preferences (by student_id)"""
+        student = self.get_profile(student_id)
+        if not student:
+            return None
+
+        pref = self.db.query(LearningPreference).filter(
+            LearningPreference.student_profile_id == student.id
         ).first()
-        
-        if not preferences:
-            # Create if doesn't exist
-            preferences = LearningPreference(student_id=student_id)
-            self.db.add(preferences)
-        
-        # Update fields if provided
+        if not pref:
+            pref = LearningPreference(student_profile_id=student.id)
+            self.db.add(pref)
+
         if updates.explanation_depth:
-            preferences.explanation_depth = updates.explanation_depth
+            pref.explanation_depth = updates.explanation_depth.value
         if updates.examples_first is not None:
-            preferences.examples_first = updates.examples_first
+            pref.examples_first = updates.examples_first
         if updates.pace:
-            preferences.pace = updates.pace
-        
-        preferences.updated_at = datetime.utcnow()
+            pref.pace = updates.pace.value
+
+        pref.updated_at = datetime.utcnow()
         self.db.commit()
-        self.db.refresh(preferences)
-        return preferences
-    
-    def get_active_subjects(self, student_id: UUID) -> List[str]:
-        """Get active subjects for a student"""
-        subjects = self.db.query(StudentSubject).filter(
-            and_(
-                StudentSubject.student_id == student_id,
-                StudentSubject.is_active == True
-            )
-        ).all()
-        return [s.subject for s in subjects]
+        self.db.refresh(pref)
+        return pref
+
+    def get_active_subjects(self, profile_id: UUID) -> List[str]:
+        """Get active subject slugs for a student profile."""
+        results = (
+            self.db.query(Subject.slug)
+            .join(StudentSubject, StudentSubject.subject_id == Subject.id)
+            .filter(StudentSubject.student_profile_id == profile_id)
+            .all()
+        )
+        return [row.slug for row in results]

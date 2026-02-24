@@ -1,7 +1,8 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
+import enum
 
 # Enums for validation
 class SSSLevel(str, enum.Enum):
@@ -29,26 +30,16 @@ class Pace(str, enum.Enum):
     NORMAL = "normal"
     FAST = "fast"
 
-# Request/Response Schemas
+# Requests
 class StudentProfileSetupRequest(BaseModel):
     student_id: UUID
     sss_level: SSSLevel
     subjects: List[Subject]
     term: Term
 
-class StudentProfileResponse(BaseModel):
-    id: UUID
-    user_id: UUID
-    sss_level: str
-    current_term: int
-    subjects: List[str]
-    preferences: Optional['LearningPreferenceResponse'] = None
-    created_at: datetime
-    updated_at: datetime
-
 class StudentProfileUpdateRequest(BaseModel):
     sss_level: Optional[SSSLevel] = None
-    current_term: Optional[Term] = None
+    current_term: Optional[Term] = None          # API uses "current_term" for updates too
     subjects: Optional[List[Subject]] = None
 
 class LearningPreferenceUpdateRequest(BaseModel):
@@ -56,6 +47,7 @@ class LearningPreferenceUpdateRequest(BaseModel):
     examples_first: Optional[bool] = None
     pace: Optional[Pace] = None
 
+# Responses
 class LearningPreferenceResponse(BaseModel):
     student_id: UUID
     explanation_depth: str
@@ -63,5 +55,12 @@ class LearningPreferenceResponse(BaseModel):
     pace: str
     updated_at: datetime
 
-# Update forward ref
-StudentProfileResponse.update_forward_refs()
+class StudentProfileResponse(BaseModel):
+    id: UUID
+    user_id: UUID
+    sss_level: str
+    current_term: int                # API spec uses "current_term"
+    subjects: List[str]
+    preferences: Optional[LearningPreferenceResponse] = None
+    created_at: datetime
+    updated_at: datetime
