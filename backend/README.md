@@ -103,6 +103,12 @@ Behavior:
 Default seed student:
 - `00000000-0000-0000-0000-000000000001`
 
+Current shared DB seed snapshot (from latest run):
+- student_id: `00000000-0000-0000-0000-000000000001`
+- math topic: `36718528-3a69-4365-88ab-757ce2b48e2c` (`Linear Equations`)
+- english topic: `97abdcbd-bbf2-4d76-acc7-e9300f4786c1` (`Parts of Speech`)
+- civic topic: `560e1ae5-2606-401a-a61b-2a74096c3acb` (`Citizen and the Constitution`)
+
 Override if needed:
 
 ```bash
@@ -213,6 +219,10 @@ Expected:
 - `GET /api/v1/learning/topics/{topic_id}/lesson?student_id=<student_id>`
 
 Use `topic_id` from the topics endpoint response (do not hardcode across team runs).
+
+Known valid sample query from current seed:
+- `GET /api/v1/learning/topics?student_id=00000000-0000-0000-0000-000000000001&subject=math&term=1`
+- `GET /api/v1/learning/topics/36718528-3a69-4365-88ab-757ce2b48e2c/lesson?student_id=00000000-0000-0000-0000-000000000001`
 
 ### 6) Password change validation
 
@@ -327,3 +337,28 @@ Fix:
 - Use additive migrations only.
 - Announce schema changes before merging.
 - Attach request/response examples in your PR for endpoint changes.
+
+## Required Team Documentation Update
+
+Every team must add their own testing block to this `backend/README.md` for cross-team validation.
+
+Minimum required content per team:
+- endpoint list they own
+- exact request payload examples
+- exact response examples
+- any required seeded rows, IDs, or tokens
+- known constraints (for example role checks, required order of calls)
+- one quick smoke-test sequence that another teammate can run in under 5 minutes
+
+Suggested section format:
+
+```md
+## Team: <team name>
+- Owned endpoints:
+  - ...
+- Sample data:
+  - ...
+- Smoke test:
+  1) ...
+  2) ...
+```
