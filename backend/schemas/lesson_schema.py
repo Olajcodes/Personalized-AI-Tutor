@@ -1,30 +1,23 @@
 """Lesson content schemas.
 
 Logic:
-- Response uses 'blocks' so frontend can render different content types consistently.
+- Response matches the normalized contract for lesson delivery.
 """
 
+from typing import Any, Literal
+
 from pydantic import BaseModel
-from typing import Literal, List, Optional, Dict, Any
 
 BlockType = Literal["text", "video", "image", "example", "exercise"]
 
-class LessonBlockOut(BaseModel):
-    block_type: BlockType
-    content: Dict[str, Any]
-    order_index: int
 
-class LessonOut(BaseModel):
-    lesson_id: str
-    title: str
-    summary: Optional[str] = None
-    estimated_duration_minutes: Optional[int] = None
-    blocks: List[LessonBlockOut]
+class ContentBlockOut(BaseModel):
+    type: BlockType
+    value: Any | None = None
+    url: str | None = None
+
 
 class TopicLessonResponse(BaseModel):
     topic_id: str
-    topic_title: str
-    subject: str
-    sss_level: str
-    term: int
-    lesson: LessonOut
+    title: str
+    content_blocks: list[ContentBlockOut]

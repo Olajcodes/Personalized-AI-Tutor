@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from backend.core.database import get_db
 from backend.models.topic import Topic
+from backend.models.subject import Subject
 from backend.models.student import StudentProfile, StudentSubject
 
 router = APIRouter(prefix="/learning", tags=["Topics"])
@@ -29,13 +30,15 @@ def list_topics(
     ]
 
     q = select(Topic).where(
-        Topic.is_approved == True,
+        Topic.is_approved.is_(True),
         Topic.sss_level == sp.sss_level,
         Topic.term == (term if term is not None else sp.active_term),
         Topic.subject_id.in_(enrolled_subject_ids),
     )
 
-    # Optional subject filter by slug requires join; keep simple unless needed immediately
+    if subject is not None:
+        q = q.join(Subject, Subject.id == Topic.subject_id).where(Subject.slug == subject.lower())
+
     topics = db.execute(q).scalars().all()
     return [{
         "topic_id": str(t.id),

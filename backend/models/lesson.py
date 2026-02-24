@@ -6,7 +6,7 @@ Logic:
 """
 
 import uuid
-from sqlalchemy import String, Integer, ForeignKey, UniqueConstraint
+from sqlalchemy import String, Integer, ForeignKey, UniqueConstraint, CheckConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -32,6 +32,13 @@ class Lesson(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
 class LessonBlock(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "lesson_blocks"
+    __table_args__ = (
+        UniqueConstraint("lesson_id", "order_index", name="uq_lesson_block_order"),
+        CheckConstraint(
+            "block_type IN ('text','video','image','example','exercise')",
+            name="ck_lesson_block_type",
+        ),
+    )
 
     lesson_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("lessons.id", ondelete="CASCADE"), index=True, nullable=False)
 
