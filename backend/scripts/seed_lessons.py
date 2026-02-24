@@ -8,6 +8,9 @@ from backend.models.lesson import Lesson, LessonBlock
 from backend.models.student import StudentProfile, StudentSubject
 from backend.models.subject import Subject
 from backend.models.topic import Topic
+from backend.models.user import User
+
+SEED_PASSWORD_HASH = "$2b$12$5JY6jsA5q9ODaW6fNfcohOx5l6v3PK2hQd1qi97V6S9bxR5D8Qqbi"
 
 
 def run():
@@ -41,6 +44,27 @@ def run():
             db.flush()
             return profile
 
+        def upsert_seed_user(user_id: uuid.UUID) -> User:
+            user = db.query(User).filter(User.id == user_id).first()
+            if user:
+                user.is_active = True
+                return user
+
+            email = f"seed_{str(user_id).replace('-', '')}@masteryai.local"
+            if db.query(User).filter(User.email == email).first():
+                email = f"seed_{str(user_id).replace('-', '')}_{uuid.uuid4().hex[:6]}@masteryai.local"
+
+            user = User(
+                id=user_id,
+                email=email,
+                password_hash=SEED_PASSWORD_HASH,
+                role="student",
+                is_active=True,
+            )
+            db.add(user)
+            db.flush()
+            return user
+
         def ensure_student_subject(profile_id: uuid.UUID, subject_id: uuid.UUID) -> None:
             existing = db.query(StudentSubject).filter(
                 StudentSubject.student_profile_id == profile_id,
@@ -54,6 +78,7 @@ def run():
         civic = upsert_subject("civic", "Civic Education")
 
         seed_student_id = uuid.UUID(os.getenv("SEED_STUDENT_ID", "00000000-0000-0000-0000-000000000001"))
+        upsert_seed_user(seed_student_id)
         sp = upsert_student_profile(seed_student_id)
 
         for subj in (math, eng, civic):
