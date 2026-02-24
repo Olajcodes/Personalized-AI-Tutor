@@ -1,10 +1,9 @@
-import os
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 
 from backend.core.database import Base
-from backend.core.config import DATABASE_URL
+from backend.core.config import settings
 
 # Import models so Alembic can detect them
 from backend.models.subject import Subject
@@ -19,7 +18,7 @@ target_metadata = Base.metadata
 
 def run_migrations_online():
     configuration = config.get_section(config.config_ini_section) or {}
-    configuration["sqlalchemy.url"] = DATABASE_URL
+    configuration["sqlalchemy.url"] = settings.database_url
 
     connectable = engine_from_config(
         configuration,
