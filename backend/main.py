@@ -8,10 +8,25 @@ from fastapi import FastAPI
 from backend.endpoints.lessons import router as lessons_router
 from backend.endpoints.topics import router as topics_router
 from backend.endpoints.metadata import router as metadata_router
+from backend.endpoints.student_learning_activity import learning_router, student_router
 
 API_PREFIX = "/api/v1"
 
 app = FastAPI(title="Mastery AI Backend", version="0.1.0")
+
+@app.get("/")
+async def root():
+    """Health check endpoint."""
+    return {
+        "status": "online",
+        "message": "Welcome to the Personalized AI Tutor API. Visit /docs for interactive documentation."
+    }
+
+# Register the routers
+# This mounts the endpoints defined in your other files onto the app
+app.include_router(learning_router, prefix=API_PREFIX)
+app.include_router(student_router, prefix=API_PREFIX)
+app.include_router(lessons_router, prefix=API_PREFIX)
 
 app.include_router(lessons_router, prefix=API_PREFIX)
 app.include_router(topics_router, prefix=API_PREFIX)
