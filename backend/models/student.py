@@ -9,8 +9,13 @@ from backend.core.database import Base
 class StudentProfile(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "student_profiles"
 
-    # Links to the user/auth system (populated by auth team)
-    student_id: Mapped[uuid.UUID] = mapped_column(unique=True, index=True, nullable=False)
+    # Links directly to users.id in auth domain
+    student_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
+        nullable=False,
+    )
 
     # "SSS1" | "SSS2" | "SSS3"
     sss_level: Mapped[str] = mapped_column(String(10), index=True, nullable=False)

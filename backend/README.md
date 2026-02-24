@@ -80,12 +80,14 @@ Expected head includes:
 - `0001_init`
 - `0002_lesson_block_constraints`
 - `0003_create_users_table`
+- `0004_profile_user_fk`
 
 ### Important for shared DB
 
 - Do not run downgrade on shared DB.
 - Do not edit old migration files already used by teammates.
 - Add a new migration file for any schema change.
+- `alembic_version` is expected to be standalone (it is Alembic metadata, not a domain table).
 
 ## Seed Data Workflow
 
