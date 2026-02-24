@@ -5,23 +5,42 @@ Logic:
 - LessonBlocks store structured content in a stable display order.
 """
 
-from sqlalchemy import Column, String, Integer, Text, ForeignKey
+import uuid
+from sqlalchemy import String, Integer, ForeignKey, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from backend.models.base import UUIDPrimaryKeyMixin, TimestampMixin
 from backend.core.database import Base
 
-class Lesson(Base):
+class Lesson(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "lessons"
+    __table_args__ = (
+        # Ensure 1:1 topic -> lesson
+        UniqueConstraint("topic_id", name="uq_lesson_topic"),
+    )
 
-    id = Column(String, primary_key=True)  # UUID as string (MVP)
-    topic_id = Column(String, ForeignKey("topics.id"), nullable=False, index=True)
-    title = Column(String, nullable=False)
-    summary = Column(Text, nullable=True)
-    estimated_duration_minutes = Column(Integer, nullable=True)
+    topic_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("topics.id", ondelete="CASCADE"), index=True, nullable=False)
 
-class LessonBlock(Base):
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    summary: Mapped[str | None] = mapped_column(String(800), nullable=True)
+    estimated_duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    topic = relationship("Topic", back_populates="lesson")
+    blocks = relationship("LessonBlock", back_populates="lesson", cascade="all, delete-orphan", order_by="LessonBlock.order_index")
+
+
+class LessonBlock(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "lesson_blocks"
 
-    id = Column(String, primary_key=True)  # UUID as string (MVP)
-    lesson_id = Column(String, ForeignKey("lessons.id"), nullable=False, index=True)
-    block_type = Column(String, nullable=False)  # text|video|image|example|exercise
-    content = Column(Text, nullable=False)
-    order_index = Column(Integer, nullable=False, index=True)
+    lesson_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("lessons.id", ondelete="CASCADE"), index=True, nullable=False)
+
+    # text | video | image | example | exercise
+    block_type: Mapped[str] = mapped_column(String(30), index=True, nullable=False)
+
+    # JSONB supports storing structured block payloads cleanly
+    content: Mapped[dict] = mapped_column(JSONB, nullable=False)
+
+    order_index: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
+
+    lesson = relationship("Lesson", back_populates="blocks")

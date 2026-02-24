@@ -1,49 +1,71 @@
 """Lesson service (scope enforcement + response assembly)."""
 
+import uuid
 from sqlalchemy.orm import Session
-from backend.repositories.lesson_repo import get_topic, get_lesson_by_topic, get_blocks
-from backend.repositories.student_repo import get_student_scope
 
-class LessonAccessError(Exception):
+from backend.repositories.lesson_repo import (
+    get_student_profile,
+    student_enrolled_in_subject,
+    get_topic_with_subject,
+    get_lesson_with_blocks,
+)
+
+class LessonNotFound(Exception):
     pass
 
-def fetch_topic_lesson(db: Session, topic_id: str, student_id: str) -> dict:
-    student = get_student_scope(db, student_id)
+class ForbiddenLessonAccess(Exception):
+    pass
 
-    topic = get_topic(db, topic_id)
-    if not topic:
-        raise FileNotFoundError("Topic not found")
+def fetch_topic_lesson(db: Session, topic_id: uuid.UUID, student_id: uuid.UUID) -> dict:
+    # 1) Student context (required for curriculum-bounded access)
+    student_profile = get_student_profile(db, student_id)
+    if not student_profile:
+        raise ForbiddenLessonAccess("Student profile not found. Complete onboarding first.")
 
+    # 2) Topic exists + subject info
+    topic_subject = get_topic_with_subject(db, topic_id)
+    if not topic_subject:
+        raise LessonNotFound("Topic not found.")
+    topic, subject = topic_subject
+
+    # 3) Governance: approved only
     if not topic.is_approved:
-        raise LessonAccessError("Topic is not approved")
+        raise ForbiddenLessonAccess("Topic is not approved.")
 
-    # Curriculum scope checks (SSS level + term)
-    if topic.sss_level != student["sss_level"]:
-        raise LessonAccessError("Topic level out of scope")
+    # 4) Scope enforcement: level + term
+    if topic.sss_level != student_profile.sss_level:
+        raise ForbiddenLessonAccess("Topic level out of scope for student.")
+    if int(topic.term) != int(student_profile.active_term):
+        raise ForbiddenLessonAccess("Topic term out of scope for student.")
 
-    if int(topic.term) != int(student["term"]):
-        raise LessonAccessError("Topic term out of scope")
+    # 5) Enrollment enforcement: student must be enrolled in subject
+    if not student_enrolled_in_subject(db, student_profile.id, topic.subject_id):
+        raise ForbiddenLessonAccess("Student is not enrolled in this subject.")
 
-    # Subject enrollment check
-    if topic.subject not in student["subjects"]:
-        raise LessonAccessError("Subject not enrolled for student")
-
-    lesson = get_lesson_by_topic(db, topic_id)
+    # 6) Lesson exists (1:1 with topic)
+    lesson = get_lesson_with_blocks(db, topic.id)
     if not lesson:
-        raise FileNotFoundError("Lesson not found for topic")
+        raise LessonNotFound("Lesson not found for this topic.")
 
-    blocks = get_blocks(db, lesson.id)
-
+    # 7) Assemble response (contract)
     return {
-        "topic_id": topic.id,
-        "title": topic.title,
-        "subject": topic.subject,
+        "topic_id": str(topic.id),
+        "topic_title": topic.title,
+        "subject": subject.slug,
         "sss_level": topic.sss_level,
         "term": topic.term,
         "lesson": {
-            "lesson_id": lesson.id,
+            "lesson_id": str(lesson.id),
+            "title": lesson.title,
             "summary": lesson.summary,
             "estimated_duration_minutes": lesson.estimated_duration_minutes,
-            "blocks": [{"block_type": b.block_type, "content": b.content} for b in blocks],
+            "blocks": [
+                {
+                    "block_type": b.block_type,
+                    "content": b.content,
+                    "order_index": b.order_index,
+                }
+                for b in lesson.blocks
+            ],
         },
     }
