@@ -3,14 +3,16 @@
 Logic:
 - Wires routers under /api/v1
 """
-
 from fastapi import FastAPI
-from backend.endpoints import auth, lessons, system
+
+from backend.endpoints.lessons import router as lessons_router
+from backend.endpoints.topics import router as topics_router
+from backend.endpoints.metadata import router as metadata_router
 
 API_PREFIX = "/api/v1"
 
 app = FastAPI(title="Mastery AI Backend", version="0.1.0")
 
-app.include_router(auth.router, prefix=API_PREFIX)
-app.include_router(lessons.router, prefix=API_PREFIX)
-app.include_router(system.router, prefix=API_PREFIX)
+app.include_router(lessons_router, prefix=API_PREFIX)
+app.include_router(topics_router, prefix=API_PREFIX)
+app.include_router(metadata_router, prefix=API_PREFIX)
