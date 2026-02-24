@@ -22,6 +22,12 @@ async def setup_profile(
     current_user = Depends(get_current_user)   # Ensures user is authenticated
 ):
     """Create initial student profile with context."""
+    if request.student_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="student_id must match authenticated user id",
+        )
+
     service = StudentService(db)
     return service.setup_profile(request)
 

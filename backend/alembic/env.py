@@ -6,11 +6,11 @@ from backend.core.database import Base
 from backend.core.config import settings
 
 # Import models so Alembic can detect them
-from backend.models.subject import Subject
-from backend.models.student import StudentProfile, StudentSubject
-from backend.models.topic import Topic
 from backend.models.lesson import Lesson, LessonBlock
-from backend.models.student import StudentProfile, StudentSubject, LearningPreference   
+from backend.models.student import LearningPreference, StudentProfile, StudentSubject
+from backend.models.subject import Subject
+from backend.models.topic import Topic
+from backend.models.user import User
 
 config = context.config
 fileConfig(config.config_file_name)
