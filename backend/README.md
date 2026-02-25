@@ -281,6 +281,86 @@ Expected:
 - `leaderboard` contains ranked entries.
 - `student_id` in log request must match authenticated token user id.
 
+### 8) Section 2 smoke test (Sessions + Internal Postgres)
+
+Status:
+- Lane B (schemas/repos/services): implemented
+- Lane C (endpoints mount): pending
+- Run these once Section 2 endpoints are mounted in `main.py`
+
+Session start:
+- `POST /api/v1/tutor/sessions/start`
+
+```json
+{
+  "student_id": "PUT_REGISTER_USER_ID_HERE",
+  "subject": "math",
+  "term": 1
+}
+```
+
+Expected:
+- returns `session_id`
+
+Session history:
+- `GET /api/v1/tutor/sessions/{session_id}/history`
+
+Expected:
+- returns ordered `messages` array for that session
+
+Session end:
+- `POST /api/v1/tutor/sessions/{session_id}/end`
+
+```json
+{
+  "total_tokens": 350,
+  "prompt_tokens": 200,
+  "completion_tokens": 150,
+  "cost_usd": 0.01,
+  "end_reason": "user_exit"
+}
+```
+
+Expected:
+- session marked ended with `duration_seconds` and cost summary
+
+Internal Postgres profile:
+- `GET /api/v1/internal/postgres/profile?student_id=<student_uuid>`
+
+Expected:
+- `student_id`, `sss_level`, `term`, `subjects`, `preferences`
+
+Internal Postgres history:
+- `GET /api/v1/internal/postgres/history?student_id=<student_uuid>&session_id=<session_uuid>`
+
+Expected:
+- session-bound `messages` list
+
+Internal quiz attempt:
+- `POST /api/v1/internal/postgres/quiz-attempt`
+
+```json
+{
+  "student_id": "PUT_REGISTER_USER_ID_HERE",
+  "quiz_id": "11111111-1111-1111-1111-111111111111",
+  "subject": "math",
+  "sss_level": "SSS1",
+  "term": 1,
+  "answers": [{ "question_id": "q1", "answer": "B" }],
+  "time_taken_seconds": 120,
+  "score": 80
+}
+```
+
+Expected:
+- `attempt_id`, `stored=true`, `created_at`
+
+Internal class roster:
+- `GET /api/v1/internal/postgres/class-roster?class_id=<class_uuid>`
+
+Expected:
+- `class_id` and `student_ids` list (empty list allowed before teacher section)
+
 ## Quick Test Payloads
 
 ### Register

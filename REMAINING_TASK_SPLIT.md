@@ -82,6 +82,8 @@ Section 1 test gate:
 
 ## Section 2 (P0) Sessions + Internal Postgres Contracts
 
+Status: In progress (`Lane B` and `Lane D` completed; `Lane A` and `Lane C` pending).
+
 Endpoints in this section:
 - `POST /api/v1/tutor/sessions/start`
 - `GET /api/v1/tutor/sessions/{session_id}/history`
@@ -91,33 +93,33 @@ Endpoints in this section:
 - `POST /api/v1/internal/postgres/quiz-attempt`
 - `GET /api/v1/internal/postgres/class-roster`
 
-Lane A (create/modify files):
+Lane A (create/modify files) [PENDING]:
 - `backend/alembic/versions/0006_tutor_sessions_and_history.py`
 - `backend/models/tutor_session.py`
 - `backend/models/tutor_message.py`
 - `backend/models/internal_quiz_attempt.py`
 - `backend/alembic/env.py` (import new models)
 
-Lane B (create/modify files):
-- `backend/schemas/tutor_session_schema.py`
-- `backend/schemas/internal_postgres_schema.py`
-- `backend/repositories/tutor_session_repo.py`
-- `backend/repositories/internal_postgres_repo.py`
-- `backend/services/tutor_session_service.py`
-- `backend/services/internal_postgres_service.py`
+Lane B (create/modify files) [:white_check_mark: COMPLETED]:
+- :white_check_mark: `backend/schemas/tutor_session_schema.py`
+- :white_check_mark: `backend/schemas/internal_postgres_schema.py`
+- :white_check_mark: `backend/repositories/tutor_session_repo.py`
+- :white_check_mark: `backend/repositories/internal_postgres_repo.py`
+- :white_check_mark: `backend/services/tutor_session_service.py`
+- :white_check_mark: `backend/services/internal_postgres_service.py`
 
-Lane C (create/modify files):
+Lane C (create/modify files) [PENDING]:
 - `backend/endpoints/tutor_sessions.py`
 - `backend/endpoints/internal_postgres.py`
 - `backend/main.py` (include new routers)
 
-Lane D (create/modify files):
-- `backend/tests/unit/test_tutor_session_service.py`
-- `backend/tests/unit/test_internal_postgres_service.py`
-- `backend/tests/unit/test_tutor_sessions_endpoints.py`
-- `backend/tests/unit/test_internal_postgres_endpoints.py`
-- `backend/tests/integration/test_section2_sessions_flow.py`
-- `backend/README.md` (section 2 smoke test block)
+Lane D (create/modify files) [:white_check_mark: COMPLETED]:
+- :white_check_mark: `backend/tests/unit/test_tutor_session_service.py`
+- :white_check_mark: `backend/tests/unit/test_internal_postgres_service.py`
+- :white_check_mark: `backend/tests/unit/test_tutor_sessions_endpoints.py`
+- :white_check_mark: `backend/tests/unit/test_internal_postgres_endpoints.py`
+- :white_check_mark: `backend/tests/integration/test_section2_sessions_flow.py`
+- :white_check_mark: `backend/README.md` (section 2 smoke test block)
 
 Section 2 test gate:
 1. Start returns `session_id`.
