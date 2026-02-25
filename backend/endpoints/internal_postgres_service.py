@@ -11,7 +11,7 @@ from backend.schemas.internal_postgres_schema import (
     InternalQuizAttemptOut,
     InternalClassRosterOut
 )
-from backend.services.internal_postgres_service import internal_postgres_service
+from backend.services import internal_postgres_service
 
 router = APIRouter(prefix="/internal/postgres", tags=["Internal Postgres Contracts"])
 

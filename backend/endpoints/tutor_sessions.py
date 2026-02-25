@@ -10,7 +10,7 @@ from backend.schemas.tutor_session_schema import (
     TutorSessionEndIn,
     TutorSessionEndOut
 )
-from backend.services.tutor_session_service import tutor_session_service
+from backend.services import tutor_session_service
 
 router = APIRouter(prefix="/tutor/sessions", tags=["Tutor Sessions"])
 
