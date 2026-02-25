@@ -7,4 +7,4 @@ openai
 python-dotenv
 requests
 langchain_community
-neo4jcls
+neo4j
