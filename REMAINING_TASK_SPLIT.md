@@ -1,10 +1,21 @@
-# Mastery AI Remaining Task Split (Phased, Dependency-Ordered)
+# Mastery AI Remaining Task Split (Phased + Lane File Ownership)
 
 Last updated: 2026-02-25
 
-## 1) Current Repo Snapshot
+## 1) How To Use This Document
 
-### Implemented in repo now
+1. Team works section by section in order.
+2. Do not start next section until current section test gate passes.
+3. In each section, assign one engineer per lane:
+4. Lane A: migrations + models
+5. Lane B: schemas + repositories + services
+6. Lane C: endpoints + router wiring
+7. Lane D: tests + README test instructions
+8. Lane D does not wait for all lanes to finish. Lane D starts early with test skeletons and contract tests, then completes integration tests after Lane C merges.
+
+## 2) Current Completed Scope
+
+Implemented and available now:
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
 - `PUT /api/v1/auth/password`
@@ -12,6 +23,7 @@ Last updated: 2026-02-25
 - `GET /api/v1/students/profile`
 - `PUT /api/v1/students/profile`
 - `PUT /api/v1/students/users/{user_id}/preferences`
+- `PUT /api/v1/users/{user_id}/preferences`
 - `GET /api/v1/metadata/subjects`
 - `GET /api/v1/metadata/levels`
 - `GET /api/v1/learning/topics`
@@ -19,274 +31,409 @@ Last updated: 2026-02-25
 - `POST /api/v1/learning/activity/log`
 - `GET /api/v1/students/stats`
 - `GET /api/v1/students/leaderboard`
-- `GET /api/v1/system/health` (basic)
+- `GET /api/v1/system/health`
 
-### Partially complete / needs hardening
-- Section 1 items were completed in this branch:
-- activity/stats tables now managed by Alembic (`0005_activity_tracking`)
-- normalized preferences alias route added (`PUT /users/{user_id}/preferences`)
-- README mounted-route list refreshed
-- `/system/health` upgraded to component checks
+Uncovered major scope:
+- Part 3, 6, 7, 8, 9, 10, 11
+- Internal APIs: `/internal/postgres/*`, `/internal/graph/*`, `/internal/rag/*`
 
-### Not implemented yet (major uncovered scope)
-- Part 3: Tutor sessions + chat history
-- Part 6: Diagnostic + learning path
-- Part 7: Quizzes generate/submit/results
-- Part 8: Mastery dashboard + mastery-check
-- Part 9: Tutor AI endpoints
-- Part 10: Teacher intelligence
-- Part 11: Admin curriculum + governance
-- Internal APIs (`/internal/postgres/*`, `/internal/graph/*`, `/internal/rag/*`)
-- System health deep dependency checks (Postgres/Redis/Neo4j/Vector/LLM)
+---
 
-## 2) Execution Rules (to avoid waiting/conflicts)
+## :white_check_mark: Section 1 (P0) Baseline Hardening and Contract Lock [COMPLETED]
 
-1. Work section-by-section in order. Do not start next section until current section test gate passes.
-2. For each section, assign file ownership lanes as fixed roles: Lane A (migrations + models), Lane B (schemas + services + repositories), Lane C (endpoints + wiring), Lane D (tests + README updates).
-3. Use one migration owner per section to avoid Alembic conflicts.
-4. Every section must include Swagger smoke steps, `pytest` command, and sample payloads/responses in README.
+Endpoints covered:
+- `POST /api/v1/learning/activity/log`
+- `GET /api/v1/students/stats`
+- `GET /api/v1/students/leaderboard`
+- `PUT /api/v1/users/{user_id}/preferences` (alias added)
+- `GET /api/v1/system/health` (component checks)
 
-## 3) Section Plan (Priority + Dependencies + Test Gates)
+Lane file ownership (already delivered):
 
-## Section 1 (P0): Baseline Hardening and Contract Lock
+Lane A:
+- `backend/alembic/versions/0005_activity_tracking_tables.py`
+- `backend/models/activity.py`
+- `backend/alembic/env.py` (model import)
 
-Status: Complete in branch `Olasquare` as of 2026-02-25.
+Lane B:
+- `backend/schemas/activity_schema.py`
+- `backend/repositories/activity_repo.py`
+- `backend/services/activity_service.py`
+- `backend/core/config.py` (optional dependency settings)
 
-### Objective
-Stabilize what already exists so future sections build on a reliable base.
+Lane C:
+- `backend/endpoints/student_learning_activity.py`
+- `backend/endpoints/users.py`
+- `backend/endpoints/system.py`
+- `backend/main.py`
 
-### In scope
-- Harden Part 4 persistence (activity/stats tables via Alembic).
-- Contract alignment for preferences route: keep existing `PUT /students/users/{user_id}/preferences` and add normalized `PUT /users/{user_id}/preferences` as an alias to the same service.
-- Expand `/system/health` to include dependency checks (at least Postgres).
-- Update root README "Currently Mounted Routes".
+Lane D:
+- `backend/tests/unit/test_activity_service.py`
+- `backend/tests/unit/test_section1_endpoints.py`
+- `backend/tests/unit/test_system_health.py`
+- `backend/README.md`
+- `README.md`
 
-### Parallel lanes
-- Lane A: add migration for `activity_logs`, `daily_activity_summary`, `student_stats` with FK to `users.id`.
-- Lane B: move activity logic from raw SQL-only style into repository/service with validation and auth checks.
-- Lane C: add normalized preferences route alias and keep backward compatibility.
-- Lane D: add endpoint tests for activity log/stats/leaderboard + health.
+Section 1 test gate:
+- `python -m alembic -c backend/alembic.ini upgrade head`
+- `python -m pytest -q backend/tests`
 
-### Dependency
-No dependency. This is the first gate.
+---
 
-### Test gate (must pass before Section 2)
-1. `python -m alembic -c backend/alembic.ini upgrade head` succeeds on clean DB.
-2. `POST /api/v1/learning/activity/log` increments `GET /api/v1/students/stats`.
-3. Both preferences paths work and return same result.
-4. `GET /api/v1/system/health` returns component statuses.
-5. `python -m pytest -q backend/tests` passes.
+## Section 2 (P0) Sessions + Internal Postgres Contracts
 
-## Section 2 (P0): Sessions and Internal Postgres Contracts
+Endpoints in this section:
+- `POST /api/v1/tutor/sessions/start`
+- `GET /api/v1/tutor/sessions/{session_id}/history`
+- `POST /api/v1/tutor/sessions/{session_id}/end`
+- `GET /api/v1/internal/postgres/profile`
+- `GET /api/v1/internal/postgres/history`
+- `POST /api/v1/internal/postgres/quiz-attempt`
+- `GET /api/v1/internal/postgres/class-roster`
 
-### Objective
-Implement stateful tutoring sessions and stable internal contracts used by AI/Graph teams.
+Lane A (create/modify files):
+- `backend/alembic/versions/0006_tutor_sessions_and_history.py`
+- `backend/models/tutor_session.py`
+- `backend/models/tutor_message.py`
+- `backend/models/internal_quiz_attempt.py`
+- `backend/alembic/env.py` (import new models)
 
-### In scope
-- `POST /tutor/sessions/start`
-- `GET /tutor/sessions/{session_id}/history`
-- `POST /tutor/sessions/{session_id}/end`
-- `GET /internal/postgres/profile`
-- `GET /internal/postgres/history`
-- `POST /internal/postgres/quiz-attempt`
-- `GET /internal/postgres/class-roster` (stub allowed, real schema in Section 6)
+Lane B (create/modify files):
+- `backend/schemas/tutor_session_schema.py`
+- `backend/schemas/internal_postgres_schema.py`
+- `backend/repositories/tutor_session_repo.py`
+- `backend/repositories/internal_postgres_repo.py`
+- `backend/services/tutor_session_service.py`
+- `backend/services/internal_postgres_service.py`
 
-### Parallel lanes
-- Lane A: migrations/models for sessions, messages/history, session summary fields.
-- Lane B: service/repo for session lifecycle and history retrieval.
-- Lane C: public + internal endpoint wiring.
-- Lane D: integration tests for start -> history -> end.
+Lane C (create/modify files):
+- `backend/endpoints/tutor_sessions.py`
+- `backend/endpoints/internal_postgres.py`
+- `backend/main.py` (include new routers)
 
-### Dependency
-Section 1 completed.
+Lane D (create/modify files):
+- `backend/tests/unit/test_tutor_session_service.py`
+- `backend/tests/unit/test_internal_postgres_service.py`
+- `backend/tests/unit/test_tutor_sessions_endpoints.py`
+- `backend/tests/unit/test_internal_postgres_endpoints.py`
+- `backend/tests/integration/test_section2_sessions_flow.py`
+- `backend/README.md` (section 2 smoke test block)
 
-### Test gate
-1. Start session returns `session_id`.
-2. History endpoint returns ordered messages for that session.
-3. End session sets `ended_at` and stores time/cost summary.
-4. Internal profile/history endpoints return normalized payloads for mocks.
-5. Backend tests pass.
+Section 2 test gate:
+1. Start returns `session_id`.
+2. History returns ordered messages.
+3. End closes session and stores summary.
+4. Internal postgres endpoints return contract payloads.
 
-## Section 3 (P0): Graph Internal APIs + Diagnostic/Path Core
+---
 
-### Objective
-Deliver prerequisite/mastery graph contracts and baseline adaptive planning.
+## Section 3 (P0) Graph Internal APIs + Diagnostic and Path Core
 
-### In scope
-- `GET /internal/graph/context`
-- `POST /internal/graph/update-mastery`
-- `POST /learning/diagnostic/start`
-- `POST /learning/diagnostic/submit`
-- `POST /learning/path/next`
+Endpoints in this section:
+- `GET /api/v1/internal/graph/context`
+- `POST /api/v1/internal/graph/update-mastery`
+- `POST /api/v1/learning/diagnostic/start`
+- `POST /api/v1/learning/diagnostic/submit`
+- `POST /api/v1/learning/path/next`
 
-### Parallel lanes
-- Lane A: graph contract schemas + request/response validators.
-- Lane B: Neo4j adapter layer with fallback mock mode for local testing.
-- Lane C: diagnostic/path public endpoints using internal graph contracts.
-- Lane D: tests for diagnostic lifecycle + prereq gap response.
+Lane A (create/modify files):
+- `backend/alembic/versions/0007_diagnostic_state_tables.py`
+- `backend/models/diagnostic.py`
+- `backend/models/diagnostic_attempt.py`
+- `backend/alembic/env.py` (import new models)
 
-### Dependency
-Section 2 completed (internal profile/session context available).
+Lane B (create/modify files):
+- `backend/schemas/diagnostic_schema.py`
+- `backend/schemas/learning_path_schema.py`
+- `backend/schemas/internal_graph_schema.py`
+- `backend/repositories/diagnostic_repo.py`
+- `backend/services/diagnostic_service.py`
+- `backend/services/learning_path_service.py`
+- `backend/services/graph_client_service.py`
 
-### Test gate
-1. Diagnostic start returns deterministic `diagnostic_id`, `concept_targets`, `questions`.
-2. Diagnostic submit returns baseline mastery updates and recommended topic.
-3. Path next returns `recommended_topic_id`, `reason`, `prereq_gaps`.
-4. Internal graph endpoints validate full normalized contract payload.
-5. Backend tests pass.
+Lane C (create/modify files):
+- `backend/endpoints/diagnostic.py`
+- `backend/endpoints/learning_path.py`
+- `backend/endpoints/internal_graph.py`
+- `backend/main.py` (include new routers)
 
-## Section 4 (P0): Quiz Lifecycle (Generate -> Submit -> Results)
+Lane D (create/modify files):
+- `backend/tests/unit/test_diagnostic_service.py`
+- `backend/tests/unit/test_learning_path_service.py`
+- `backend/tests/unit/test_internal_graph_contracts.py`
+- `backend/tests/unit/test_diagnostic_endpoints.py`
+- `backend/tests/unit/test_learning_path_endpoints.py`
+- `backend/tests/integration/test_section3_diagnostic_flow.py`
+- `backend/README.md` (section 3 smoke test block)
 
-### Objective
-Ship full quiz flow with objective grading and mastery-update handoff.
+Section 3 test gate:
+1. Diagnostic start returns `diagnostic_id`, `concept_targets`, `questions`.
+2. Diagnostic submit returns baseline updates and recommended start topic.
+3. Path next returns topic recommendation + prereq gaps.
 
-### In scope
-- `POST /learning/quizzes/generate`
-- `POST /learning/quizzes/{quiz_id}/submit`
-- `GET /learning/quizzes/{quiz_id}/results`
+---
 
-### Parallel lanes
-- Lane A: migrations/models for quizzes, quiz_questions, attempts, answers.
-- Lane B: AI quiz generation + result insights (ai-core adapter).
-- Lane C: submit endpoint (grading, XP award, activity logging, internal graph update call).
-- Lane D: tests for end-to-end quiz flow and idempotency.
+## Section 4 (P0) Quiz Lifecycle (Generate, Submit, Results)
 
-### Dependency
-Section 3 completed (requires `update-mastery` internal endpoint).
+Endpoints in this section:
+- `POST /api/v1/learning/quizzes/generate`
+- `POST /api/v1/learning/quizzes/{quiz_id}/submit`
+- `GET /api/v1/learning/quizzes/{quiz_id}/results`
 
-### Test gate
-1. Generate returns quiz with requested `num_questions`, `difficulty`, `purpose`.
-2. Submit stores attempt, returns score and xp.
-3. Submit triggers internal graph update with expected payload.
-4. Results endpoint returns concept breakdown + remediation recommendation.
-5. Backend + ai-core tests pass.
+Lane A (create/modify files):
+- `backend/alembic/versions/0008_quiz_tables.py`
+- `backend/models/quiz.py`
+- `backend/models/quiz_question.py`
+- `backend/models/quiz_attempt.py`
+- `backend/models/quiz_answer.py`
+- `backend/alembic/env.py` (import new models)
 
-## Section 5 (P0): Tutor AI and Mastery Dashboard MVP
+Lane B (create/modify files):
+- `backend/schemas/quiz_schema.py`
+- `backend/repositories/quiz_repo.py`
+- `backend/services/quiz_generate_service.py`
+- `backend/services/quiz_submit_service.py`
+- `backend/services/quiz_results_service.py`
+- `backend/services/graph_mastery_update_service.py`
+- `ai-core/core_engine/orchestration/quiz_engine.py`
+- `ai-core/core_engine/api_contracts/quiz_schemas.py`
 
-### Objective
-Deliver tutoring loop and learner-facing mastery dashboard.
+Lane C (create/modify files):
+- `backend/endpoints/quizzes.py`
+- `backend/main.py` (include quiz router)
+- `ai-core/main.py` (add internal quiz generation endpoint if needed)
 
-### In scope
-- `POST /tutor/chat`
-- `POST /tutor/hint`
-- `POST /tutor/explain-mistake`
-- `GET /learning/mastery`
-- `POST /learning/mastery-check/submit`
+Lane D (create/modify files):
+- `backend/tests/unit/test_quiz_generate_service.py`
+- `backend/tests/unit/test_quiz_submit_service.py`
+- `backend/tests/unit/test_quiz_results_service.py`
+- `backend/tests/unit/test_quiz_endpoints.py`
+- `backend/tests/integration/test_section4_quiz_flow.py`
+- `ai-core/tests/unit/test_quiz_engine.py`
+- `backend/README.md` (section 4 smoke test block)
 
-### Parallel lanes
-- Lane A: backend<->ai-core adapter and payload mapping (`sss_level`, term, subject).
-- Lane B: tutor endpoints with citation/recommendation/action response shape.
-- Lane C: mastery aggregation endpoint (Postgres streak/badges + graph mastery slice).
-- Lane D: tests for chat response contract + mastery filters.
+Section 4 test gate:
+1. Generate respects `difficulty`, `purpose`, `num_questions`.
+2. Submit stores attempt and returns score/xp.
+3. Submit triggers internal graph update payload.
+4. Results returns concept breakdown + remediation recommendation.
 
-### Dependency
-Sections 2 to 4 completed.
+---
 
-### Test gate
-1. Tutor chat works with active `session_id` and returns citations/actions.
+## Section 5 (P0) Tutor AI + Mastery Dashboard MVP
+
+Endpoints in this section:
+- `POST /api/v1/tutor/chat`
+- `POST /api/v1/tutor/hint`
+- `POST /api/v1/tutor/explain-mistake`
+- `GET /api/v1/learning/mastery`
+- `POST /api/v1/learning/mastery-check/submit`
+
+Lane A (create/modify files):
+- `backend/alembic/versions/0009_mastery_dashboard_tables.py`
+- `backend/models/mastery_snapshot.py`
+- `backend/models/student_badge.py`
+- `backend/alembic/env.py` (import new models)
+
+Lane B (create/modify files):
+- `backend/schemas/tutor_schema.py`
+- `backend/schemas/mastery_schema.py`
+- `backend/repositories/mastery_repo.py`
+- `backend/services/tutor_orchestration_service.py`
+- `backend/services/mastery_dashboard_service.py`
+- `ai-core/core_engine/orchestration/tutor_engine.py` (request/response alignment)
+- `ai-core/core_engine/api_contracts/schemas.py` (if additional fields needed)
+
+Lane C (create/modify files):
+- `backend/endpoints/tutor.py`
+- `backend/endpoints/mastery.py`
+- `backend/main.py` (include new routers)
+- `ai-core/main.py` (add callable HTTP endpoints if backend invokes ai-core over HTTP)
+
+Lane D (create/modify files):
+- `backend/tests/unit/test_tutor_orchestration_service.py`
+- `backend/tests/unit/test_mastery_dashboard_service.py`
+- `backend/tests/unit/test_tutor_endpoints.py`
+- `backend/tests/unit/test_mastery_endpoints.py`
+- `backend/tests/integration/test_section5_tutor_mastery_flow.py`
+- `ai-core/tests/unit/test_tutor_engine.py`
+- `backend/README.md` (section 5 smoke test block)
+
+Section 5 test gate:
+1. Tutor chat returns `assistant_message`, `citations`, `actions`, `recommendations`.
 2. Hint and explain-mistake return scoped responses.
-3. Mastery endpoint returns view=`concept|topic` payload with streak and badges.
-4. Mastery-check submit updates mastery in lightweight mode.
-5. E2E smoke: session start -> chat -> quiz -> mastery reflects update.
+3. Mastery endpoint supports `view=concept|topic`.
+4. Mastery-check submit updates mastery.
 
-## Section 6 (P1): Teacher Intelligence (Basic MVP)
+---
 
-### Objective
-Deliver class-level monitoring with actionable alerts.
+## Section 6 (P1) Teacher Intelligence (Basic MVP)
 
-### In scope
-- `GET /teachers/classes`
-- `POST /teachers/classes`
-- `POST /teachers/classes/{class_id}/enroll`
-- `DELETE /teachers/classes/{class_id}/enroll/{student_id}`
-- `GET /teachers/classes/{class_id}/dashboard`
-- `GET /teachers/classes/{class_id}/heatmap`
-- `GET /teachers/classes/{class_id}/alerts`
-- `GET /teachers/classes/{class_id}/students/{student_id}/timeline`
-- `POST /teachers/assignments`
-- `POST /teachers/interventions`
+Endpoints in this section:
+- `GET /api/v1/teachers/classes`
+- `POST /api/v1/teachers/classes`
+- `POST /api/v1/teachers/classes/{class_id}/enroll`
+- `DELETE /api/v1/teachers/classes/{class_id}/enroll/{student_id}`
+- `GET /api/v1/teachers/classes/{class_id}/dashboard`
+- `GET /api/v1/teachers/classes/{class_id}/heatmap`
+- `GET /api/v1/teachers/classes/{class_id}/alerts`
+- `GET /api/v1/teachers/classes/{class_id}/students/{student_id}/timeline`
+- `POST /api/v1/teachers/assignments`
+- `POST /api/v1/teachers/interventions`
 
-### Parallel lanes
-- Lane A: class/roster/assignment/intervention schema + migrations.
-- Lane B: dashboard/alerts aggregations from activity + mastery data.
-- Lane C: heatmap/timeline merge from graph + relational slices.
-- Lane D: role-based access tests (`teacher` only).
+Lane A (create/modify files):
+- `backend/alembic/versions/0010_teacher_intelligence_tables.py`
+- `backend/models/teacher_class.py`
+- `backend/models/class_enrollment.py`
+- `backend/models/teacher_assignment.py`
+- `backend/models/teacher_intervention.py`
+- `backend/alembic/env.py` (import new models)
 
-### Dependency
-Sections 3 to 5 completed.
+Lane B (create/modify files):
+- `backend/schemas/teacher_schema.py`
+- `backend/repositories/teacher_repo.py`
+- `backend/services/teacher_service.py`
+- `backend/services/teacher_analytics_service.py`
 
-### Test gate
-1. Teacher can create class and enroll students.
-2. Dashboard shows class KPIs and completion distribution.
-3. Heatmap returns concept mastery matrix for class.
-4. Alerts returns inactivity/decline/prereq-failure signals.
-5. Non-teacher role is denied.
+Lane C (create/modify files):
+- `backend/endpoints/teachers.py`
+- `backend/main.py` (include teacher router)
 
-## Section 7 (P1): Admin Curriculum MVP + System Reliability
+Lane D (create/modify files):
+- `backend/tests/unit/test_teacher_service.py`
+- `backend/tests/unit/test_teacher_analytics_service.py`
+- `backend/tests/unit/test_teachers_endpoints.py`
+- `backend/tests/integration/test_section6_teacher_flow.py`
+- `backend/README.md` (section 6 smoke test block)
 
-### Objective
-Deliver content governance and deployment-safe curriculum version control.
+Section 6 test gate:
+1. Teacher can create/enroll/manage class.
+2. Dashboard/heatmap/alerts/timeline return valid data.
+3. RBAC denies non-teacher users.
 
-### In scope
-- `POST /admin/curriculum/upload`
-- `GET /admin/curriculum/ingestion-status`
-- `GET /admin/curriculum/pending-approvals`
-- `GET /admin/curriculum/topics/{topic_id}`
-- `GET /admin/curriculum/concepts/{concept_id}`
-- `PUT /admin/curriculum/topics/{topic_id}/map`
-- `POST /admin/curriculum/versions/{version_id}/approve`
-- `POST /admin/curriculum/versions/{version_id}/rollback`
-- `GET /admin/governance/metrics`
-- `GET /admin/governance/hallucinations`
-- `POST /admin/governance/hallucinations/{id}/resolve`
-- `POST /internal/rag/retrieve`
-- Deep health checks in `/system/health`
+---
 
-### Parallel lanes
-- Lane A: ingestion job/version tables + status state machine.
-- Lane B: curriculum mapping and version approve/rollback endpoints.
-- Lane C: internal RAG retrieve endpoint + governance metrics wiring.
-- Lane D: admin RBAC tests + ingestion smoke tests.
+## Section 7 (P1) Admin Curriculum + Governance + Internal RAG + Deep Health
 
-### Dependency
-Sections 1 to 6 completed.
+Endpoints in this section:
+- `POST /api/v1/admin/curriculum/upload`
+- `GET /api/v1/admin/curriculum/ingestion-status`
+- `GET /api/v1/admin/curriculum/pending-approvals`
+- `GET /api/v1/admin/curriculum/topics/{topic_id}`
+- `GET /api/v1/admin/curriculum/concepts/{concept_id}`
+- `PUT /api/v1/admin/curriculum/topics/{topic_id}/map`
+- `POST /api/v1/admin/curriculum/versions/{version_id}/approve`
+- `POST /api/v1/admin/curriculum/versions/{version_id}/rollback`
+- `GET /api/v1/admin/governance/metrics`
+- `GET /api/v1/admin/governance/hallucinations`
+- `POST /api/v1/admin/governance/hallucinations/{id}/resolve`
+- `POST /api/v1/internal/rag/retrieve`
+- `GET /api/v1/system/health` (deep checks)
 
-### Test gate
-1. Upload creates `job_id`; status transitions parse -> chunk -> embed -> ready.
-2. Approve marks version live; rollback restores previous live version.
-3. Internal RAG retrieve returns filtered chunks payload.
-4. Governance endpoints return non-empty metrics structure.
-5. `/system/health` reports Postgres/Redis/Neo4j/Vector/LLM connectivity.
+Lane A (create/modify files):
+- `backend/alembic/versions/0011_admin_curriculum_governance_tables.py`
+- `backend/models/curriculum_ingestion_job.py`
+- `backend/models/curriculum_version.py`
+- `backend/models/curriculum_topic_map.py`
+- `backend/models/governance_hallucination.py`
+- `backend/alembic/env.py` (import new models)
 
-## Section 8 (Release Gate): E2E Validation and Demo Freeze
+Lane B (create/modify files):
+- `backend/schemas/admin_curriculum_schema.py`
+- `backend/schemas/governance_schema.py`
+- `backend/schemas/internal_rag_schema.py`
+- `backend/repositories/admin_curriculum_repo.py`
+- `backend/repositories/governance_repo.py`
+- `backend/services/admin_curriculum_service.py`
+- `backend/services/governance_service.py`
+- `backend/services/rag_retrieve_service.py`
+- `backend/services/system_health_service.py`
+- `ai-core/core_engine/rag/retriever.py` (real retrieval implementation)
 
-### Objective
-Lock a demo-safe MVP with deterministic test flows for student, teacher, and admin.
+Lane C (create/modify files):
+- `backend/endpoints/admin_curriculum.py`
+- `backend/endpoints/admin_governance.py`
+- `backend/endpoints/internal_rag.py`
+- `backend/endpoints/system.py` (deep checks)
+- `backend/main.py` (include new routers)
 
-### In scope
-- Final smoke scripts and test fixtures for shared DB.
-- End-to-end test docs for all MVP MUST flows.
-- PR cleanup and branch freeze criteria.
+Lane D (create/modify files):
+- `backend/tests/unit/test_admin_curriculum_service.py`
+- `backend/tests/unit/test_governance_service.py`
+- `backend/tests/unit/test_internal_rag_endpoint.py`
+- `backend/tests/unit/test_system_health_endpoint.py`
+- `backend/tests/integration/test_section7_admin_flow.py`
+- `backend/README.md` (section 7 smoke test block)
 
-### Test gate
-1. Student flow: register/login -> profile -> diagnostic -> quiz -> tutor chat -> mastery.
-2. Teacher flow: class create/enroll -> heatmap -> alerts -> timeline.
-3. Admin flow: upload -> ingestion status -> approve -> rollback.
-4. All tests pass in CI/local and documented in README.
+Section 7 test gate:
+1. Upload returns `job_id`.
+2. Ingestion status progression works.
+3. Approve/rollback workflow works.
+4. Internal RAG retrieve returns chunk list payload.
+5. Deep health reports Postgres/Redis/Neo4j/Vector/LLM.
 
-## 4) Endpoint-to-Section Mapping (Uncovered Scope)
+---
 
-- Section 2: Part 3 + internal postgres endpoints.
-- Section 3: Part 6 + internal graph endpoints.
-- Section 4: Part 7.
-- Section 5: Part 8 + Part 9.
-- Section 6: Part 10.
-- Section 7: Part 11 + internal rag + deep Part 12.
-- Section 8: final integration and sign-off.
+## Section 8 (Release Gate) E2E Validation and Demo Freeze
 
-## 5) Notes for Team Lead Assignment
+No new business endpoints. This section finalizes integration quality.
 
-1. Keep all work inside the active section only.
-2. Assign engineers by lane (A/B/C/D) per section to avoid file conflicts.
-3. Do one merge per lane, then run section test gate, then move to next section.
-4. Require each PR to include endpoint list changed, migration ID (if any), Swagger test payload/response, and exact test command output.
+Lane A (create/modify files):
+- `backend/scripts/seed_demo_data.py`
+- `backend/scripts/reset_demo_state.py`
+
+Lane B (create/modify files):
+- `ai-core/scripts/smoke_test_question.py` (final contract version)
+- `backend/services/demo_validation_service.py` (optional helper)
+
+Lane C (create/modify files):
+- `README.md` (final MVP API matrix)
+- `backend/README.md` (full cross-team smoke procedures)
+- `ai-core/README.md` (runtime + endpoint docs)
+
+Lane D (create/modify files):
+- `backend/tests/integration/test_e2e_student_flow.py`
+- `backend/tests/integration/test_e2e_teacher_flow.py`
+- `backend/tests/integration/test_e2e_admin_flow.py`
+- `ai-core/tests/unit/test_scoped_retrieval.py`
+- `ai-core/tests/unit/test_prereq_query.py`
+
+Section 8 test gate:
+1. Student E2E passes.
+2. Teacher E2E passes.
+3. Admin E2E passes.
+4. README smoke tests are reproducible by any teammate.
+
+---
+
+## 3) Endpoint-to-Section Coverage Map
+
+Section 2:
+- Part 3 + internal postgres endpoints.
+
+Section 3:
+- Part 6 + internal graph endpoints.
+
+Section 4:
+- Part 7.
+
+Section 5:
+- Part 8 + Part 9.
+
+Section 6:
+- Part 10.
+
+Section 7:
+- Part 11 + internal rag + deep Part 12.
+
+Section 8:
+- Final integration and release-quality validation.
+
+## 4) PR Requirements Per Lane
+
+Every PR must include:
+- endpoints changed
+- files added/modified
+- migration revision ID (if any)
+- sample request/response
+- exact test command and output
