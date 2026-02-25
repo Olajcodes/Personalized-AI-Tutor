@@ -10,10 +10,10 @@ class Role(str, Enum):
     admin = "admin"
 
 
-class JSSLevel(str, Enum):
-    jss1 = "JSS1"
-    jss2 = "JSS2"
-    jss3 = "JSS3"
+class SSSLevel(str, Enum):
+    sss1 = "SSS1"
+    sss2 = "SSS2"
+    sss3 = "SSS3"
 
 
 class Term(int, Enum):

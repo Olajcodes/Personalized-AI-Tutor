@@ -1,14 +1,16 @@
-"""Pydantic models for FastAPI ↔ ai-core contract."""
+"""Pydantic models for FastAPI <-> ai-core contract."""
 
 from __future__ import annotations
-from pydantic import BaseModel, Field
+
 from typing import Any, Dict, List, Literal, Optional
+
+from pydantic import BaseModel, Field
 
 
 class TutorRequest(BaseModel):
     user_id: str
     role: Literal["student", "teacher", "admin"] = "student"
-    jss_level: Literal["JSS1", "JSS2", "JSS3"]
+    sss_level: Literal["SSS1", "SSS2", "SSS3"]
     term: Literal[1, 2, 3]
     subject_id: str
     topic_id: Optional[str] = None
