@@ -81,6 +81,7 @@ Expected head includes:
 - `0002_lesson_block_constraints`
 - `0003_create_users_table`
 - `0004_profile_user_fk`
+- `0005_activity_tracking`
 
 ### Important for shared DB
 
@@ -146,9 +147,15 @@ Base prefix: `/api/v1`
 - `GET /students/profile`
 - `PUT /students/profile`
 - `PUT /students/users/{user_id}/preferences`
+- `PUT /users/{user_id}/preferences`
 - `GET /metadata/subjects`
+- `GET /metadata/levels`
 - `GET /learning/topics`
 - `GET /learning/topics/{topic_id}/lesson`
+- `POST /learning/activity/log`
+- `GET /students/stats`
+- `GET /students/leaderboard`
+- `GET /system/health`
 
 ## Shared DB Test Runbook (Team Standard)
 
@@ -239,6 +246,29 @@ Known valid sample query from current seed:
 
 Then login again with `newpassword123`.
 
+### 7) Activity + stats quick validation
+
+- `POST /api/v1/learning/activity/log`
+
+```json
+{
+  "student_id": "PUT_REGISTER_USER_ID_HERE",
+  "subject": "math",
+  "term": 1,
+  "event_type": "lesson_viewed",
+  "ref_id": "topic-linear-equations",
+  "duration_seconds": 120
+}
+```
+
+- `GET /api/v1/students/stats`
+- `GET /api/v1/students/leaderboard`
+
+Expected:
+- `stats` reflects non-zero study time and points after log call.
+- `leaderboard` contains ranked entries.
+- `student_id` in log request must match authenticated token user id.
+
 ## Quick Test Payloads
 
 ### Register
@@ -273,7 +303,9 @@ Then login again with `newpassword123`.
 
 ### Update Preferences
 
-`PUT /api/v1/students/users/{user_id}/preferences`
+Use either path:
+- `PUT /api/v1/students/users/{user_id}/preferences` (backward compatible)
+- `PUT /api/v1/users/{user_id}/preferences` (normalized contract)
 
 ```json
 {

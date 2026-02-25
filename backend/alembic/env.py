@@ -6,6 +6,7 @@ from backend.core.database import Base
 from backend.core.config import settings
 
 # Import models so Alembic can detect them
+from backend.models.activity import ActivityLog, DailyActivitySummary, StudentStats
 from backend.models.lesson import Lesson, LessonBlock
 from backend.models.student import LearningPreference, StudentProfile, StudentSubject
 from backend.models.subject import Subject
