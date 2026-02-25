@@ -25,3 +25,7 @@ That function performs, in order:
 ## Notes
 - Ingestion pipelines live outside ai-core (admin pipeline).
 - Multi-agent LangGraph orchestration is deferred to stretch goals.
+
+## Service Endpoints (Container Runtime)
+- `GET /` -> service status
+- `GET /health` -> config presence checks for LLM/Postgres/Neo4j/Redis/Vector settings

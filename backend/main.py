@@ -12,6 +12,7 @@ from backend.endpoints.student_learning_activity import learning_router, student
 from backend.endpoints.students import router as students_router
 from backend.endpoints.system import router as system_router
 from backend.endpoints.topics import router as topics_router
+from backend.endpoints.users import router as users_router
 
 API_PREFIX = "/api/v1"
 
@@ -27,6 +28,7 @@ app.include_router(lessons_router, prefix=API_PREFIX)
 app.include_router(topics_router, prefix=API_PREFIX)
 app.include_router(metadata_router, prefix=API_PREFIX)
 app.include_router(students_router, prefix=API_PREFIX)
+app.include_router(users_router, prefix=API_PREFIX)
 app.include_router(system_router, prefix=API_PREFIX)
 
 @app.get("/")

@@ -112,16 +112,17 @@ This repository is actively under development in team-parallel mode.
 
 ### Implemented and Working
 
-- Curriculum metadata subjects endpoint
-- Student-scoped topic listing
-- Student-scoped lesson content delivery
+- Auth and user management endpoints (register/login/password)
+- Student profile and preference endpoints
+- Curriculum metadata endpoints (subjects and levels)
+- Student-scoped topic listing and lesson delivery
+- Student learning activity endpoints (log/stats/leaderboard)
+- System health endpoint
 - Migration and seed flow for curriculum lesson data
-- Unit tests for lesson service logic
+- Unit tests for auth, lessons, activity, and section-1 endpoint contracts
 
 ### Present but Not Fully Integrated Yet
 
-- Auth endpoint module
-- System health endpoint module
 - AI-core provider and datastore integrations (partially stubbed)
 - Full MVP endpoint surface from the normalized capstone API spec
 
@@ -131,9 +132,22 @@ Base URL: `/api/v1`
 
 ### Currently Mounted Routes
 
+- `POST /auth/register`
+- `POST /auth/login`
+- `PUT /auth/password`
+- `POST /students/profile/setup`
+- `GET /students/profile`
+- `PUT /students/profile`
+- `PUT /students/users/{user_id}/preferences`
+- `PUT /users/{user_id}/preferences`
 - `GET /metadata/subjects`
+- `GET /metadata/levels`
 - `GET /learning/topics`
 - `GET /learning/topics/{topic_id}/lesson`
+- `POST /learning/activity/log`
+- `GET /students/stats`
+- `GET /students/leaderboard`
+- `GET /system/health`
 
 ### Examples of Planned MVP Routes
 
@@ -206,6 +220,38 @@ python -m uvicorn backend.main:app --reload
 Swagger:
 
 - `http://127.0.0.1:8000/docs`
+
+## Containerized Setup (Backend + AI Core)
+
+Run from repository root:
+
+```bash
+docker compose up --build
+```
+
+Services:
+- Backend API: `http://127.0.0.1:8000`
+- Backend Swagger: `http://127.0.0.1:8000/docs`
+- AI Core service: `http://127.0.0.1:8100`
+- AI Core health: `http://127.0.0.1:8100/health`
+- Postgres: `localhost:5432`
+
+Notes:
+- Compose runs backend migrations automatically at container startup.
+- Backend uses `DATABASE_URL` from compose env (defaults to local compose Postgres).
+- Existing `backend/.env` and `ai-core/.env` are still loaded via `env_file`.
+
+Stop services:
+
+```bash
+docker compose down
+```
+
+Stop services and remove DB volume:
+
+```bash
+docker compose down -v
+```
 
 ## Endpoint Verification Guide (Current Working Scope)
 
