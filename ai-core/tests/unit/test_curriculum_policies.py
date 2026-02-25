@@ -1,17 +1,26 @@
 import pytest
-from core_engine.curriculum.policies import assert_jss_level_allowed, assert_term_allowed, CurriculumPolicyError
 
-def test_jss_allowed():
-    for lvl in ["JSS1","JSS2","JSS3"]:
-        assert_jss_level_allowed(lvl)
+from core_engine.curriculum.policies import (
+    CurriculumPolicyError,
+    assert_sss_level_allowed,
+    assert_term_allowed,
+)
 
-def test_jss_reject():
+
+def test_sss_allowed():
+    for lvl in ["SSS1", "SSS2", "SSS3"]:
+        assert_sss_level_allowed(lvl)
+
+
+def test_sss_reject():
     with pytest.raises(CurriculumPolicyError):
-        assert_jss_level_allowed("SS1")
+        assert_sss_level_allowed("SS1")
+
 
 def test_term_allowed():
-    for t in [1,2,3]:
+    for t in [1, 2, 3]:
         assert_term_allowed(t)
+
 
 def test_term_reject():
     with pytest.raises(CurriculumPolicyError):
