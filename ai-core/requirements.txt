@@ -1,3 +1,5 @@
+fastapi
+uvicorn[standard]
 langchain-openai
 langchain
 langgraph

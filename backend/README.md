@@ -136,6 +136,18 @@ python -m uvicorn backend.main:app --reload
 Swagger:
 - `http://127.0.0.1:8000/docs`
 
+## Docker Runtime
+
+From repo root:
+
+```bash
+docker compose up --build
+```
+
+Backend container:
+- runs `alembic upgrade head` at startup
+- serves API on `http://127.0.0.1:8000`
+
 ## Mounted Routes (Current)
 
 Base prefix: `/api/v1`

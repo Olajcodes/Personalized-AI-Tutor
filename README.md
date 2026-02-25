@@ -221,6 +221,38 @@ Swagger:
 
 - `http://127.0.0.1:8000/docs`
 
+## Containerized Setup (Backend + AI Core)
+
+Run from repository root:
+
+```bash
+docker compose up --build
+```
+
+Services:
+- Backend API: `http://127.0.0.1:8000`
+- Backend Swagger: `http://127.0.0.1:8000/docs`
+- AI Core service: `http://127.0.0.1:8100`
+- AI Core health: `http://127.0.0.1:8100/health`
+- Postgres: `localhost:5432`
+
+Notes:
+- Compose runs backend migrations automatically at container startup.
+- Backend uses `DATABASE_URL` from compose env (defaults to local compose Postgres).
+- Existing `backend/.env` and `ai-core/.env` are still loaded via `env_file`.
+
+Stop services:
+
+```bash
+docker compose down
+```
+
+Stop services and remove DB volume:
+
+```bash
+docker compose down -v
+```
+
 ## Endpoint Verification Guide (Current Working Scope)
 
 Use these in Swagger or HTTP client after seed:

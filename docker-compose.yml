@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mastery-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mastery_ai
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mastery_ai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: mastery-backend
+    restart: unless-stopped
+    env_file:
+      - backend/.env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/mastery_ai}
+      ENV: ${ENV:-dev}
+      REDIS_URL: ${REDIS_URL:-}
+      NEO4J_URI: ${NEO4J_URI:-}
+      VECTOR_DB_URL: ${VECTOR_DB_URL:-}
+      LLM_API_BASE: ${LLM_API_BASE:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "python -m alembic -c backend/alembic.ini upgrade head &&
+      python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+
+  ai-core:
+    build:
+      context: .
+      dockerfile: ai-core/Dockerfile
+    container_name: mastery-ai-core
+    restart: unless-stopped
+    env_file:
+      - ai-core/.env
+    environment:
+      POSTGRES_DSN: ${POSTGRES_DSN:-postgresql://postgres:postgres@postgres:5432/mastery_ai}
+      NEO4J_URI: ${NEO4J_URI:-}
+      NEO4J_USER: ${NEO4J_USER:-}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-}
+      REDIS_URL: ${REDIS_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8100:8100"
+
+volumes:
+  postgres_data:
