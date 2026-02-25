@@ -13,6 +13,9 @@ from backend.endpoints.students import router as students_router
 from backend.endpoints.system import router as system_router
 from backend.endpoints.topics import router as topics_router
 from backend.endpoints.users import router as users_router
+# Section 2 Routers
+from backend.endpoints.tutor_sessions import router as tutor_sessions_router
+from backend.endpoints.internal_postgres_service import router as internal_postgres_router
 
 API_PREFIX = "/api/v1"
 
@@ -30,6 +33,9 @@ app.include_router(metadata_router, prefix=API_PREFIX)
 app.include_router(students_router, prefix=API_PREFIX)
 app.include_router(users_router, prefix=API_PREFIX)
 app.include_router(system_router, prefix=API_PREFIX)
+# Section 2 Router Wiring
+app.include_router(tutor_sessions_router, prefix=API_PREFIX)
+app.include_router(internal_postgres_router, prefix=API_PREFIX)
 
 @app.get("/")
 async def root():
