@@ -1,18 +1,20 @@
+import inspect
 from sqlalchemy.orm import Session
 from uuid import UUID
 from fastapi import HTTPException, status
-from datetime import datetime
 
+from backend.schemas.activity_schema import ActivityLogCreate
 from backend.schemas.quiz_schema import QuizSubmitRequest, QuizSubmitResponse, ConceptBreakdownItem
 from backend.repositories.quiz_repo import QuizRepository
 from backend.services.graph_mastery_update_service import GraphMasteryUpdateService
 from backend.services.activity_service import ActivityService  # from Section 1
+from backend.repositories.activity_repo import ActivityRepository
 
 class QuizSubmitService:
     def __init__(self, db: Session):
         self.repo = QuizRepository(db)
         self.graph_service = GraphMasteryUpdateService(db)
-        self.activity_service = ActivityService(db)
+        self.activity_service = ActivityService(ActivityRepository(db))
 
     async def submit_quiz(self, quiz_id: UUID, request: QuizSubmitRequest) -> QuizSubmitResponse:
         # 1. Fetch quiz and questions
@@ -20,21 +22,22 @@ class QuizSubmitService:
         if not quiz:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quiz not found")
         questions = self.repo.get_questions_for_quiz(quiz_id)
-        question_map = {q.id: q for q in questions}
+        question_map = {str(q.id): q for q in questions}
 
         # 2. Score answers
         total_questions = len(questions)
         correct_count = 0
         concept_results = []  # list of (concept_id, correct)
         for ans in request.answers:
-            qid = ans["question_id"]
+            qid = str(ans["question_id"])
             if qid not in question_map:
                 continue  # skip invalid question ids
             q = question_map[qid]
-            is_correct = (ans["answer"].strip().lower() == q.correct_answer.strip().lower())
+            expected = (q.correct_answer or "").strip().lower()
+            is_correct = (ans["answer"].strip().lower() == expected)
             if is_correct:
                 correct_count += 1
-            concept_results.append((q.concept_id, is_correct))
+            concept_results.append((getattr(q, "concept_id", q.id), is_correct))
 
         score = (correct_count / total_questions) * 100 if total_questions > 0 else 0
         xp = int(score)  # simple mapping: 1 XP per percent
@@ -44,11 +47,12 @@ class QuizSubmitService:
         # Prepare answers with is_correct flag
         answers_with_score = []
         for ans in request.answers:
-            qid = ans["question_id"]
+            qid = str(ans["question_id"])
             if qid in question_map:
-                is_correct = (ans["answer"].strip().lower() == question_map[qid].correct_answer.strip().lower())
+                expected = (question_map[qid].correct_answer or "").strip().lower()
+                is_correct = (ans["answer"].strip().lower() == expected)
                 answers_with_score.append({
-                    "question_id": qid,
+                    "question_id": question_map[qid].id,
                     "answer": ans["answer"],
                     "is_correct": is_correct
                 })
@@ -56,14 +60,17 @@ class QuizSubmitService:
         self.repo.update_attempt_score(attempt.id, score, xp)
 
         # 4. Log activity
-        await self.activity_service.log_activity(
+        activity_payload = ActivityLogCreate(
             student_id=request.student_id,
-            subject=quiz.subject,  # need to store subject on quiz? currently not in model. We'll need to add subject to quiz model.
+            subject=quiz.subject,
             term=quiz.term,
             event_type="quiz_submitted",
-            ref_id=quiz_id,
-            duration_seconds=request.time_taken_seconds
+            ref_id=str(quiz_id),
+            duration_seconds=request.time_taken_seconds,
         )
+        activity_result = self.activity_service.log_activity(activity_payload)
+        if inspect.isawaitable(activity_result):
+            await activity_result
 
         # 5. Trigger graph mastery update
         concept_breakdown = [
@@ -74,10 +81,10 @@ class QuizSubmitService:
             student_id=request.student_id,
             quiz_id=quiz_id,
             attempt_id=attempt.id,
-            subject=quiz.subject,  # need subject field
-            sss_level=quiz.sss_level,  # need sss_level field
-            term=quiz.term,  # need term field
-            source=quiz.purpose,
+            subject=quiz.subject,
+            sss_level=quiz.sss_level,
+            term=quiz.term,
+            source=quiz.purpose or "practice",
             concept_breakdown=concept_breakdown
         )
 

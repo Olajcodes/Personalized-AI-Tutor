@@ -20,6 +20,7 @@ def test_learning_path_service_contract_is_exposed():
 
     service = learning_path_service_module.learning_path_service
     assert callable(getattr(service, "calculate_next_step", None))
+    assert callable(getattr(service, "get_learning_map_visual", None))
 
 
 def test_learning_path_service_signature_includes_db_and_payload():
@@ -27,3 +28,11 @@ def test_learning_path_service_signature_includes_db_and_payload():
     params = inspect.signature(service.calculate_next_step).parameters
 
     assert "db" in params and "payload" in params
+
+
+def test_learning_map_visual_signature_includes_required_args():
+    service = learning_path_service_module.learning_path_service
+    params = inspect.signature(service.get_learning_map_visual).parameters
+
+    for expected in ("db", "student_id", "subject", "sss_level", "term", "view"):
+        assert expected in params

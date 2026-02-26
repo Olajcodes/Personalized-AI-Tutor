@@ -5,6 +5,7 @@ from backend.main import app
 
 SECTION3_PATH_ENDPOINTS = [
     "/api/v1/learning/path/next",
+    "/api/v1/learning/path/map/visual",
     "/api/v1/internal/graph/context",
     "/api/v1/internal/graph/update-mastery",
 ]

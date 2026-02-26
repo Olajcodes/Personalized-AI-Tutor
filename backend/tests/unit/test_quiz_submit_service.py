@@ -58,6 +58,9 @@ def mock_question(quiz_id):
 async def test_submit_quiz_success(
     mock_db, quiz_id, student_id, submit_request, mock_quiz, mock_question
 ):
+    # Align request question_id with mocked question so grading path is exercised.
+    submit_request.answers[0]["question_id"] = mock_question.id
+
     service = QuizSubmitService(mock_db)
     service.repo.get_quiz_with_questions = MagicMock(return_value=mock_quiz)
     service.repo.get_questions_for_quiz = MagicMock(return_value=[mock_question])

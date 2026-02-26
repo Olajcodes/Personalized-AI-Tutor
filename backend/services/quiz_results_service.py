@@ -1,7 +1,6 @@
 from sqlalchemy.orm import Session
 from uuid import UUID
 from fastapi import HTTPException, status
-from typing import List
 
 from backend.schemas.quiz_schema import QuizResultsResponse, ConceptBreakdownItem
 from backend.repositories.quiz_repo import QuizRepository
@@ -26,12 +25,13 @@ class QuizResultsService:
         questions = self.repo.get_questions_for_quiz(quiz_id)
         question_map = {q.id: q for q in questions}
         concept_map = {}  # concept_id -> list of correctness
-        for answer in attempt.answers:
+        for answer in getattr(attempt, "answers", []):
             q = question_map.get(answer.question_id)
             if q:
-                if q.concept_id not in concept_map:
-                    concept_map[q.concept_id] = []
-                concept_map[q.concept_id].append(answer.is_correct)
+                concept_id = getattr(q, "concept_id", q.id)
+                if concept_id not in concept_map:
+                    concept_map[concept_id] = []
+                concept_map[concept_id].append(bool(answer.is_correct))
 
         concept_breakdown = []
         for concept_id, correctness_list in concept_map.items():
@@ -61,6 +61,6 @@ class QuizResultsService:
             recommended_revision_topic_id=recommended_topic
         )
 
-    async def _get_topic_for_concept(self, concept_id: UUID) -> UUID:
+    async def _get_topic_for_concept(self, concept_id: UUID) -> UUID | None:
         # Placeholder: would query graph or topic-concept mapping table
         return None

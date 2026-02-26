@@ -1,25 +1,41 @@
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Literal
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
+
 from backend.core.database import get_db
-from backend.schemas.learning_path_schema import PathNextIn, PathNextOut
-from backend.services.learning_path_service import learning_path_service
+from backend.schemas.learning_path_schema import LearningMapVisualOut, PathNextIn, PathNextOut
+from backend.services.learning_path_service import LearningPathValidationError, learning_path_service
 
 router = APIRouter(prefix="/learning/path", tags=["Learning Path"])
 
+
 @router.post("/next", response_model=PathNextOut)
-def get_next_path_step(
-    payload: PathNextIn,
-    db: Session = Depends(get_db)
-):
-    """
-    POST /api/v1/learning/path/next
-    Determines the next optimal topic or activity for the student.
-    Returns topic recommendations and identifies prerequisite gaps.
-    """
+def get_next_path_step(payload: PathNextIn, db: Session = Depends(get_db)):
     try:
         return learning_path_service.calculate_next_step(db=db, payload=payload)
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error calculating next path step: {str(e)}"
+    except LearningPathValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.get("/map/visual", response_model=LearningMapVisualOut)
+def get_learning_map_visual(
+    student_id: UUID,
+    subject: Literal["math", "english", "civic"],
+    sss_level: Literal["SSS1", "SSS2", "SSS3"],
+    term: int = Query(..., ge=1, le=3),
+    view: Literal["topic", "concept"] = "topic",
+    db: Session = Depends(get_db),
+):
+    try:
+        return learning_path_service.get_learning_map_visual(
+            db,
+            student_id=student_id,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+            view=view,
         )
+    except LearningPathValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))

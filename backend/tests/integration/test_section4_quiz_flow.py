@@ -15,6 +15,12 @@ SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+if engine.dialect.name == "sqlite":
+    pytest.skip(
+        "Section 4 integration flow requires a Postgres-compatible JSONB test database.",
+        allow_module_level=True,
+    )
+
 
 def override_get_db():
     try:

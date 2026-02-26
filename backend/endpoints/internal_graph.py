@@ -1,40 +1,45 @@
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Literal
 from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+
+from backend.core.database import get_db
 from backend.schemas.internal_graph_schema import (
     InternalGraphContextOut,
     InternalGraphUpdateIn,
-    InternalGraphUpdateOut
+    InternalGraphUpdateOut,
 )
-from backend.services.graph_client_service import graph_client_service
+from backend.services.graph_client_service import GraphClientValidationError, graph_client_service
 
 router = APIRouter(prefix="/internal/graph", tags=["Internal Graph APIs"])
 
+
 @router.get("/context", response_model=InternalGraphContextOut)
 def get_graph_context(
-    student_id: UUID
+    student_id: UUID,
+    subject: Literal["math", "english", "civic"],
+    sss_level: Literal["SSS1", "SSS2", "SSS3"],
+    term: int = Query(..., ge=1, le=3),
+    topic_id: str | None = None,
+    db: Session = Depends(get_db),
 ):
-    """
-    GET /api/v1/internal/graph/context
-    Retrieves the current knowledge graph state for a student.
-    Used internally to inform AI tutoring and path generation.
-    """
-    context = graph_client_service.get_student_graph_context(student_id=student_id)
-    if not context:
-        raise HTTPException(status_code=404, detail="Graph context not found for student")
-    return context
+    try:
+        return graph_client_service.get_student_graph_context(
+            db,
+            student_id=student_id,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+            topic_id=topic_id,
+        )
+    except GraphClientValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
 
 @router.post("/update-mastery", response_model=InternalGraphUpdateOut)
-def update_graph_mastery(
-    payload: InternalGraphUpdateIn
-):
-    """
-    POST /api/v1/internal/graph/update-mastery
-    Pushes mastery updates (from quizzes or diagnostics) into the Neo4j/Knowledge Graph.
-    """
+def update_graph_mastery(payload: InternalGraphUpdateIn, db: Session = Depends(get_db)):
     try:
-        return graph_client_service.push_mastery_update(payload=payload)
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to update knowledge graph: {str(e)}"
-        )
+        return graph_client_service.push_mastery_update(db, payload=payload)
+    except GraphClientValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))

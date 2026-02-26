@@ -7,6 +7,7 @@ REQUIRED_SECTION3_PATHS = [
     "/api/v1/learning/diagnostic/start",
     "/api/v1/learning/diagnostic/submit",
     "/api/v1/learning/path/next",
+    "/api/v1/learning/path/map/visual",
     "/api/v1/internal/graph/context",
     "/api/v1/internal/graph/update-mastery",
 ]
