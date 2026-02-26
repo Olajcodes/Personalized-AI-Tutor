@@ -56,14 +56,14 @@ Mastery AI is a curriculum-governed tutoring platform for SSS1 to SSS3 learners 
 Mastery AI is split into two primary codebases in one repository:
 
 1. `backend/` (FastAPI + PostgreSQL)
-2. `ai-core/` (orchestration and AI logic)
+2. `ai_core/` (orchestration and AI logic)
 
 ### High-Level Flow
 
 1. Frontend sends user action to backend API.
 2. Backend resolves identity, scope, and persisted state.
-3. For AI interactions, backend delegates to `ai-core` orchestration.
-4. `ai-core` performs scope checks, retrieval, prerequisite lookup, generation, and lightweight mastery updates.
+3. For AI interactions, backend delegates to `ai_core` orchestration.
+4. `ai_core` performs scope checks, retrieval, prerequisite lookup, generation, and lightweight mastery updates.
 5. Backend persists outputs, history, and analytics-facing records.
 
 ### Data Components
@@ -88,7 +88,7 @@ Personalized-AI-Tutor/
 |   |-- services/
 |   |-- tests/
 |   `-- main.py
-|-- ai-core/
+|-- ai_core/
 |   |-- core_engine/
 |   |-- scripts/
 |   `-- tests/
@@ -101,8 +101,8 @@ Personalized-AI-Tutor/
 - ORM and migrations: SQLAlchemy, Alembic
 - Relational DB: PostgreSQL
 - Graph DB: Neo4j
-- AI orchestration: LangGraph-compatible engine design (`ai-core`)
-- Retrieval: vector-store abstraction in `ai-core`
+- AI orchestration: LangGraph-compatible engine design (`ai_core`)
+- Retrieval: vector-store abstraction in `ai_core`
 - Security: JWT and password hashing utilities
 - Testing: pytest
 
@@ -197,7 +197,7 @@ ENV=dev
 
 ```bash
 python -m pip install -r backend/requirements.txt pytest
-python -m pip install -r ai-core/requirements.txt
+python -m pip install -r ai_core/requirements.txt
 ```
 
 ### 4) Migrate and Seed Backend Data
@@ -239,7 +239,7 @@ Services:
 Notes:
 - Compose runs backend migrations automatically at container startup.
 - Backend uses `DATABASE_URL` from compose env (defaults to local compose Postgres).
-- Existing `backend/.env` and `ai-core/.env` are still loaded via `env_file`.
+- Existing `backend/.env` and `ai_core/.env` are still loaded via `env_file`.
 
 Stop services:
 
@@ -252,6 +252,38 @@ Stop services and remove DB volume:
 ```bash
 docker compose down -v
 ```
+
+## Render Deployment (Backend + AI Core)
+
+This repo is configured for Render Blueprint deployment with [`render.yaml`](./render.yaml).
+
+### Recommended (Blueprint)
+
+1. In Render dashboard, click `New +` -> `Blueprint`.
+2. Select this repository and branch `main`.
+3. Render will create two web services:
+   - `mastery-backend` (Dockerfile: `backend/Dockerfile`)
+   - `mastery-ai-core` (Dockerfile: `ai_core/Dockerfile`)
+4. Set required secret env vars before first deploy:
+   - Backend: `DATABASE_URL`, `JWT_SECRET`
+   - AI Core: `LLM_API_KEY` (plus any datastore secrets you use)
+5. Deploy.
+
+### Manual Service Setup (if not using Blueprint)
+
+For backend service:
+- Runtime: `Docker`
+- Dockerfile Path: `backend/Dockerfile`
+- Docker Build Context: `.`
+- Health Check Path: `/api/v1/system/health`
+
+For ai_core service:
+- Runtime: `Docker`
+- Dockerfile Path: `ai_core/Dockerfile`
+- Docker Build Context: `.`
+- Health Check Path: `/health`
+
+If Render shows `failed to read dockerfile: open Dockerfile: no such file or directory`, your service is still pointing to root `./Dockerfile`. Update Dockerfile Path to the values above and redeploy with cache clear.
 
 ## Endpoint Verification Guide (Current Working Scope)
 
@@ -304,7 +336,7 @@ python -m pytest -q backend/tests
 ### AI Core
 
 ```bash
-python -m pytest -q ai-core/tests
+python -m pytest -q ai_core/tests
 ```
 
 ## Contribution Workflow
