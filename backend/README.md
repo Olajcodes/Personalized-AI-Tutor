@@ -607,13 +607,15 @@ Suggested section format:
 
 
 
-### Section 4 – Quiz Lifecycle (Generate, Submit, Results)
+### Section 4 - Quiz Lifecycle (Generate, Submit, Results)
 
-**Smoke test steps**:
-1. Ensure database is migrated: `alembic upgrade head`
-2. Start the server: `uvicorn main:app --reload`
-3. Generate a quiz via `POST /api/v1/learning/quizzes/generate` with a valid payload.
-4. Submit answers via `POST /api/v1/learning/quizzes/{quiz_id}/submit`.
-5. Fetch results via `GET /api/v1/learning/quizzes/{quiz_id}/results?student_id=...&attempt_id=...`.
-6. Run unit tests: `pytest backend/tests/unit/test_quiz_* -v`
-7. Run integration tests: `pytest backend/tests/integration/test_section4_quiz_flow.py -v`
+Smoke test steps:
+1. Ensure database is migrated: `python -m alembic -c backend/alembic.ini upgrade head`
+2. Start the backend server from repo root: `python -m uvicorn backend.main:app --reload`
+3. (Optional) start ai-core service if remote generation is enabled: `python -m uvicorn ai_core.main:app --port 8001 --reload`
+4. Generate quiz: `POST /api/v1/learning/quizzes/generate`
+5. Submit answers: `POST /api/v1/learning/quizzes/{quiz_id}/submit`
+6. Fetch results: `GET /api/v1/learning/quizzes/{quiz_id}/results?student_id=...&attempt_id=...`
+7. Run backend section-4 unit tests: `python -m pytest -q backend/tests/unit/test_quiz_generate_service.py backend/tests/unit/test_quiz_submit_service.py backend/tests/unit/test_quiz_results_service.py backend/tests/unit/test_quiz_endpoints.py`
+8. Run ai-core quiz tests: `python -m pytest -q ai_core/tests/unit/test_quiz_engine.py`
+9. Integration note: `backend/tests/integration/test_section4_quiz_flow.py` intentionally skips on SQLite and should be run with a Postgres-compatible test database.

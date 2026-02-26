@@ -1,18 +1,20 @@
-from sqlalchemy.orm import Session
-from uuid import UUID
-from fastapi import HTTPException, status
+from __future__ import annotations
 
-from backend.schemas.quiz_schema import QuizResultsResponse, ConceptBreakdownItem
-from backend.repositories.quiz_repo import QuizRepository
-# Hypothetical AI insights client
+from uuid import UUID
+
+from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+
 from backend.core.ai_core_client import generate_quiz_insights
+from backend.repositories.quiz_repo import QuizRepository
+from backend.schemas.quiz_schema import ConceptBreakdownItem, QuizResultsResponse
+
 
 class QuizResultsService:
     def __init__(self, db: Session):
         self.repo = QuizRepository(db)
 
     async def get_results(self, quiz_id: UUID, student_id: UUID, attempt_id: UUID) -> QuizResultsResponse:
-        # 1. Fetch attempt and quiz
         attempt = self.repo.get_attempt_with_answers(attempt_id)
         if not attempt or attempt.quiz_id != quiz_id or attempt.student_id != student_id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found")
@@ -21,46 +23,55 @@ class QuizResultsService:
         if not quiz:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quiz not found")
 
-        # 2. Build concept breakdown from answers
         questions = self.repo.get_questions_for_quiz(quiz_id)
         question_map = {q.id: q for q in questions}
-        concept_map = {}  # concept_id -> list of correctness
+
+        concept_correctness: dict[str, list[bool]] = {}
         for answer in getattr(attempt, "answers", []):
-            q = question_map.get(answer.question_id)
-            if q:
-                concept_id = getattr(q, "concept_id", q.id)
-                if concept_id not in concept_map:
-                    concept_map[concept_id] = []
-                concept_map[concept_id].append(bool(answer.is_correct))
+            question = question_map.get(answer.question_id)
+            if not question:
+                continue
 
-        concept_breakdown = []
-        for concept_id, correctness_list in concept_map.items():
-            # Simple average correctness for this concept
-            avg_correct = sum(correctness_list) / len(correctness_list)
-            concept_breakdown.append(ConceptBreakdownItem(
-                concept_id=concept_id,
-                correct=avg_correct > 0.5,  # threshold
-                mastery_delta=0.0  # not computed here
-            ))
+            concept_id = str(getattr(question, "concept_id", question.id))
+            concept_correctness.setdefault(concept_id, []).append(bool(answer.is_correct))
 
-        # 3. Get AI insights (mock for now)
-        insights = await generate_quiz_insights(quiz_id, attempt_id)
+        concept_breakdown: list[ConceptBreakdownItem] = []
+        weakest_concept: str | None = None
+        weakest_accuracy = 1.0
 
-        # 4. Determine recommended revision topic (could be based on weakest concept)
+        for concept_id, values in concept_correctness.items():
+            accuracy = sum(values) / len(values)
+            is_correct = accuracy >= 0.5
+            weight_change = 0.15 if is_correct else -0.05
+
+            concept_breakdown.append(
+                ConceptBreakdownItem(
+                    concept_id=concept_id,
+                    is_correct=is_correct,
+                    weight_change=weight_change,
+                )
+            )
+
+            if accuracy < weakest_accuracy:
+                weakest_accuracy = accuracy
+                weakest_concept = concept_id
+
+        try:
+            insights = await generate_quiz_insights(quiz_id, attempt_id)
+        except Exception:
+            insights = ["Insights are temporarily unavailable. Review missed concepts and retry."]
+
         recommended_topic = None
-        if concept_breakdown:
-            # Find concept with lowest correctness
-            weakest = min(concept_breakdown, key=lambda x: x.correct)
-            # Map concept to topic (requires topic-concept mapping – assume external service)
-            recommended_topic = await self._get_topic_for_concept(weakest.concept_id)
+        if weakest_concept is not None:
+            recommended_topic = await self._get_topic_for_concept(weakest_concept)
 
         return QuizResultsResponse(
-            score=attempt.score,
+            score=float(attempt.score or 0.0),
             concept_breakdown=concept_breakdown,
             insights=insights,
-            recommended_revision_topic_id=recommended_topic
+            recommended_revision_topic_id=recommended_topic,
         )
 
-    async def _get_topic_for_concept(self, concept_id: UUID) -> UUID | None:
-        # Placeholder: would query graph or topic-concept mapping table
+    async def _get_topic_for_concept(self, concept_id: str) -> UUID | None:
+        _ = concept_id
         return None

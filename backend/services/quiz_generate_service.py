@@ -1,20 +1,19 @@
-from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
+from __future__ import annotations
 
-from backend.schemas.quiz_schema import QuizGenerateRequest, QuizGenerateResponse, QuestionSchema
+from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+
+from backend.core.ai_core_client import generate_quiz_questions
 from backend.repositories.quiz_repo import QuizRepository
-# Import AI core client (placeholder)
-from backend.core.ai_core_client import generate_quiz_questions  # hypothetical client
+from backend.schemas.quiz_schema import QuestionSchema, QuizGenerateRequest, QuizGenerateResponse
+
 
 class QuizGenerateService:
     def __init__(self, db: Session):
         self.repo = QuizRepository(db)
 
     async def generate_quiz(self, request: QuizGenerateRequest) -> QuizGenerateResponse:
-        # 1. Validate prerequisites? (optional)
-        # 2. Call AI core to generate questions
         try:
-            # This function would call the ai-core quiz_engine
             questions_data = await generate_quiz_questions(
                 subject=request.subject,
                 sss_level=request.sss_level,
@@ -22,13 +21,20 @@ class QuizGenerateService:
                 topic_id=request.topic_id,
                 purpose=request.purpose,
                 difficulty=request.difficulty,
-                num_questions=request.num_questions
+                num_questions=request.num_questions,
             )
-        except Exception as e:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                                detail=f"AI generation failed: {str(e)}")
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"AI generation failed: {exc}",
+            )
 
-        # 3. Store quiz and questions in DB
+        if not questions_data:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="AI generation returned no questions",
+            )
+
         quiz = self.repo.create_quiz(
             student_id=request.student_id,
             subject=request.subject,
@@ -39,19 +45,27 @@ class QuizGenerateService:
             difficulty=request.difficulty,
             num_questions=request.num_questions,
         )
-        for idx, q in enumerate(questions_data):
-            q["order"] = idx
-            self.repo.add_question_to_quiz(quiz.id, q)
 
-        # 4. Build response
-        questions = [
-            QuestionSchema(
-                id=q["id"],
-                text=q["text"],
-                options=q.get("options"),
-                correct_answer=q.get("correct_answer"),  # may omit for security
-                concept_id=q["concept_id"],
-                difficulty=q["difficulty"]
-            ) for q in questions_data
-        ]
-        return QuizGenerateResponse(quiz_id=quiz.id, questions=questions)
+        response_questions: list[QuestionSchema] = []
+        for idx, question in enumerate(questions_data):
+            question_payload = {
+                "text": question.get("text") or question.get("question_text"),
+                "options": question.get("options") or [],
+                "correct_answer": question.get("correct_answer"),
+                "explanation": question.get("explanation"),
+                "order": idx,
+            }
+            self.repo.add_question_to_quiz(quiz.id, question_payload)
+
+            response_questions.append(
+                QuestionSchema(
+                    id=question["id"],
+                    text=question_payload["text"],
+                    options=question_payload["options"],
+                    correct_answer=question_payload["correct_answer"],
+                    concept_id=str(question.get("concept_id") or question["id"]),
+                    difficulty=question.get("difficulty") or request.difficulty,
+                )
+            )
+
+        return QuizGenerateResponse(quiz_id=quiz.id, questions=response_questions)

@@ -1,14 +1,18 @@
-import inspect
-from sqlalchemy.orm import Session
-from uuid import UUID
-from fastapi import HTTPException, status
+from __future__ import annotations
 
-from backend.schemas.activity_schema import ActivityLogCreate
-from backend.schemas.quiz_schema import QuizSubmitRequest, QuizSubmitResponse, ConceptBreakdownItem
-from backend.repositories.quiz_repo import QuizRepository
-from backend.services.graph_mastery_update_service import GraphMasteryUpdateService
-from backend.services.activity_service import ActivityService  # from Section 1
+import inspect
+from uuid import UUID
+
+from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+
 from backend.repositories.activity_repo import ActivityRepository
+from backend.repositories.quiz_repo import QuizRepository
+from backend.schemas.activity_schema import ActivityLogCreate
+from backend.schemas.quiz_schema import ConceptBreakdownItem, QuizSubmitRequest, QuizSubmitResponse
+from backend.services.activity_service import ActivityService
+from backend.services.graph_mastery_update_service import GraphMasteryUpdateService
+
 
 class QuizSubmitService:
     def __init__(self, db: Session):
@@ -16,50 +20,89 @@ class QuizSubmitService:
         self.graph_service = GraphMasteryUpdateService(db)
         self.activity_service = ActivityService(ActivityRepository(db))
 
+    @staticmethod
+    def _normalize_answer(answer_item) -> dict[str, str] | None:
+        if hasattr(answer_item, "question_id") and hasattr(answer_item, "answer"):
+            question_id = str(answer_item.question_id)
+            answer = str(answer_item.answer).strip()
+            return {"question_id": question_id, "answer": answer} if answer else None
+
+        if isinstance(answer_item, dict):
+            question_id = str(answer_item.get("question_id") or "").strip()
+            answer = str(answer_item.get("answer") or "").strip()
+            if question_id and answer:
+                return {"question_id": question_id, "answer": answer}
+
+        return None
+
     async def submit_quiz(self, quiz_id: UUID, request: QuizSubmitRequest) -> QuizSubmitResponse:
-        # 1. Fetch quiz and questions
         quiz = self.repo.get_quiz_with_questions(quiz_id)
         if not quiz:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quiz not found")
+
+        if str(quiz.student_id) != str(request.student_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Quiz does not belong to the supplied student",
+            )
+
         questions = self.repo.get_questions_for_quiz(quiz_id)
         question_map = {str(q.id): q for q in questions}
 
-        # 2. Score answers
+        normalized_answers = [
+            parsed
+            for parsed in (self._normalize_answer(item) for item in request.answers)
+            if parsed is not None
+        ]
+
         total_questions = len(questions)
         correct_count = 0
-        concept_results = []  # list of (concept_id, correct)
-        for ans in request.answers:
-            qid = str(ans["question_id"])
-            if qid not in question_map:
-                continue  # skip invalid question ids
-            q = question_map[qid]
-            expected = (q.correct_answer or "").strip().lower()
-            is_correct = (ans["answer"].strip().lower() == expected)
+        concept_results: list[tuple[str, bool]] = []
+
+        for answer in normalized_answers:
+            qid = answer["question_id"]
+            question = question_map.get(qid)
+            if not question:
+                continue
+
+            expected = (question.correct_answer or "").strip().lower()
+            is_correct = answer["answer"].strip().lower() == expected
             if is_correct:
                 correct_count += 1
-            concept_results.append((getattr(q, "concept_id", q.id), is_correct))
 
-        score = (correct_count / total_questions) * 100 if total_questions > 0 else 0
-        xp = int(score)  # simple mapping: 1 XP per percent
+            concept_id = str(getattr(question, "concept_id", question.id))
+            concept_results.append((concept_id, is_correct))
 
-        # 3. Save attempt and answers
-        attempt = self.repo.create_attempt(quiz_id, request.student_id, request.time_taken_seconds)
-        # Prepare answers with is_correct flag
+        score = round((correct_count / total_questions) * 100, 2) if total_questions > 0 else 0.0
+        xp = int(score)
+
+        attempt = self.repo.create_attempt(
+            quiz_id,
+            request.student_id,
+            request.time_taken_seconds,
+            raw_answers=normalized_answers,
+        )
+
         answers_with_score = []
-        for ans in request.answers:
-            qid = str(ans["question_id"])
-            if qid in question_map:
-                expected = (question_map[qid].correct_answer or "").strip().lower()
-                is_correct = (ans["answer"].strip().lower() == expected)
-                answers_with_score.append({
-                    "question_id": question_map[qid].id,
-                    "answer": ans["answer"],
-                    "is_correct": is_correct
-                })
+        for answer in normalized_answers:
+            qid = answer["question_id"]
+            question = question_map.get(qid)
+            if not question:
+                continue
+
+            expected = (question.correct_answer or "").strip().lower()
+            is_correct = answer["answer"].strip().lower() == expected
+            answers_with_score.append(
+                {
+                    "question_id": question.id,
+                    "answer": answer["answer"],
+                    "is_correct": is_correct,
+                }
+            )
+
         self.repo.save_answers(attempt.id, answers_with_score)
         self.repo.update_attempt_score(attempt.id, score, xp)
 
-        # 4. Log activity
         activity_payload = ActivityLogCreate(
             student_id=request.student_id,
             subject=quiz.subject,
@@ -72,11 +115,16 @@ class QuizSubmitService:
         if inspect.isawaitable(activity_result):
             await activity_result
 
-        # 5. Trigger graph mastery update
+        source = quiz.purpose if quiz.purpose in {"practice", "diagnostic", "exam_prep"} else "practice"
         concept_breakdown = [
-            ConceptBreakdownItem(concept_id=cid, correct=correct, mastery_delta=0.15 if correct else -0.05)
-            for cid, correct in concept_results
+            ConceptBreakdownItem(
+                concept_id=concept_id,
+                is_correct=is_correct,
+                weight_change=0.15 if is_correct else -0.05,
+            )
+            for concept_id, is_correct in concept_results
         ]
+
         await self.graph_service.send_update(
             student_id=request.student_id,
             quiz_id=quiz_id,
@@ -84,8 +132,8 @@ class QuizSubmitService:
             subject=quiz.subject,
             sss_level=quiz.sss_level,
             term=quiz.term,
-            source=quiz.purpose or "practice",
-            concept_breakdown=concept_breakdown
+            source=source,
+            concept_breakdown=concept_breakdown,
         )
 
         return QuizSubmitResponse(attempt_id=attempt.id, score=score, xp_awarded=xp)
