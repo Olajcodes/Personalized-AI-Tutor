@@ -18,6 +18,11 @@ from backend.models.tutor_session import TutorSession
 from backend.models.internal_quiz_attempt import InternalQuizAttempt
 from backend.models.user import User
 
+from backend.models.quiz import Quiz
+from backend.models.quiz_question import QuizQuestion
+from backend.models.quiz_attempt import QuizAttempt
+from backend.models.quiz_answer import QuizAnswer
+
 config = context.config
 fileConfig(config.config_file_name)
 
