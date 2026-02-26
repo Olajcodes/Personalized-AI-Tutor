@@ -4,7 +4,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 
 from backend.services.quiz_results_service import QuizResultsService
-from backend.models.quiz import QuizAttempt, QuizAnswer, QuizQuestion, Quiz
+from backend.models.quiz import QuizAttempt, Quiz
 
 
 @pytest.fixture
@@ -45,7 +45,7 @@ def mock_quiz(quiz_id):
     return quiz
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_get_results_success(
     mock_db, quiz_id, student_id, attempt_id, mock_attempt, mock_quiz
 ):
@@ -64,7 +64,7 @@ async def test_get_results_success(
     assert response.insights == ["Insight 1"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_get_results_attempt_not_found(
     mock_db, quiz_id, student_id, attempt_id
 ):

@@ -1,13 +1,21 @@
-from uuid import UUID
-from datetime import datetime
-from typing import List
-import httpx  # for calling internal graph endpoint
+from __future__ import annotations
 
-from backend.schemas.quiz_schema import GraphMasteryUpdatePayload, ConceptBreakdownItem
+import asyncio
+import logging
+from datetime import datetime, timezone
+from typing import List
+from uuid import UUID
+
+import httpx
+
 from backend.core.config import settings
+from backend.schemas.quiz_schema import ConceptBreakdownItem, GraphMasteryUpdatePayload
+
+logger = logging.getLogger(__name__)
+
 
 class GraphMasteryUpdateService:
-    def __init__(self, db=None):  # db not strictly needed here
+    def __init__(self, db=None):
         self.db = db
 
     async def send_update(
@@ -19,30 +27,45 @@ class GraphMasteryUpdateService:
         sss_level: str,
         term: int,
         source: str,
-        concept_breakdown: List[ConceptBreakdownItem]
-    ):
-        payload = GraphMasteryUpdatePayload(
-            student_id=student_id,
-            quiz_id=quiz_id,
-            attempt_id=attempt_id,
-            subject=subject,
-            sss_level=sss_level,
-            term=term,
-            timestamp=datetime.utcnow(),
-            source=source,
-            concept_breakdown=concept_breakdown
-        )
+        concept_breakdown: List[ConceptBreakdownItem],
+    ) -> bool:
+        try:
+            payload = GraphMasteryUpdatePayload(
+                student_id=student_id,
+                quiz_id=quiz_id,
+                attempt_id=attempt_id,
+                subject=subject,
+                sss_level=sss_level,
+                term=term,
+                timestamp=datetime.now(timezone.utc),
+                source=source,
+                concept_breakdown=concept_breakdown,
+            )
+        except Exception as exc:
+            logger.warning("Skipping graph mastery update due to invalid payload: %s", exc)
+            return False
 
-        # Send to internal graph endpoint (e.g., POST /internal/graph/update-mastery)
-        async with httpx.AsyncClient() as client:
+        base_url = settings.internal_graph_base_url.rstrip("/")
+        if not base_url:
+            logger.warning("Skipping graph mastery update: INTERNAL_GRAPH_BASE_URL is not configured")
+            return False
+
+        timeout = max(float(settings.internal_graph_timeout_seconds), 1.0)
+        retries = max(int(settings.internal_graph_max_retries), 0)
+
+        for attempt_index in range(retries + 1):
             try:
-                response = await client.post(
-                    f"{settings.INTERNAL_GRAPH_BASE_URL}/update-mastery",
-                    json=payload.dict(),
-                    timeout=5.0
-                )
-                response.raise_for_status()
-            except Exception as e:
-                # Log error but don't break the flow – maybe queue for retry
-                print(f"Graph update failed: {e}")
-                # Optionally store in a dead-letter queue
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    response = await client.post(
+                        f"{base_url}/update-mastery",
+                        json=payload.model_dump(mode="json"),
+                    )
+                    response.raise_for_status()
+                return True
+            except httpx.HTTPError as exc:
+                if attempt_index >= retries:
+                    logger.warning("Graph mastery update failed after retries: %s", exc)
+                    return False
+                await asyncio.sleep(min(0.25 * (attempt_index + 1), 1.0))
+
+        return False

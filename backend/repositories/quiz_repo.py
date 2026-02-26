@@ -1,15 +1,25 @@
-from sqlalchemy.orm import Session
+from __future__ import annotations
+
+from typing import Any
 from uuid import UUID, uuid4
-from typing import List, Optional
+
+from sqlalchemy.orm import Session
 
 from backend.models.quiz import Quiz
-from backend.models.quiz_question import QuizQuestion
-from backend.models.quiz_attempt import QuizAttempt
 from backend.models.quiz_answer import QuizAnswer
+from backend.models.quiz_attempt import QuizAttempt
+from backend.models.quiz_question import QuizQuestion
+
 
 class QuizRepository:
     def __init__(self, db: Session):
         self.db = db
+
+    @staticmethod
+    def _normalize_options(raw_options: Any) -> list:
+        if isinstance(raw_options, list):
+            return raw_options
+        return []
 
     # --- Quiz Generation ---
     def create_quiz(
@@ -39,67 +49,94 @@ class QuizRepository:
         self.db.flush()
         return quiz
 
-    def add_question_to_quiz(self, quiz_id: UUID, question_data: dict) -> QuizQuestion:
-        """question_data should contain fields: text, options, correct_answer."""
+    def add_question_to_quiz(self, quiz_id: UUID, question_data: dict[str, Any]) -> QuizQuestion:
+        question_text = question_data.get("text") or question_data.get("question_text")
+        if not question_text:
+            raise ValueError("Question payload must include text")
+
+        order = int(question_data.get("order", 0))
+        question_number = max(order + 1, 1)
+
         question = QuizQuestion(
             id=uuid4(),
             quiz_id=quiz_id,
-            question_number=question_data.get("order", 0) + 1,
-            question_text=question_data["text"],
-            options=question_data.get("options"),
-            correct_answer=question_data["correct_answer"],
+            question_number=question_number,
+            question_text=question_text,
+            options=self._normalize_options(question_data.get("options")),
+            correct_answer=question_data.get("correct_answer"),
+            explanation=question_data.get("explanation"),
         )
         self.db.add(question)
         self.db.flush()
         return question
 
-    def get_quiz_with_questions(self, quiz_id: UUID) -> Optional[Quiz]:
+    def get_quiz_with_questions(self, quiz_id: UUID) -> Quiz | None:
         return self.db.query(Quiz).filter(Quiz.id == quiz_id).first()
 
     # --- Quiz Submission ---
-    def create_attempt(self, quiz_id: UUID, student_id: UUID, time_taken: int) -> QuizAttempt:
+    def create_attempt(
+        self,
+        quiz_id: UUID,
+        student_id: UUID,
+        time_taken: int,
+        raw_answers: list[dict[str, Any]] | None = None,
+    ) -> QuizAttempt:
         attempt = QuizAttempt(
             id=uuid4(),
             quiz_id=quiz_id,
             student_id=student_id,
             time_taken_seconds=time_taken,
+            raw_answers=raw_answers or [],
         )
         self.db.add(attempt)
         self.db.flush()
         return attempt
 
-    def save_answers(self, attempt_id: UUID, answers: List[dict]):
+    def save_answers(self, attempt_id: UUID, answers: list[dict[str, Any]]) -> int:
+        saved_count = 0
         for ans in answers:
+            question_id = ans.get("question_id")
+            if question_id is None:
+                continue
+
             answer = QuizAnswer(
                 id=uuid4(),
                 attempt_id=attempt_id,
-                question_id=ans["question_id"],
-                selected_answer=ans["answer"],
-                is_correct=ans.get("is_correct")  # will be set after scoring
+                question_id=question_id,
+                selected_answer=ans.get("answer"),
+                is_correct=ans.get("is_correct"),
             )
             self.db.add(answer)
-        self.db.flush()
+            saved_count += 1
 
-    def update_attempt_score(self, attempt_id: UUID, score: float, xp: int):
+        self.db.flush()
+        return saved_count
+
+    def update_attempt_score(self, attempt_id: UUID, score: float, xp: int) -> None:
         _ = xp
-        self.db.query(QuizAttempt).filter(QuizAttempt.id == attempt_id).update({
-            "score": score,
-        })
+        self.db.query(QuizAttempt).filter(QuizAttempt.id == attempt_id).update(
+            {
+                "score": score,
+                "status": "graded",
+            },
+            synchronize_session=False,
+        )
         self.db.flush()
 
-    def get_attempt(self, attempt_id: UUID) -> Optional[QuizAttempt]:
+    def get_attempt(self, attempt_id: UUID) -> QuizAttempt | None:
         return self.db.query(QuizAttempt).filter(QuizAttempt.id == attempt_id).first()
 
-    def get_attempt_with_answers(self, attempt_id: UUID) -> Optional[QuizAttempt]:
+    def get_attempt_with_answers(self, attempt_id: UUID) -> QuizAttempt | None:
         attempt = self.db.query(QuizAttempt).filter(QuizAttempt.id == attempt_id).first()
         if not attempt:
             return None
+
         answers = self.db.query(QuizAnswer).filter(QuizAnswer.attempt_id == attempt_id).all()
         setattr(attempt, "answers", answers)
         return attempt
 
     # --- Results ---
-    def get_questions_for_quiz(self, quiz_id: UUID) -> List[QuizQuestion]:
+    def get_questions_for_quiz(self, quiz_id: UUID) -> list[QuizQuestion]:
         return (
             self.db.query(QuizQuestion)
             .filter(QuizQuestion.quiz_id == quiz_id)
