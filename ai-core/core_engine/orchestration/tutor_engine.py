@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-from core_engine.api_contracts.schemas import TutorRequest, TutorResponse, Citation
+from core_engine.api_contracts.schemas import Citation, TutorRequest, TutorResponse
 from core_engine.config.settings import Settings
 from core_engine.curriculum.resolver import CurriculumResolver
-from core_engine.rag.retriever import RagRetriever
-from core_engine.rag.citations import format_citations
 from core_engine.knowledge_graph.prerequisites import PrereqService
 from core_engine.llm.client import LLMClient
 from core_engine.llm.prompts import build_tutor_prompt
 from core_engine.mastery.updater import MasteryUpdater
-from core_engine.safety.moderation import basic_moderate
-from core_engine.safety.injection import sanitize_user_text
-from core_engine.observability.logging import get_logger
 from core_engine.observability.cost import CostTracker
+from core_engine.observability.logging import get_logger
+from core_engine.rag.citations import format_citations
+from core_engine.rag.retriever import RagRetriever
+from core_engine.safety.injection import sanitize_user_text
+from core_engine.safety.moderation import basic_moderate
 
 logger = get_logger(__name__)
 
@@ -31,7 +31,7 @@ def handle_question(
     cost_tracker: CostTracker,
 ) -> TutorResponse:
     """MVP orchestration:
-    resolve scope → retrieve chunks → prereq hints → LLM response → mastery update → logs/cost
+    resolve scope -> retrieve chunks -> prereq hints -> LLM response -> mastery update -> logs/cost
     """
 
     # 1) Safety and hygiene
@@ -43,7 +43,7 @@ def handle_question(
     # 2) Curriculum scoping
     scope = curriculum.resolve_scope(
         subject_id=request.subject_id,
-        jss_level=request.jss_level,
+        sss_level=request.sss_level,
         term=int(request.term),
         topic_id=request.topic_id,
     )
@@ -52,7 +52,7 @@ def handle_question(
     chunks = retriever.retrieve(
         query=user_text,
         subject_id=scope.subject_id,
-        jss_level=scope.jss_level,
+        sss_level=scope.sss_level,
         term=scope.term,
         allowed_topic_ids=scope.allowed_topic_ids,
         approved_only=True,
@@ -69,7 +69,7 @@ def handle_question(
     prompt = build_tutor_prompt(
         user_message=user_text,
         mode=request.mode,
-        jss_level=request.jss_level,
+        sss_level=request.sss_level,
         term=int(request.term),
         citations=citations,
         remediation_prereqs=remediation_prereqs,
@@ -95,7 +95,7 @@ def handle_question(
         extra={
             "user_id": request.user_id,
             "subject_id": request.subject_id,
-            "jss_level": request.jss_level,
+            "sss_level": request.sss_level,
             "term": int(request.term),
             "topic_id": request.topic_id,
             "mode": request.mode,

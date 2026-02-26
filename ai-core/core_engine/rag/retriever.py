@@ -1,6 +1,7 @@
 """Vector DB retrieval with strict metadata filters (MVP)."""
 
 from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -27,7 +28,7 @@ class RagRetriever:
         *,
         query: str,
         subject_id: str,
-        jss_level: str,
+        sss_level: str,
         term: int,
         allowed_topic_ids: List[str],
         approved_only: bool,
@@ -36,7 +37,7 @@ class RagRetriever:
         """Retrieve chunks from vector store constrained by metadata filters.
 
         Replace this stub with:
-- pgvector query OR pinecone/weaviate filtered search
-- metadata filters: subject_id, jss_level, term, topic_id IN allowed_topic_ids, approved=true
+        - pgvector query OR pinecone/weaviate filtered search
+        - metadata filters: subject_id, sss_level, term, topic_id IN allowed_topic_ids, approved=true
         """
         return []

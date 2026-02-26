@@ -1,7 +1,7 @@
 [project]
 name = "ai-core"
 version = "0.1.0"
-description = "MVP AI core engine for JSS-scoped personalized AI tutor."
+description = "MVP AI core engine for SSS-scoped personalized AI tutor."
 requires-python = ">=3.10"
 dependencies = [
   "pydantic>=2.6",
@@ -13,4 +13,5 @@ dependencies = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["."]
+asyncio_default_fixture_loop_scope = "function"

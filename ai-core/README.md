@@ -1,9 +1,9 @@
 # ai-core (MVP)
 
-Minimal AI core engine for the **Personalized AI Tutor** capstone MVP.
+Minimal AI core engine for the Personalized AI Tutor capstone MVP.
 
 ## What this service does (MVP scope)
-- Curriculum-scoped tutoring: **JSS1–JSS3**, **Term 1–3**
+- Curriculum-scoped tutoring: SSS1-SSS3, Term 1-3
 - RAG retrieval with strict metadata filters + citations
 - Basic Neo4j prerequisite lookups
 - Basic mastery updates
@@ -25,3 +25,7 @@ That function performs, in order:
 ## Notes
 - Ingestion pipelines live outside ai-core (admin pipeline).
 - Multi-agent LangGraph orchestration is deferred to stretch goals.
+
+## Service Endpoints (Container Runtime)
+- `GET /` -> service status
+- `GET /health` -> config presence checks for LLM/Postgres/Neo4j/Redis/Vector settings
