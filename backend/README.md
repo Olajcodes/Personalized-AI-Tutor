@@ -53,6 +53,9 @@ JWT_SECRET=change_me
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=1440
 ENV=dev
+AI_CORE_BASE_URL=http://127.0.0.1:8100
+AI_CORE_TIMEOUT_SECONDS=8
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:4173
 ```
 
 Notes:

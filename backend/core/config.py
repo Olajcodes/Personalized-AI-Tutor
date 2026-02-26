@@ -6,6 +6,7 @@ Logic:
 """
 
 import os
+import json
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -13,6 +14,25 @@ from pydantic import BaseModel
 
 _ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(dotenv_path=_ENV_PATH)
+
+
+def _parse_cors_origins(raw_value: str) -> list[str]:
+    value = (raw_value or "").strip()
+    if not value:
+        return ["http://localhost:3000", "http://localhost:5173", "http://localhost:4173"]
+
+    if value == "*":
+        return ["*"]
+
+    if value.startswith("["):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+        except json.JSONDecodeError:
+            pass
+
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 class Settings(BaseModel):
@@ -29,6 +49,7 @@ class Settings(BaseModel):
 
     ai_core_base_url: str = os.getenv("AI_CORE_BASE_URL", "")
     ai_core_timeout_seconds: float = float(os.getenv("AI_CORE_TIMEOUT_SECONDS", "8"))
+    cors_origins: list[str] = _parse_cors_origins(os.getenv("CORS_ORIGINS", ""))
 
     internal_graph_base_url: str = os.getenv(
         "INTERNAL_GRAPH_BASE_URL", "http://127.0.0.1:8000/api/v1/internal/graph"
