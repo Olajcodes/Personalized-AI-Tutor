@@ -44,10 +44,19 @@ Implemented and currently mounted:
 - `GET /api/v1/internal/postgres/history`
 - `POST /api/v1/internal/postgres/quiz-attempt`
 - `GET /api/v1/internal/postgres/class-roster`
+- `POST /api/v1/learning/diagnostic/start`
+- `POST /api/v1/learning/diagnostic/submit`
+- `POST /api/v1/learning/path/next`
+- `GET /api/v1/learning/path/map/visual`
+- `GET /api/v1/internal/graph/context`
+- `POST /api/v1/internal/graph/update-mastery`
+- `POST /api/v1/learning/quizzes/generate`
+- `POST /api/v1/learning/quizzes/{quiz_id}/submit`
+- `GET /api/v1/learning/quizzes/{quiz_id}/results`
 
 Not yet completed end-to-end:
-- Part 6, 7, 8, 9, 10, 11
-- Internal APIs: `/internal/graph/*`, `/internal/rag/*`
+- Part 7, 8, 9, 10, 11
+- Internal APIs: `/internal/rag/*`
 
 ---
 
@@ -127,37 +136,41 @@ Section 2 test gate:
 
 ---
 
-## [🟡] Section 3 (P0) Graph Internal APIs + Diagnostic and Path Core [PARTIAL]
+## [✅] Section 3 (P0) Graph Internal APIs + Diagnostic and Path Core [COMPLETED]
 
 Lane A:
 - [✅] `backend/alembic/versions/0007_diagnostic_state_tables.py`
 - [✅] `backend/models/diagnostic.py`
 - [✅] `backend/models/diagnostic_attempt.py`
-- [✅] `backend/alembic/env.py` (imports for diagnostic models are present)
+- [✅] `backend/alembic/versions/0010_graph_mastery_tracking.py`
+- [✅] `backend/models/student_concept_mastery.py`
+- [✅] `backend/models/mastery_update_event.py`
+- [✅] `backend/alembic/env.py` (section 3 model imports added)
 
 Lane B:
-- [🟡] `backend/schemas/diagnostic_schema.py` - exists; corrected minor Pydantic v2 deprecation usage. Still needs normalized contract alignment (`term` and submit response key names).
-- [🟡] `backend/schemas/learning_path_schema.py` - exists; request/response fields are not yet aligned to normalized API contract.
-- [🟡] `backend/schemas/internal_graph_schema.py` - corrected to normalized update payload shape; context schema is still placeholder-level.
-- [🟡] `backend/repositories/diagnostic_repo.py` - exists but methods are stubs (`pass`); needs DB implementation.
-- [🟡] `backend/services/diagnostic_service.py` - exists but returns mock values; needs grading, persistence, and recommendation logic.
-- [🟡] `backend/services/learning_path_service.py` - exists but static return; needs prerequisite/mastery-driven logic.
-- [🟡] `backend/services/graph_client_service.py` - exists as placeholder; needs real Neo4j/internal graph integration.
+- [✅] `backend/schemas/diagnostic_schema.py` - normalized request/response contract finalized.
+- [✅] `backend/schemas/learning_path_schema.py` - normalized request/response contract finalized.
+- [✅] `backend/schemas/internal_graph_schema.py` - context + update contracts aligned to normalized API spec.
+- [✅] `backend/repositories/diagnostic_repo.py` - implemented scope validation, topic resolution, and diagnostic persistence.
+- [✅] `backend/repositories/graph_repo.py` - added mastery state/event persistence helpers.
+- [✅] `backend/services/diagnostic_service.py` - implemented question generation, grading, mastery baseline updates, and recommendation logic.
+- [✅] `backend/services/learning_path_service.py` - implemented mastery/prerequisite-driven next-topic selection.
+- [✅] `backend/services/graph_client_service.py` - implemented internal graph context + mastery update flows backed by Postgres.
 
 Lane C:
-- [🟡] `backend/endpoints/diagnostic.py` exists and imports resolve, but currently serves mock-backed service output.
-- [🟡] `backend/endpoints/learning_path.py` exists and imports resolve, but currently serves mock-backed service output.
-- [🟡] `backend/endpoints/internal_graph.py` exists and imports resolve, but currently uses placeholder graph client output.
-- [✅] `backend/main.py` intentionally keeps section 3 routers unmounted until section 3 logic is production-ready.
+- [✅] `backend/endpoints/diagnostic.py` - production error mapping and service wiring.
+- [✅] `backend/endpoints/learning_path.py` - production error mapping and service wiring (`/next` + `/map/visual`).
+- [✅] `backend/endpoints/internal_graph.py` - normalized query params, db wiring, and validation handling.
+- [✅] `backend/main.py` - section 3 routers mounted under `/api/v1`.
 
 Lane D:
-- [✅] `backend/tests/unit/test_diagnostic_service.py` (active contract test; module now exists)
-- [✅] `backend/tests/unit/test_learning_path_service.py` (active contract test; module now exists)
-- [✅] `backend/tests/unit/test_internal_graph_contracts.py` (active contract test; normalized payload check enabled)
-- [✅] `backend/tests/unit/test_diagnostic_endpoints.py` (skip-ready until Lane C mounts section 3 routes)
-- [✅] `backend/tests/unit/test_learning_path_endpoints.py` (skip-ready until Lane C mounts section 3 routes)
-- [✅] `backend/tests/integration/test_section3_diagnostic_flow.py` (skip-ready route gate test)
-- [✅] `backend/README.md` section 3 smoke steps added
+- [✅] `backend/tests/unit/test_diagnostic_service.py`
+- [✅] `backend/tests/unit/test_learning_path_service.py`
+- [✅] `backend/tests/unit/test_internal_graph_contracts.py`
+- [✅] `backend/tests/unit/test_diagnostic_endpoints.py` (active; routes mounted)
+- [✅] `backend/tests/unit/test_learning_path_endpoints.py` (active; routes mounted)
+- [✅] `backend/tests/integration/test_section3_diagnostic_flow.py` (active route gate)
+- [✅] `backend/README.md` section 3 smoke steps updated
 
 ---
 
@@ -178,29 +191,29 @@ Lane B:
 - [🟡] `backend/services/quiz_submit_service.py` - import issue corrected; major async/field alignment work remains.
 - [🟡] `backend/services/quiz_results_service.py` - exists; depends on assumptions not yet guaranteed by repository/model layer.
 - [🟡] `backend/services/graph_mastery_update_service.py` - exists; needs production retry/error handling and contract hardening.
-- [🟡] `ai-core/core_engine/orchestration/quiz_engine.py` - import path corrected; implementation is still mock-only.
-- [🟡] `ai-core/core_engine/api_contracts/quiz_schemas.py` - exists; requires strict parity validation with backend contract.
+- [🟡] `ai_core/core_engine/orchestration/quiz_engine.py` - import path corrected; implementation is still mock-only.
+- [🟡] `ai_core/core_engine/api_contracts/quiz_schemas.py` - exists; requires strict parity validation with backend contract.
 
 Lane C:
-- [❌] `backend/endpoints/quizzes.py`
-- [❌] `backend/main.py` quiz router mount
-- [🟡] `ai-core/main.py` exists but does not expose section 4 HTTP endpoints yet.
+- [✅] `backend/endpoints/quizzes.py` - corrected route prefix to `/learning/quizzes` and fixed async/db wiring.
+- [✅] `backend/main.py` quiz router mount
+- [🟡] `ai_core/main.py` exists but does not expose section 4 HTTP endpoints yet.
 
 Lane D:
-- [❌] `backend/tests/unit/test_quiz_generate_service.py`
-- [❌] `backend/tests/unit/test_quiz_submit_service.py`
-- [❌] `backend/tests/unit/test_quiz_results_service.py`
-- [❌] `backend/tests/unit/test_quiz_endpoints.py`
-- [❌] `backend/tests/integration/test_section4_quiz_flow.py`
-- [❌] `ai-core/tests/unit/test_quiz_engine.py`
-- [❌] `backend/README.md` section-4 smoke block
+- [✅] `backend/tests/unit/test_quiz_generate_service.py`
+- [✅] `backend/tests/unit/test_quiz_submit_service.py`
+- [✅] `backend/tests/unit/test_quiz_results_service.py`
+- [✅] `backend/tests/unit/test_quiz_endpoints.py`
+- [🟡] `backend/tests/integration/test_section4_quiz_flow.py` - currently skips on SQLite; requires Postgres-compatible JSONB test DB for true E2E.
+- [✅] `ai_core/tests/unit/test_quiz_engine.py`
+- [✅] `backend/README.md` section-4 smoke block
 
 ---
 
 ## [❌] Section 5 (P0) Tutor AI + Mastery Dashboard MVP [NOT STARTED]
 
 Lane A:
-- [❌] `backend/alembic/versions/0010_mastery_dashboard_tables.py`
+- [❌] `backend/alembic/versions/0011_mastery_dashboard_tables.py`
 - [❌] `backend/models/mastery_snapshot.py`
 - [❌] `backend/models/student_badge.py`
 - [❌] `backend/alembic/env.py` imports for mastery models
@@ -211,14 +224,14 @@ Lane B:
 - [❌] `backend/repositories/mastery_repo.py`
 - [❌] `backend/services/tutor_orchestration_service.py`
 - [❌] `backend/services/mastery_dashboard_service.py`
-- [🟡] `ai-core/core_engine/orchestration/tutor_engine.py` exists but not integrated to backend contracts yet
-- [🟡] `ai-core/core_engine/api_contracts/schemas.py` exists but needs section-5 contract alignment
+- [🟡] `ai_core/core_engine/orchestration/tutor_engine.py` exists but not integrated to backend contracts yet
+- [🟡] `ai_core/core_engine/api_contracts/schemas.py` exists but needs section-5 contract alignment
 
 Lane C:
 - [❌] `backend/endpoints/tutor.py`
 - [❌] `backend/endpoints/mastery.py`
 - [❌] `backend/main.py` tutor/mastery router mount
-- [❌] `ai-core/main.py` callable endpoints for tutor flows (if HTTP integration path is chosen)
+- [❌] `ai_core/main.py` callable endpoints for tutor flows (if HTTP integration path is chosen)
 
 Lane D:
 - [❌] `backend/tests/unit/test_tutor_orchestration_service.py`
@@ -226,7 +239,7 @@ Lane D:
 - [❌] `backend/tests/unit/test_tutor_endpoints.py`
 - [❌] `backend/tests/unit/test_mastery_endpoints.py`
 - [❌] `backend/tests/integration/test_section5_tutor_mastery_flow.py`
-- [❌] `ai-core/tests/unit/test_tutor_engine.py`
+- [❌] `ai_core/tests/unit/test_tutor_engine.py`
 - [❌] `backend/README.md` section-5 smoke block
 
 ---
@@ -234,7 +247,7 @@ Lane D:
 ## [❌] Section 6 (P1) Teacher Intelligence (Basic MVP) [NOT STARTED]
 
 Lane A:
-- [❌] `backend/alembic/versions/0011_teacher_intelligence_tables.py`
+- [❌] `backend/alembic/versions/0012_teacher_intelligence_tables.py`
 - [❌] `backend/models/teacher_class.py`
 - [❌] `backend/models/class_enrollment.py`
 - [❌] `backend/models/teacher_assignment.py`
@@ -263,7 +276,7 @@ Lane D:
 ## [❌] Section 7 (P1) Admin Curriculum + Governance + Internal RAG + Deep Health [NOT STARTED]
 
 Lane A:
-- [❌] `backend/alembic/versions/0012_admin_curriculum_governance_tables.py`
+- [❌] `backend/alembic/versions/0013_admin_curriculum_governance_tables.py`
 - [❌] `backend/models/curriculum_ingestion_job.py`
 - [❌] `backend/models/curriculum_version.py`
 - [❌] `backend/models/curriculum_topic_map.py`
@@ -280,7 +293,7 @@ Lane B:
 - [❌] `backend/services/governance_service.py`
 - [❌] `backend/services/rag_retrieve_service.py`
 - [❌] `backend/services/system_health_service.py`
-- [🟡] `ai-core/core_engine/rag/retriever.py` exists but not yet wired to backend internal-rag contract
+- [🟡] `ai_core/core_engine/rag/retriever.py` exists but not yet wired to backend internal-rag contract
 
 Lane C:
 - [❌] `backend/endpoints/admin_curriculum.py`
@@ -306,27 +319,27 @@ Lane A:
 - [❌] `backend/scripts/reset_demo_state.py`
 
 Lane B:
-- [✅] `ai-core/scripts/smoke_test_question.py`
+- [✅] `ai_core/scripts/smoke_test_question.py`
 - [❌] `backend/services/demo_validation_service.py`
 
 Lane C:
 - [✅] `README.md`
 - [✅] `backend/README.md`
-- [✅] `ai-core/README.md`
+- [✅] `ai_core/README.md`
 
 Lane D:
 - [❌] `backend/tests/integration/test_e2e_student_flow.py`
 - [❌] `backend/tests/integration/test_e2e_teacher_flow.py`
 - [❌] `backend/tests/integration/test_e2e_admin_flow.py`
-- [✅] `ai-core/tests/unit/test_scoped_retrieval.py`
-- [✅] `ai-core/tests/unit/test_prereq_query.py`
+- [✅] `ai_core/tests/unit/test_scoped_retrieval.py`
+- [✅] `ai_core/tests/unit/test_prereq_query.py`
 
 ---
 
 ## 3) Test Snapshot (Current)
 
-- [✅] `python -m pytest -q backend/tests` -> `38 passed, 3 skipped`
-- [✅] `python -m pytest -q ai-core/tests` -> `6 passed`
+- [✅] `python -m pytest -q backend/tests` -> `51 passed, 1 skipped`
+- [✅] `python -m pytest -q ai_core/tests` -> `8 passed`
 
 ---
 
@@ -337,6 +350,7 @@ Lane D:
 - [✅] `backend/endpoints/internal_postgres_service.py` deleted and replaced by `backend/endpoints/internal_postgres.py`.
 - [🟡] `backend/core/ai_core_client.py` is a temporary local stub to unblock imports; replace with real ai-core HTTP client integration in section 4.
 - [🟡] `backend/repositories/quiz_repo.py`, `backend/services/quiz_generate_service.py`, `backend/services/quiz_submit_service.py`, `backend/services/quiz_results_service.py` are present but not production-ready due model/contract mismatches.
+- [🟡] `backend/tests/integration/test_section4_quiz_flow.py` is intentionally SQLite-skipped because project models use PostgreSQL-specific JSONB types.
 
 ---
 
@@ -348,4 +362,5 @@ Every PR must include:
 - migration revision ID (if any)
 - sample request/response
 - exact test command and output
+
 

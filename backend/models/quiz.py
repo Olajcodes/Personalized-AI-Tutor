@@ -1,7 +1,7 @@
 import uuid
 
 from sqlalchemy import ForeignKey, Integer, String
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import Base
@@ -20,7 +20,6 @@ class Quiz(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     term: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
 
     topic_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
         ForeignKey("topics.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
@@ -35,3 +34,9 @@ class Quiz(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     time_limit_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Use a non-reserved Python attribute name while preserving DB column name.
     extra_metadata: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
+
+
+# Compatibility re-exports for code/tests that import all quiz models from this module.
+from backend.models.quiz_question import QuizQuestion  # noqa: E402
+from backend.models.quiz_attempt import QuizAttempt  # noqa: E402
+from backend.models.quiz_answer import QuizAnswer  # noqa: E402

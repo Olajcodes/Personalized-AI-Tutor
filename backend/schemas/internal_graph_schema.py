@@ -1,14 +1,29 @@
 from datetime import datetime
-from typing import Any, Dict, List, Literal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 
+class MasteryNodeOut(BaseModel):
+    concept_id: str
+    score: float
+
+
+class PrereqEdgeOut(BaseModel):
+    prerequisite_concept_id: str
+    concept_id: str
+
+
 class InternalGraphContextOut(BaseModel):
     student_id: UUID
-    nodes: List[Dict[str, Any]]
-    edges: List[Dict[str, Any]]
+    subject: Literal["math", "english", "civic"]
+    sss_level: Literal["SSS1", "SSS2", "SSS3"]
+    term: int
+    topic_id: str | None = None
+    mastery: list[MasteryNodeOut]
+    prereqs: list[PrereqEdgeOut]
+    unlocked_nodes: list[str]
     overall_mastery: float
 
 
@@ -27,7 +42,7 @@ class InternalGraphUpdateIn(BaseModel):
     term: int = Field(ge=1, le=3)
     timestamp: datetime
     source: Literal["practice", "diagnostic", "exam_prep"]
-    concept_breakdown: List[ConceptUpdateIn]
+    concept_breakdown: list[ConceptUpdateIn]
 
 
 class InternalGraphUpdateOut(BaseModel):

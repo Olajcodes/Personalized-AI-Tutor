@@ -1,7 +1,5 @@
 from sqlalchemy.orm import Session
-from uuid import UUID
 from fastapi import HTTPException, status
-import httpx  # or use internal client to call ai-core
 
 from backend.schemas.quiz_schema import QuizGenerateRequest, QuizGenerateResponse, QuestionSchema
 from backend.repositories.quiz_repo import QuizRepository
@@ -33,9 +31,13 @@ class QuizGenerateService:
         # 3. Store quiz and questions in DB
         quiz = self.repo.create_quiz(
             student_id=request.student_id,
+            subject=request.subject,
+            sss_level=request.sss_level,
+            term=request.term,
             topic_id=request.topic_id,
             purpose=request.purpose,
-            difficulty=request.difficulty
+            difficulty=request.difficulty,
+            num_questions=request.num_questions,
         )
         for idx, q in enumerate(questions_data):
             q["order"] = idx

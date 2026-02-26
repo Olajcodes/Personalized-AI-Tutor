@@ -82,6 +82,11 @@ Expected head includes:
 - `0003_create_users_table`
 - `0004_profile_user_fk`
 - `0005_activity_tracking`
+- `0006_learning_preferences`
+- `0007_diagnostic_state`
+- `0008_tutor_sessions_and_history`
+- `0009_quiz_tables`
+- `0010_graph_mastery_tracking`
 
 ### Important for shared DB
 
@@ -168,6 +173,22 @@ Base prefix: `/api/v1`
 - `GET /students/stats`
 - `GET /students/leaderboard`
 - `GET /system/health`
+- `POST /tutor/sessions/start`
+- `GET /tutor/sessions/{session_id}/history`
+- `POST /tutor/sessions/{session_id}/end`
+- `GET /internal/postgres/profile`
+- `GET /internal/postgres/history`
+- `POST /internal/postgres/quiz-attempt`
+- `GET /internal/postgres/class-roster`
+- `POST /learning/diagnostic/start`
+- `POST /learning/diagnostic/submit`
+- `POST /learning/path/next`
+- `GET /learning/path/map/visual`
+- `GET /internal/graph/context`
+- `POST /internal/graph/update-mastery`
+- `POST /learning/quizzes/generate`
+- `POST /learning/quizzes/{quiz_id}/submit`
+- `GET /learning/quizzes/{quiz_id}/results`
 
 ## Shared DB Test Runbook (Team Standard)
 
@@ -362,9 +383,8 @@ Expected:
 ### 9) Section 3 smoke test (Diagnostic + Path + Internal Graph)
 
 Status:
-- Lane D test scaffolds are complete.
-- Endpoint/service implementation is pending Lane B/C.
-- Run manual endpoint checks below once section 3 routes are mounted in `backend/main.py`.
+- Completed.
+- Backed by persisted diagnostic state and graph mastery tracking tables.
 
 Diagnostic start:
 - `POST /api/v1/learning/diagnostic/start`
@@ -390,7 +410,9 @@ Diagnostic submit:
 {
   "diagnostic_id": "PUT_DIAGNOSTIC_ID_HERE",
   "student_id": "PUT_REGISTER_USER_ID_HERE",
-  "answers": [{ "question_id": "q1", "answer": "B" }]
+  "answers": [
+    { "question_id": "PUT_QUESTION_ID_FROM_START_RESPONSE", "answer": "A" }
+  ]
 }
 ```
 
@@ -415,11 +437,17 @@ Expected:
 - `reason`
 - `prereq_gaps`
 
-Internal graph context:
-- `GET /api/v1/internal/graph/context?student_id=<student_uuid>`
+Learning map visual:
+- `GET /api/v1/learning/path/map/visual?student_id=<student_uuid>&subject=math&sss_level=SSS1&term=1&view=topic`
 
 Expected:
-- current graph context payload for the student
+- list of nodes with `mastered`/`current`/`locked` status for scoped topics
+
+Internal graph context:
+- `GET /api/v1/internal/graph/context?student_id=<student_uuid>&subject=math&sss_level=SSS1&term=1`
+
+Expected:
+- scoped graph context payload with mastery, prerequisite edges, unlocked nodes, and overall mastery
 
 Internal graph update:
 - `POST /api/v1/internal/graph/update-mastery`
