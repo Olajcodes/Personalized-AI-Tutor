@@ -4,7 +4,10 @@ from uuid import UUID, uuid4
 from datetime import datetime
 from typing import List, Optional
 
-from backend.models.quiz import Quiz, QuizQuestion, QuizAttempt, QuizAnswer
+from backend.models.quiz import Quiz
+from backend.models.quiz_question import QuizQuestion
+from backend.models.quiz_attempt import QuizAttempt
+from backend.models.quiz_answer import QuizAnswer
 from backend.schemas.quiz_schema import QuizGenerateRequest
 
 class QuizRepository:
