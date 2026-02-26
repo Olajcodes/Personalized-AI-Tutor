@@ -6,7 +6,7 @@ from ai_core.core_engine.orchestration.quiz_engine import (
 )
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_generate_quiz_questions_returns_correct_structure():
     subject = "math"
     sss_level = "SSS2"
@@ -38,7 +38,7 @@ async def test_generate_quiz_questions_returns_correct_structure():
         assert q["difficulty"] == difficulty
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_generate_quiz_insights_returns_list():
     quiz_id = uuid.uuid4()
     attempt_id = uuid.uuid4()

@@ -5,7 +5,7 @@ from fastapi import HTTPException
 
 from backend.schemas.quiz_schema import QuizSubmitRequest
 from backend.services.quiz_submit_service import QuizSubmitService
-from backend.models.quiz import Quiz, QuizQuestion, QuizAttempt
+from backend.models.quiz import Quiz, QuizQuestion
 
 
 @pytest.fixture
@@ -54,12 +54,12 @@ def mock_question(quiz_id):
     return q
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_submit_quiz_success(
     mock_db, quiz_id, student_id, submit_request, mock_quiz, mock_question
 ):
     # Align request question_id with mocked question so grading path is exercised.
-    submit_request.answers[0]["question_id"] = mock_question.id
+    submit_request.answers[0].question_id = mock_question.id
 
     service = QuizSubmitService(mock_db)
     service.repo.get_quiz_with_questions = MagicMock(return_value=mock_quiz)
@@ -81,7 +81,7 @@ async def test_submit_quiz_success(
     service.graph_service.send_update.assert_awaited_once()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_submit_quiz_not_found(mock_db, quiz_id, submit_request):
     service = QuizSubmitService(mock_db)
     service.repo.get_quiz_with_questions = MagicMock(return_value=None)

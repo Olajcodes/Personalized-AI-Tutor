@@ -26,7 +26,7 @@ def generate_request():
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_generate_quiz_success(mock_db, generate_request):
     # Mock AI core response
     mock_questions = [
@@ -59,7 +59,7 @@ async def test_generate_quiz_success(mock_db, generate_request):
         assert service.repo.add_question_to_quiz.call_count == 5
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_generate_quiz_ai_failure(mock_db, generate_request):
     with patch(
         "backend.services.quiz_generate_service.generate_quiz_questions",
