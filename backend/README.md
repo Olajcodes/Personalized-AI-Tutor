@@ -284,9 +284,7 @@ Expected:
 ### 8) Section 2 smoke test (Sessions + Internal Postgres)
 
 Status:
-- Lane B (schemas/repos/services): implemented
-- Lane C (endpoints mount): pending
-- Run these once Section 2 endpoints are mounted in `main.py`
+- Completed.
 
 Session start:
 - `POST /api/v1/tutor/sessions/start`
@@ -303,13 +301,13 @@ Expected:
 - returns `session_id`
 
 Session history:
-- `GET /api/v1/tutor/sessions/{session_id}/history`
+- `GET /api/v1/tutor/sessions/{session_id}/history?student_id=<student_uuid>`
 
 Expected:
 - returns ordered `messages` array for that session
 
 Session end:
-- `POST /api/v1/tutor/sessions/{session_id}/end`
+- `POST /api/v1/tutor/sessions/{session_id}/end?student_id=<student_uuid>`
 
 ```json
 {
@@ -360,6 +358,91 @@ Internal class roster:
 
 Expected:
 - `class_id` and `student_ids` list (empty list allowed before teacher section)
+
+### 9) Section 3 smoke test (Diagnostic + Path + Internal Graph)
+
+Status:
+- Lane D test scaffolds are complete.
+- Endpoint/service implementation is pending Lane B/C.
+- Run manual endpoint checks below once section 3 routes are mounted in `backend/main.py`.
+
+Diagnostic start:
+- `POST /api/v1/learning/diagnostic/start`
+
+```json
+{
+  "student_id": "PUT_REGISTER_USER_ID_HERE",
+  "subject": "english",
+  "sss_level": "SSS1",
+  "term": 1
+}
+```
+
+Expected:
+- `diagnostic_id`
+- `concept_targets`
+- `questions`
+
+Diagnostic submit:
+- `POST /api/v1/learning/diagnostic/submit`
+
+```json
+{
+  "diagnostic_id": "PUT_DIAGNOSTIC_ID_HERE",
+  "student_id": "PUT_REGISTER_USER_ID_HERE",
+  "answers": [{ "question_id": "q1", "answer": "B" }]
+}
+```
+
+Expected:
+- `baseline_mastery_updates`
+- `recommended_start_topic_id`
+
+Path next:
+- `POST /api/v1/learning/path/next`
+
+```json
+{
+  "student_id": "PUT_REGISTER_USER_ID_HERE",
+  "subject": "math",
+  "sss_level": "SSS2",
+  "term": 2
+}
+```
+
+Expected:
+- `recommended_topic_id`
+- `reason`
+- `prereq_gaps`
+
+Internal graph context:
+- `GET /api/v1/internal/graph/context?student_id=<student_uuid>`
+
+Expected:
+- current graph context payload for the student
+
+Internal graph update:
+- `POST /api/v1/internal/graph/update-mastery`
+
+```json
+{
+  "student_id": "PUT_REGISTER_USER_ID_HERE",
+  "quiz_id": "11111111-1111-1111-1111-111111111111",
+  "attempt_id": "22222222-2222-2222-2222-222222222222",
+  "subject": "math",
+  "sss_level": "SSS2",
+  "term": 2,
+  "timestamp": "2026-02-23T10:00:00Z",
+  "source": "practice",
+  "concept_breakdown": [
+    { "concept_id": "concept-a", "is_correct": true, "weight_change": 0.15 },
+    { "concept_id": "concept-b", "is_correct": false, "weight_change": -0.05 }
+  ]
+}
+```
+
+Expected:
+- success acknowledgement from graph adapter/client service
 
 ## Quick Test Payloads
 

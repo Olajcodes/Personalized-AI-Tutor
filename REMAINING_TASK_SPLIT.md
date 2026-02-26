@@ -151,13 +151,13 @@ Lane C:
 - [x] `backend/main.py` keeps section 3 routers unmounted until Lane B is complete (prevents runtime break).
 
 Lane D:
-- [ ] `backend/tests/unit/test_diagnostic_service.py`
-- [ ] `backend/tests/unit/test_learning_path_service.py`
-- [ ] `backend/tests/unit/test_internal_graph_contracts.py`
-- [ ] `backend/tests/unit/test_diagnostic_endpoints.py`
-- [ ] `backend/tests/unit/test_learning_path_endpoints.py`
-- [ ] `backend/tests/integration/test_section3_diagnostic_flow.py`
-- [~] `backend/README.md` section 3 smoke steps still pending
+- [x] `backend/tests/unit/test_diagnostic_service.py` (skip-ready until Lane B service modules exist)
+- [x] `backend/tests/unit/test_learning_path_service.py` (skip-ready until Lane B service modules exist)
+- [x] `backend/tests/unit/test_internal_graph_contracts.py` (skip-ready until Lane B schema modules exist)
+- [x] `backend/tests/unit/test_diagnostic_endpoints.py` (skip-ready until Lane C mounts section 3 routes)
+- [x] `backend/tests/unit/test_learning_path_endpoints.py` (skip-ready until Lane C mounts section 3 routes)
+- [x] `backend/tests/integration/test_section3_diagnostic_flow.py` (skip-ready route gate test)
+- [x] `backend/README.md` section 3 smoke steps added
 
 ---
 
@@ -325,7 +325,7 @@ Lane D:
 
 ## 3) Test Snapshot (Current)
 
-- [x] `python -m pytest -q backend/tests` -> `32 passed`
+- [x] `python -m pytest -q backend/tests` -> `32 passed, 6 skipped`
 - [x] `python -m pytest -q ai-core/tests` -> `6 passed`
 
 ---
