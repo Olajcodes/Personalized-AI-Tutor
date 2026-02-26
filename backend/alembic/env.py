@@ -13,6 +13,9 @@ from backend.models.lesson import Lesson, LessonBlock
 from backend.models.student import LearningPreference, StudentProfile, StudentSubject
 from backend.models.subject import Subject
 from backend.models.topic import Topic
+from backend.models.tutor_message import TutorMessage
+from backend.models.tutor_session import TutorSession
+from backend.models.internal_quiz_attempt import InternalQuizAttempt
 from backend.models.user import User
 
 config = context.config
