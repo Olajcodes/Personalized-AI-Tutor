@@ -318,14 +318,9 @@ def end_session(session_id: UUID, db: Session = Depends(get_db)):
         duration_seconds = int(row["duration_seconds"] or 0)
         cost = row["cost"]
 
-        _log_activity(
-            db,
-            student_profile_id=UUID(str(ctx["student_profile_id"])),
-            subject=str(ctx["subject"]),
-            term=int(ctx["term"]),
-            ref_id=f"session_end:{session_id}",
-            duration_seconds=duration_seconds,
-        )
+        # No _log_activity call here — the DB trigger log_tutor_session_to_activity_logs
+        # fires automatically on UPDATE tutor_sessions and writes to activity_logs.
+        # Calling _log_activity here too causes a duplicate/conflicting insert.
 
         db.commit()
         return EndSessionResponse(session_id=session_id, duration_seconds=duration_seconds, cost=cost)

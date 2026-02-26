@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from backend.endpoints.lessons import router as lessons_router
 from backend.endpoints.topics import router as topics_router
 from backend.endpoints.metadata import router as metadata_router
-from backend.endpoints.tutor_session_and_chat_history3 import router as tutor_router
+from backend.endpoints.tutor_session_and_chat_history import router as tutor_router
 
 API_PREFIX = "/api/v1"
 
