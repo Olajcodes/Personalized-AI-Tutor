@@ -4,10 +4,7 @@ services:
     runtime: docker
     dockerfilePath: ./backend/Dockerfile
     dockerContext: .
-<<<<<<< Olasquare
     healthCheckPath: /api/v1/system/health
-=======
->>>>>>> main
     branch: main
     autoDeploy: true
     plan: free
@@ -22,23 +19,17 @@ services:
         value: "1440"
       - key: ENV
         value: prod
-<<<<<<< Olasquare
       - key: AI_CORE_BASE_URL
         value: https://mastery-ai-core.onrender.com
       - key: AI_CORE_TIMEOUT_SECONDS
         value: "8"
-=======
->>>>>>> main
 
   - type: web
     name: mastery-ai-core
     runtime: docker
     dockerfilePath: ./ai_core/Dockerfile
     dockerContext: .
-<<<<<<< Olasquare
     healthCheckPath: /health
-=======
->>>>>>> main
     branch: main
     autoDeploy: true
     plan: free
