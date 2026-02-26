@@ -5,12 +5,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY ai-core/requirements.txt /tmp/requirements.txt
+COPY ai_core/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
-COPY ai-core /app/ai-core
-WORKDIR /app/ai-core
+COPY ai_core /app/ai_core
 
-EXPOSE 8100
+EXPOSE 10000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8100"]
+CMD ["sh", "-c", "uvicorn ai_core.main:app --host 0.0.0.0 --port ${PORT:-10000}"]

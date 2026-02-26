@@ -44,11 +44,11 @@ services:
   ai-core:
     build:
       context: .
-      dockerfile: ai-core/Dockerfile
+      dockerfile: ai_core/Dockerfile
     container_name: mastery-ai-core
     restart: unless-stopped
     env_file:
-      - ai-core/.env
+      - ai_core/.env
     environment:
       POSTGRES_DSN: ${POSTGRES_DSN:-postgresql://postgres:postgres@postgres:5432/mastery_ai}
       NEO4J_URI: ${NEO4J_URI:-}

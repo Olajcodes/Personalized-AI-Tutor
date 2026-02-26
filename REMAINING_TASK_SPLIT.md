@@ -197,7 +197,7 @@ Lane B:
 Lane C:
 - [✅] `backend/endpoints/quizzes.py` - corrected route prefix to `/learning/quizzes` and fixed async/db wiring.
 - [✅] `backend/main.py` quiz router mount
-- [🟡] `ai_core/main.py` exists but does not expose section 4 HTTP endpoints yet.
+- [✅] `ai_core/main.py` exposes section 4 quiz HTTP endpoints (`POST /quiz/generate`, `GET /quiz/{quiz_id}/attempt/{attempt_id}/insights`).
 
 Lane D:
 - [✅] `backend/tests/unit/test_quiz_generate_service.py`
@@ -350,6 +350,7 @@ Lane D:
 - [✅] `backend/endpoints/internal_postgres_service.py` deleted and replaced by `backend/endpoints/internal_postgres.py`.
 - [🟡] `backend/core/ai_core_client.py` is a temporary local stub to unblock imports; replace with real ai-core HTTP client integration in section 4.
 - [🟡] `backend/repositories/quiz_repo.py`, `backend/services/quiz_generate_service.py`, `backend/services/quiz_submit_service.py`, `backend/services/quiz_results_service.py` are present but not production-ready due model/contract mismatches.
+- [🟡] `backend/schemas/quiz_schema.py` and `ai_core/core_engine/api_contracts/quiz_schemas.py` are not fully aligned yet (`student_id` and response fields differ), so direct backend->ai-core quiz integration remains blocked.
 - [🟡] `backend/tests/integration/test_section4_quiz_flow.py` is intentionally SQLite-skipped because project models use PostgreSQL-specific JSONB types.
 
 ---
