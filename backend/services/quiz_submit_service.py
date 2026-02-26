@@ -7,7 +7,6 @@ from backend.schemas.quiz_schema import QuizSubmitRequest, QuizSubmitResponse, C
 from backend.repositories.quiz_repo import QuizRepository
 from backend.services.graph_mastery_update_service import GraphMasteryUpdateService
 from backend.services.activity_service import ActivityService  # from Section 1
-from backend.models.quiz import QuizQuestion
 
 class QuizSubmitService:
     def __init__(self, db: Session):

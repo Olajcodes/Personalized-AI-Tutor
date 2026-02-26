@@ -33,4 +33,5 @@ class Quiz(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="generated")
 
     time_limit_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Use a non-reserved Python attribute name while preserving DB column name.
+    extra_metadata: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
