@@ -9,8 +9,8 @@ class DiagnosticQuestionOut(BaseModel):
 
 class DiagnosticStartIn(BaseModel):
     student_id: UUID
-    subject: str = Field(..., example="math")
-    sss_level: str = Field(..., example="SSS1")
+    subject: str = Field(..., json_schema_extra={"example": "math"})
+    sss_level: str = Field(..., json_schema_extra={"example": "SSS1"})
 
 class DiagnosticStartOut(BaseModel):
     diagnostic_id: UUID

@@ -5,7 +5,7 @@ Currently returns mock data; replace with actual LLM integration.
 """
 import uuid
 from typing import List, Dict, Any
-from ai_core.core_engine.api_contracts.quiz_schemas import (
+from core_engine.api_contracts.quiz_schemas import (
     QuizGenerateRequest, QuestionSchema
 )
 

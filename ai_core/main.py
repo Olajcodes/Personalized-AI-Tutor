@@ -4,8 +4,19 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
+from uuid import UUID
 
 from fastapi import FastAPI
+
+from ai_core.core_engine.orchestration.quiz_engine import (
+    generate_quiz_questions,
+    generate_quiz_insights,
+)
+from ai_core.core_engine.api_contracts.quiz_schemas import (
+    QuizGenerateRequest,
+    QuizGenerateResponse,
+    QuestionSchema,
+)
 
 app = FastAPI(title="Mastery AI Core", version="0.1.0")
 
@@ -29,3 +40,26 @@ def health():
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "checks": checks,
     }
+
+
+@app.post("/quiz/generate", response_model=QuizGenerateResponse)
+async def quiz_generate(payload: QuizGenerateRequest):
+    questions_raw = await generate_quiz_questions(
+        subject=payload.subject,
+        sss_level=payload.sss_level,
+        term=payload.term,
+        topic_id=payload.topic_id,
+        purpose=payload.purpose,
+        difficulty=payload.difficulty,
+        num_questions=payload.num_questions,
+    )
+
+    # Convert dicts -> Pydantic models
+    questions = [QuestionSchema(**q) for q in questions_raw]
+    return QuizGenerateResponse(questions=questions)
+
+
+@app.get("/quiz/{quiz_id}/attempt/{attempt_id}/insights")
+async def quiz_insights(quiz_id: UUID, attempt_id: UUID):
+    insights = await generate_quiz_insights(quiz_id=quiz_id, attempt_id=attempt_id)
+    return {"insights": insights}
