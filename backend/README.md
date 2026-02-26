@@ -571,3 +571,21 @@ Suggested section format:
   1) ...
   2) ...
 ```
+
+
+
+
+
+
+
+
+### Section 4 – Quiz Lifecycle (Generate, Submit, Results)
+
+**Smoke test steps**:
+1. Ensure database is migrated: `alembic upgrade head`
+2. Start the server: `uvicorn main:app --reload`
+3. Generate a quiz via `POST /api/v1/learning/quizzes/generate` with a valid payload.
+4. Submit answers via `POST /api/v1/learning/quizzes/{quiz_id}/submit`.
+5. Fetch results via `GET /api/v1/learning/quizzes/{quiz_id}/results?student_id=...&attempt_id=...`.
+6. Run unit tests: `pytest backend/tests/unit/test_quiz_* -v`
+7. Run integration tests: `pytest backend/tests/integration/test_section4_quiz_flow.py -v`
