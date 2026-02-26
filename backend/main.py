@@ -18,6 +18,9 @@ from backend.endpoints.users import router as users_router
 from backend.endpoints.tutor_sessions import router as tutor_sessions_router
 from backend.endpoints.internal_postgres import router as internal_postgres_router
 
+# Section 4 Routers
+from backend.endpoints.quizzes import router as quizzes_router
+
 API_PREFIX = "/api/v1"
 
 app = FastAPI(title="Mastery AI Backend", version="0.1.0")
@@ -38,6 +41,9 @@ app.include_router(system_router, prefix=API_PREFIX)
 # Section 2 Router Wiring
 app.include_router(tutor_sessions_router, prefix=API_PREFIX)
 app.include_router(internal_postgres_router, prefix=API_PREFIX)
+
+# Section 4 router wiring
+app.include_router(quizzes_router, prefix=API_PREFIX)
 
 @app.get("/")
 async def root():
