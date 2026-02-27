@@ -1,3 +1,8 @@
+"""Tutor session lifecycle endpoints.
+
+Supports session start, history retrieval, and session closure/cost summary.
+"""
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -27,11 +32,11 @@ def _service(db: Session) -> TutorSessionService:
 @router.post("/start", response_model=TutorSessionStartOut, status_code=status.HTTP_201_CREATED)
 def start_session(
     payload: TutorSessionStartIn,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """
-    POST /api/v1/tutor/sessions/start
-    Initializes a new AI Tutor session for a student using the StartIn schema.
+    """Create a new tutor session record for a student scope.
+
+    Returns a `session_id` used by history and end-session operations.
     """
     try:
         return _service(db).start_session(payload=payload)
@@ -51,12 +56,11 @@ def start_session(
 def get_session_history(
     session_id: UUID,
     student_id: UUID,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """
-    GET /api/v1/tutor/sessions/{session_id}/history
-    Retrieves the full message history. Now requires student_id for validation 
-    as per the service contract.
+    """Return ordered message history for a tutor session.
+
+    Requires `student_id` to ensure the caller only accesses owned sessions.
     """
     try:
         return _service(db).get_history(session_id=session_id, student_id=student_id)
@@ -69,18 +73,17 @@ def end_session(
     session_id: UUID,
     student_id: UUID,
     payload: TutorSessionEndIn,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """
-    POST /api/v1/tutor/sessions/{session_id}/end
-    Closes an active tutor session. Requires student_id to verify ownership 
-    before marking the session as ended.
+    """Close an active tutor session and return usage/cost summary.
+
+    Session ownership is validated using `student_id`.
     """
     try:
         return _service(db).end_session(
             session_id=session_id,
             student_id=student_id,
-            payload=payload
+            payload=payload,
         )
     except TutorSessionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

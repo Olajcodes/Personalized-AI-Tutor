@@ -24,6 +24,8 @@ from backend.models.quiz_attempt import QuizAttempt
 from backend.models.quiz_answer import QuizAnswer
 from backend.models.student_concept_mastery import StudentConceptMastery
 from backend.models.mastery_update_event import MasteryUpdateEvent
+from backend.models.mastery_snapshot import MasterySnapshot
+from backend.models.student_badge import StudentBadge
 
 config = context.config
 fileConfig(config.config_file_name)

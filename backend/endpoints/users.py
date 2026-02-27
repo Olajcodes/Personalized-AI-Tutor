@@ -1,3 +1,9 @@
+"""User identity profile endpoints.
+
+These routes expose personal profile fields (name/avatar/phone) for
+authenticated users, plus the normalized preference route.
+"""
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -23,6 +29,10 @@ def get_my_profile(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    """Return identity profile for the authenticated user.
+
+    Used by dashboard header/account settings pages.
+    """
     return _user_service(db).get_me(current_user.id)
 
 
@@ -32,6 +42,10 @@ def update_my_profile(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    """Update identity profile fields for the authenticated user.
+
+    Supports first/last/display name, phone, and avatar URL updates.
+    """
     return _user_service(db).update_me(current_user.id, payload)
 
 
@@ -42,6 +56,11 @@ def update_preferences(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    """Update learning preferences via canonical `/users` route.
+
+    This route mirrors `/students/users/{user_id}/preferences` but should be
+    preferred by frontend integrations going forward.
+    """
     if current_user.id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

@@ -1,3 +1,8 @@
+"""Adaptive learning path endpoints.
+
+Public APIs that expose next-step recommendations and map visualization.
+"""
+
 from typing import Literal
 from uuid import UUID
 
@@ -13,6 +18,10 @@ router = APIRouter(prefix="/learning/path", tags=["Learning Path"])
 
 @router.post("/next", response_model=PathNextOut)
 def get_next_path_step(payload: PathNextIn, db: Session = Depends(get_db)):
+    """Return the next recommended topic based on mastery/prerequisite logic.
+
+    Response includes recommendation reason and prerequisite gap hints.
+    """
     try:
         return learning_path_service.calculate_next_step(db=db, payload=payload)
     except LearningPathValidationError as exc:
@@ -28,6 +37,10 @@ def get_learning_map_visual(
     view: Literal["topic", "concept"] = "topic",
     db: Session = Depends(get_db),
 ):
+    """Return a visualizable learning map snapshot for the provided scope.
+
+    Supports topic or concept views to power progress-map UI components.
+    """
     try:
         return learning_path_service.get_learning_map_visual(
             db,
