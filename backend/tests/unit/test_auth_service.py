@@ -24,12 +24,23 @@ class FakeAuthRepo:
     def get_user_by_id(self, user_id: uuid.UUID):
         return self.users_by_id.get(user_id)
 
-    def create_user(self, email: str, password_hash: str, role: str = "student"):
+    def create_user(
+        self,
+        email: str,
+        password_hash: str,
+        role: str = "student",
+        first_name: str | None = None,
+        last_name: str | None = None,
+        display_name: str | None = None,
+    ):
         user = SimpleNamespace(
             id=uuid.uuid4(),
             email=email,
             password_hash=password_hash,
             role=role,
+            first_name=first_name,
+            last_name=last_name,
+            display_name=display_name,
             is_active=True,
         )
         self.users_by_email[user.email] = user
@@ -51,6 +62,27 @@ def test_register_success():
     assert out.email == "student@example.com"
     assert out.role == "student"
     assert repo.get_user_by_email("student@example.com") is not None
+
+
+def test_register_accepts_identity_fields():
+    repo = FakeAuthRepo()
+    service = AuthService(repo)
+
+    out = service.register(
+        RegisterIn(
+            email="student@example.com",
+            password="password123",
+            role="student",
+            first_name="Olasquare",
+            last_name="Ola",
+        )
+    )
+    user = repo.get_user_by_email("student@example.com")
+
+    assert out.first_name == "Olasquare"
+    assert out.last_name == "Ola"
+    assert out.display_name == "Olasquare Ola"
+    assert user.display_name == "Olasquare Ola"
 
 
 def test_register_duplicate_email_fails():
@@ -89,6 +121,7 @@ def test_change_password_success():
 
     assert login.user_id == str(user.id)
     assert login.role == "student"
+    assert login.first_name is None
     assert out.user_id == str(user.id)
 
 

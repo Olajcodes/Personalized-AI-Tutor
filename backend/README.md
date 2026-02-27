@@ -91,6 +91,13 @@ Expected head includes:
 - `0008_tutor_sessions_and_history`
 - `0009_quiz_tables`
 - `0010_graph_mastery_tracking`
+- `0011_quiz_question_concept_id`
+- `0012_student_stats_created_fix`
+- `0013_activity_logs_timestamp_fix`
+- `0014_tutor_sessions_reconcile`
+- `0015_activity_event_check`
+- `0016_activity_fk_reconcile`
+- `0017_user_identity_fields`
 
 ### Important for shared DB
 
@@ -168,6 +175,8 @@ Base prefix: `/api/v1`
 - `GET /students/profile`
 - `PUT /students/profile`
 - `PUT /students/users/{user_id}/preferences`
+- `GET /users/me`
+- `PUT /users/me`
 - `PUT /users/{user_id}/preferences`
 - `GET /metadata/subjects`
 - `GET /metadata/levels`
@@ -209,7 +218,9 @@ Sample payload (use unique email every time):
 {
   "email": "yourname+test001@example.com",
   "password": "password123",
-  "role": "student"
+  "role": "student",
+  "first_name": "Olasquare",
+  "last_name": "Adeola"
 }
 ```
 
@@ -234,7 +245,10 @@ Expected login response now includes `user_id`:
 {
   "access_token": "<jwt>",
   "user_id": "<uuid>",
-  "role": "student"
+  "role": "student",
+  "first_name": "Olasquare",
+  "last_name": "Adeola",
+  "display_name": "Olasquare Adeola"
 }
 ```
 
@@ -261,6 +275,29 @@ Use `user_id` from register response as `student_id`.
 
 Important:
 - If you set a different `student_id` than your auth user ID, `GET /students/profile` will likely return not found.
+
+### 3a) User profile identity (dashboard card)
+
+- `GET /api/v1/users/me`
+
+Expected fields:
+- `first_name`
+- `last_name`
+- `display_name`
+- `avatar_url`
+- `phone`
+
+- `PUT /api/v1/users/me`
+
+Sample payload:
+
+```json
+{
+  "display_name": "Olasquare A.",
+  "phone": "+2348012345678",
+  "avatar_url": "https://cdn.example.com/avatar/olasquare.png"
+}
+```
 
 ### 4) Verify profile
 

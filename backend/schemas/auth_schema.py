@@ -9,6 +9,9 @@ class RegisterIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     role: Literal["student", "teacher", "admin"] = "student"
+    first_name: str | None = Field(default=None, min_length=1, max_length=100)
+    last_name: str | None = Field(default=None, min_length=1, max_length=100)
+    display_name: str | None = Field(default=None, min_length=1, max_length=150)
 
 
 class LoginIn(BaseModel):
@@ -20,12 +23,18 @@ class AuthOut(BaseModel):
     access_token: str
     user_id: str
     role: str
+    first_name: str | None = None
+    last_name: str | None = None
+    display_name: str | None = None
 
 
 class RegisterOut(BaseModel):
     user_id: str
     email: EmailStr
     role: str
+    first_name: str | None = None
+    last_name: str | None = None
+    display_name: str | None = None
     message: str
 
 

@@ -15,8 +15,24 @@ class AuthRepository:
     def get_user_by_id(self, user_id: uuid.UUID) -> User | None:
         return self.db.query(User).filter(User.id == user_id).first()
 
-    def create_user(self, email: str, password_hash: str, role: str = "student") -> User:
-        user = User(email=email, password_hash=password_hash, role=role, is_active=True)
+    def create_user(
+        self,
+        email: str,
+        password_hash: str,
+        role: str = "student",
+        first_name: str | None = None,
+        last_name: str | None = None,
+        display_name: str | None = None,
+    ) -> User:
+        user = User(
+            email=email,
+            password_hash=password_hash,
+            role=role,
+            first_name=first_name,
+            last_name=last_name,
+            display_name=display_name,
+            is_active=True,
+        )
         self.db.add(user)
         self.db.commit()
         self.db.refresh(user)
