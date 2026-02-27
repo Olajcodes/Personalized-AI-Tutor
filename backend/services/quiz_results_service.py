@@ -32,7 +32,9 @@ class QuizResultsService:
             if not question:
                 continue
 
-            concept_id = str(getattr(question, "concept_id", question.id))
+            concept_id = str(getattr(question, "concept_id", "")).strip()
+            if not concept_id:
+                concept_id = str(quiz.topic_id or question.id)
             concept_correctness.setdefault(concept_id, []).append(bool(answer.is_correct))
 
         concept_breakdown: list[ConceptBreakdownItem] = []
@@ -63,7 +65,7 @@ class QuizResultsService:
 
         recommended_topic = None
         if weakest_concept is not None:
-            recommended_topic = await self._get_topic_for_concept(weakest_concept)
+            recommended_topic = await self._get_topic_for_concept(weakest_concept, fallback_topic_id=quiz.topic_id)
 
         return QuizResultsResponse(
             score=float(attempt.score or 0.0),
@@ -72,6 +74,30 @@ class QuizResultsService:
             recommended_revision_topic_id=recommended_topic,
         )
 
-    async def _get_topic_for_concept(self, concept_id: str) -> UUID | None:
-        _ = concept_id
+    async def _get_topic_for_concept(self, concept_id: str, fallback_topic_id: UUID | None) -> UUID | None:
+        def _parse_uuid(value: str) -> UUID | None:
+            try:
+                return UUID(value)
+            except (TypeError, ValueError):
+                return None
+
+        candidates: list[UUID] = []
+        direct = _parse_uuid(concept_id)
+        if direct is not None:
+            candidates.append(direct)
+
+        if concept_id.startswith("topic:"):
+            parts = concept_id.split(":")
+            if len(parts) >= 2:
+                parsed = _parse_uuid(parts[1])
+                if parsed is not None:
+                    candidates.append(parsed)
+
+        if fallback_topic_id is not None:
+            candidates.append(fallback_topic_id)
+
+        for topic_id in candidates:
+            if self.repo.topic_exists(topic_id):
+                return topic_id
+
         return None

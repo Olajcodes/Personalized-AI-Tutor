@@ -36,10 +36,10 @@ class QuizSubmitRequest(BaseModel):
 
 class QuestionSchema(BaseModel):
     id: UUID
-    text: str
-    options: list[str] | None = None
+    text: str = Field(min_length=1)
+    options: list[str] = Field(default_factory=list)
     correct_answer: str | None = None
-    concept_id: str
+    concept_id: str = Field(min_length=1, max_length=255)
     difficulty: Difficulty
 
 
@@ -73,7 +73,7 @@ class GraphMasteryUpdatePayload(BaseModel):
     attempt_id: UUID
     subject: SupportedSubject
     sss_level: SupportedLevel
-    term: int = Field(ge=1, le=3)
+    term: Literal[1, 2, 3]
     timestamp: datetime
     source: QuizPurpose
     concept_breakdown: list[ConceptBreakdownItem]

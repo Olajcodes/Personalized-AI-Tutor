@@ -55,6 +55,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES=1440
 ENV=dev
 AI_CORE_BASE_URL=http://127.0.0.1:8100
 AI_CORE_TIMEOUT_SECONDS=8
+AI_CORE_ALLOW_FALLBACK=true
 CORS_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:4173
 ```
 
@@ -621,4 +622,4 @@ Smoke test steps:
 6. Fetch results: `GET /api/v1/learning/quizzes/{quiz_id}/results?student_id=...&attempt_id=...`
 7. Run backend section-4 unit tests: `python -m pytest -q backend/tests/unit/test_quiz_generate_service.py backend/tests/unit/test_quiz_submit_service.py backend/tests/unit/test_quiz_results_service.py backend/tests/unit/test_quiz_endpoints.py`
 8. Run ai-core quiz tests: `python -m pytest -q ai_core/tests/unit/test_quiz_engine.py`
-9. Integration note: `backend/tests/integration/test_section4_quiz_flow.py` intentionally skips on SQLite and should be run with a Postgres-compatible test database.
+9. Integration note: set `TEST_DATABASE_URL=postgresql://...` and run `python -m pytest -q backend/tests/integration/test_section4_quiz_flow.py` for real section-4 E2E.

@@ -48,12 +48,18 @@ async def test_generate_quiz_success(mock_db, generate_request):
         # Mock repository
         service = QuizGenerateService(mock_db)
         service.repo.create_quiz = MagicMock(return_value=MagicMock(id=uuid4()))
-        service.repo.add_question_to_quiz = MagicMock()
+        created_rows = [
+            MagicMock(id=uuid4(), concept_id=f"topic:{generate_request.topic_id}:c{idx}")
+            for idx in range(5)
+        ]
+        service.repo.add_question_to_quiz = MagicMock(side_effect=created_rows)
 
         response = await service.generate_quiz(generate_request)
 
         assert response.quiz_id is not None
         assert len(response.questions) == 5
+        assert response.questions[0].id == created_rows[0].id
+        assert response.questions[0].concept_id == created_rows[0].concept_id
         mock_ai.assert_called_once()
         service.repo.create_quiz.assert_called_once()
         assert service.repo.add_question_to_quiz.call_count == 5
