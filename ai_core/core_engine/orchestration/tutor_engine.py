@@ -7,6 +7,8 @@ Includes:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from core_engine.api_contracts.schemas import (
     Citation,
     TutorChatRequest,
@@ -19,18 +21,16 @@ from core_engine.api_contracts.schemas import (
     TutorRequest,
     TutorResponse,
 )
-from core_engine.config.settings import Settings
-from core_engine.curriculum.resolver import CurriculumResolver
-from core_engine.knowledge_graph.prerequisites import PrereqService
-from core_engine.llm.client import LLMClient
-from core_engine.llm.prompts import build_tutor_prompt
-from core_engine.mastery.updater import MasteryUpdater
-from core_engine.observability.cost import CostTracker
 from core_engine.observability.logging import get_logger
-from core_engine.rag.citations import format_citations
-from core_engine.rag.retriever import RagRetriever
-from core_engine.safety.injection import sanitize_user_text
-from core_engine.safety.moderation import basic_moderate
+
+if TYPE_CHECKING:
+    from core_engine.config.settings import Settings
+    from core_engine.curriculum.resolver import CurriculumResolver
+    from core_engine.knowledge_graph.prerequisites import PrereqService
+    from core_engine.llm.client import LLMClient
+    from core_engine.mastery.updater import MasteryUpdater
+    from core_engine.observability.cost import CostTracker
+    from core_engine.rag.retriever import RagRetriever
 
 logger = get_logger(__name__)
 
@@ -38,17 +38,22 @@ logger = get_logger(__name__)
 def handle_question(
     request: TutorRequest,
     *,
-    settings: Settings,
-    curriculum: CurriculumResolver,
-    retriever: RagRetriever,
-    prereqs: PrereqService,
-    llm: LLMClient,
-    mastery: MasteryUpdater,
-    cost_tracker: CostTracker,
+    settings: "Settings",
+    curriculum: "CurriculumResolver",
+    retriever: "RagRetriever",
+    prereqs: "PrereqService",
+    llm: "LLMClient",
+    mastery: "MasteryUpdater",
+    cost_tracker: "CostTracker",
 ) -> TutorResponse:
     """MVP orchestration:
     resolve scope -> retrieve chunks -> prereq hints -> LLM response -> mastery update -> logs/cost
     """
+
+    from core_engine.llm.prompts import build_tutor_prompt
+    from core_engine.rag.citations import format_citations
+    from core_engine.safety.injection import sanitize_user_text
+    from core_engine.safety.moderation import basic_moderate
 
     # 1) Safety and hygiene
     user_text = request.message[: settings.max_input_chars]

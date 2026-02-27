@@ -189,6 +189,9 @@ Base prefix: `/api/v1`
 - `POST /tutor/sessions/start`
 - `GET /tutor/sessions/{session_id}/history`
 - `POST /tutor/sessions/{session_id}/end`
+- `POST /tutor/chat`
+- `POST /tutor/hint`
+- `POST /tutor/explain-mistake`
 - `GET /internal/postgres/profile`
 - `GET /internal/postgres/history`
 - `POST /internal/postgres/quiz-attempt`
@@ -202,6 +205,7 @@ Base prefix: `/api/v1`
 - `POST /learning/quizzes/generate`
 - `POST /learning/quizzes/{quiz_id}/submit`
 - `GET /learning/quizzes/{quiz_id}/results`
+- `GET /learning/mastery`
 
 ## Shared DB Test Runbook (Team Standard)
 
@@ -672,3 +676,40 @@ Smoke test steps:
 7. Run backend section-4 unit tests: `python -m pytest -q backend/tests/unit/test_quiz_generate_service.py backend/tests/unit/test_quiz_submit_service.py backend/tests/unit/test_quiz_results_service.py backend/tests/unit/test_quiz_endpoints.py`
 8. Run ai-core quiz tests: `python -m pytest -q ai_core/tests/unit/test_quiz_engine.py`
 9. Integration note: set `TEST_DATABASE_URL=postgresql://...` and run `python -m pytest -q backend/tests/integration/test_section4_quiz_flow.py` for real section-4 E2E.
+
+### Section 5 - Tutor AI + Mastery Dashboard MVP
+
+Smoke test steps:
+1. Ensure database is migrated: `python -m alembic -c backend/alembic.ini upgrade head`
+2. Start backend: `python -m uvicorn backend.main:app --reload`
+3. Start ai-core (optional; fallback works if unavailable): `python -m uvicorn ai_core.main:app --port 8001 --reload`
+4. Create/start a tutor session:
+   - `POST /api/v1/tutor/sessions/start`
+   - Save returned `session_id`.
+5. Send tutor chat:
+   - `POST /api/v1/tutor/chat`
+   - Sample body:
+   ```json
+   {
+     "student_id": "PUT_USER_ID_HERE",
+     "session_id": "PUT_SESSION_ID_HERE",
+     "subject": "math",
+     "sss_level": "SSS2",
+     "term": 1,
+     "topic_id": "PUT_TOPIC_ID_HERE",
+     "message": "Explain linear equations with one example."
+   }
+   ```
+6. Request a hint:
+   - `POST /api/v1/tutor/hint`
+7. Request explain-mistake:
+   - `POST /api/v1/tutor/explain-mistake`
+8. Fetch mastery dashboard:
+   - `GET /api/v1/learning/mastery?student_id=...&subject=math&term=1&view=concept`
+9. Run section-5 unit tests:
+   - `python -m pytest -q backend/tests/unit/test_tutor_orchestration_service.py backend/tests/unit/test_mastery_dashboard_service.py backend/tests/unit/test_tutor_endpoints.py backend/tests/unit/test_mastery_endpoints.py`
+10. Run ai-core tutor tests:
+    - `python -m pytest -q ai_core/tests/unit/test_tutor_engine.py`
+11. Integration note:
+    - set `TEST_DATABASE_URL=postgresql://...`
+    - run `python -m pytest -q backend/tests/integration/test_section5_tutor_mastery_flow.py`

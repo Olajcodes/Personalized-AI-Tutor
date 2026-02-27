@@ -211,7 +211,7 @@ Lane D:
 
 ---
 
-## [🟡] Section 5 (P0) Tutor AI + Mastery Dashboard MVP [LANE A+B COMPLETED]
+## [✅] Section 5 (P0) Tutor AI + Mastery Dashboard MVP [COMPLETED]
 
 Lane A:
 - [✅] `backend/alembic/versions/0018_mastery_dashboard_tables.py` - created mastery snapshot/badge tables with constraints and indexes.
@@ -229,19 +229,19 @@ Lane B:
 - [✅] `ai_core/core_engine/api_contracts/schemas.py` - section-5 tutor contract models added/aligned.
 
 Lane C:
-- [❌] `backend/endpoints/tutor.py`
-- [❌] `backend/endpoints/mastery.py`
-- [❌] `backend/main.py` tutor/mastery router mount
-- [❌] `ai_core/main.py` callable endpoints for tutor flows (if HTTP integration path is chosen)
+- [✅] `backend/endpoints/tutor.py` - chat/hint/explain endpoints added with auth + session ownership validation.
+- [✅] `backend/endpoints/mastery.py` - `/learning/mastery` endpoint added with student ownership checks.
+- [✅] `backend/main.py` tutor/mastery router mount completed.
+- [✅] `ai_core/main.py` callable tutor HTTP endpoints added: `/tutor/chat`, `/tutor/hint`, `/tutor/explain-mistake`.
 
 Lane D:
-- [❌] `backend/tests/unit/test_tutor_orchestration_service.py`
-- [❌] `backend/tests/unit/test_mastery_dashboard_service.py`
-- [❌] `backend/tests/unit/test_tutor_endpoints.py`
-- [❌] `backend/tests/unit/test_mastery_endpoints.py`
-- [❌] `backend/tests/integration/test_section5_tutor_mastery_flow.py`
-- [❌] `ai_core/tests/unit/test_tutor_engine.py`
-- [❌] `backend/README.md` section-5 smoke block
+- [✅] `backend/tests/unit/test_tutor_orchestration_service.py`
+- [✅] `backend/tests/unit/test_mastery_dashboard_service.py`
+- [✅] `backend/tests/unit/test_tutor_endpoints.py`
+- [✅] `backend/tests/unit/test_mastery_endpoints.py`
+- [✅] `backend/tests/integration/test_section5_tutor_mastery_flow.py` (runs with `TEST_DATABASE_URL`; skipped safely when unset)
+- [✅] `ai_core/tests/unit/test_tutor_engine.py`
+- [✅] `backend/README.md` section-5 smoke block
 
 ---
 

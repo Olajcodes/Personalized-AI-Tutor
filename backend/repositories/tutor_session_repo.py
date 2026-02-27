@@ -104,6 +104,26 @@ class TutorSessionRepository:
         ).mappings().all()
         return [dict(row) for row in rows]
 
+    def add_message(self, *, session_id: UUID, role: str, content: str) -> dict:
+        message_id = uuid.uuid4()
+        row = self.db.execute(
+            text(
+                """
+                INSERT INTO tutor_messages (id, session_id, role, content, created_at, updated_at)
+                VALUES (:id, :session_id, :role, :content, NOW(), NOW())
+                RETURNING id, session_id, role, content, created_at
+                """
+            ),
+            {
+                "id": message_id,
+                "session_id": session_id,
+                "role": role,
+                "content": content,
+            },
+        ).mappings().first()
+        self.db.commit()
+        return dict(row) if row else {}
+
     def end_session(
         self,
         *,
