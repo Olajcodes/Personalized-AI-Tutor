@@ -24,6 +24,13 @@ class AuthService:
         return email.strip().lower()
 
     @staticmethod
+    def _normalize_optional_text(value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    @staticmethod
     def _validate_password_strength(password: str) -> None:
         if len(password) < 8:
             raise AuthValidationError("Password must be at least 8 characters long.")
@@ -35,15 +42,27 @@ class AuthService:
         if self.repo.get_user_by_email(email):
             raise AuthConflictError("A user with this email already exists.")
 
+        first_name = self._normalize_optional_text(payload.first_name)
+        last_name = self._normalize_optional_text(payload.last_name)
+        display_name = self._normalize_optional_text(payload.display_name)
+        if display_name is None and (first_name or last_name):
+            display_name = " ".join(part for part in [first_name, last_name] if part)
+
         user = self.repo.create_user(
             email=email,
             password_hash=hash_password(payload.password),
             role=payload.role,
+            first_name=first_name,
+            last_name=last_name,
+            display_name=display_name,
         )
         return RegisterOut(
             user_id=str(user.id),
             email=user.email,
             role=user.role,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            display_name=user.display_name,
             message="User created successfully.",
         )
 
@@ -57,7 +76,14 @@ class AuthService:
             raise AuthUnauthorizedError("User account is inactive.")
 
         token = create_access_token(subject=user.email, role=user.role, user_id=str(user.id))
-        return AuthOut(access_token=token, user_id=str(user.id), role=user.role)
+        return AuthOut(
+            access_token=token,
+            user_id=str(user.id),
+            role=user.role,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            display_name=user.display_name,
+        )
 
     def change_password(self, user_id, payload: ChangePasswordIn) -> None:
         user = self.repo.get_user_by_id(user_id)

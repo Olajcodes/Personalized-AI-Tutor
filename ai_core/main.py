@@ -14,6 +14,19 @@ from ai_core.core_engine.orchestration.quiz_engine import (
     generate_quiz_questions,
     generate_quiz_insights,
 )
+from ai_core.core_engine.orchestration.tutor_engine import (
+    run_tutor_chat,
+    run_tutor_explain_mistake,
+    run_tutor_hint,
+)
+from ai_core.core_engine.api_contracts.schemas import (
+    TutorChatRequest,
+    TutorChatResponse,
+    TutorExplainMistakeRequest,
+    TutorExplainMistakeResponse,
+    TutorHintRequest,
+    TutorHintResponse,
+)
 from ai_core.core_engine.api_contracts.quiz_schemas import (
     QuizGenerateRequest,
     QuizGenerateResponse,
@@ -91,3 +104,18 @@ async def quiz_generate(payload: QuizGenerateRequest):
 async def quiz_insights(quiz_id: UUID, attempt_id: UUID):
     insights = await generate_quiz_insights(quiz_id=quiz_id, attempt_id=attempt_id)
     return QuizInsightsResponse(insights=insights)
+
+
+@app.post("/tutor/chat", response_model=TutorChatResponse)
+def tutor_chat(payload: TutorChatRequest):
+    return run_tutor_chat(payload)
+
+
+@app.post("/tutor/hint", response_model=TutorHintResponse)
+def tutor_hint(payload: TutorHintRequest):
+    return run_tutor_hint(payload)
+
+
+@app.post("/tutor/explain-mistake", response_model=TutorExplainMistakeResponse)
+def tutor_explain_mistake(payload: TutorExplainMistakeRequest):
+    return run_tutor_explain_mistake(payload)

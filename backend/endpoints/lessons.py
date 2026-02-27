@@ -1,3 +1,8 @@
+"""Lesson content delivery endpoints.
+
+Exposes topic lesson retrieval with student-scope authorization checks.
+"""
+
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -14,6 +19,11 @@ def get_topic_lesson(
     student_id: uuid.UUID = Query(..., description="Student UUID for curriculum scope enforcement"),
     db: Session = Depends(get_db),
 ):
+    """Return lesson content blocks for a specific topic.
+
+    Access is restricted to topics that are valid for the requesting student's
+    configured learning scope.
+    """
     try:
         return fetch_topic_lesson(db=db, topic_id=topic_id, student_id=student_id)
     except LessonNotFound as e:

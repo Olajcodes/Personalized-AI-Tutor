@@ -1,3 +1,8 @@
+"""Quiz lifecycle endpoints.
+
+Public APIs for quiz generation, submission, and post-attempt results.
+"""
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
@@ -28,6 +33,10 @@ async def generate_quiz(
     payload: QuizGenerateRequest,
     db: Session = Depends(get_db),
 ):
+    """Generate a targeted quiz for a student and persist it.
+
+    Uses AI-core question generation contract and stores normalized quiz records.
+    """
     service = QuizGenerateService(db)
     return await service.generate_quiz(payload)
 
@@ -41,6 +50,10 @@ async def submit_quiz(
     payload: QuizSubmitRequest,
     db: Session = Depends(get_db),
 ):
+    """Submit answers for a generated quiz and return scored attempt summary.
+
+    This endpoint also triggers activity logging and graph mastery update push.
+    """
     service = QuizSubmitService(db)
     return await service.submit_quiz(quiz_id=quiz_id, request=payload)
 
@@ -55,6 +68,10 @@ async def get_quiz_results(
     attempt_id: UUID,
     db: Session = Depends(get_db),
 ):
+    """Return scored quiz results with concept breakdown and tutor insights.
+
+    Requires `quiz_id`, `student_id`, and `attempt_id` to resolve a unique attempt.
+    """
     service = QuizResultsService(db)
     return await service.get_results(
         quiz_id=quiz_id,

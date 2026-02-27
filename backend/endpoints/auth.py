@@ -1,4 +1,7 @@
-"""Auth endpoints."""
+"""Authentication and account security endpoints.
+
+Public API for register/login/password update.
+"""
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -30,6 +33,11 @@ def _service(db: Session) -> AuthService:
 
 @router.post("/register", response_model=RegisterOut, status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterIn, db: Session = Depends(get_db)):
+    """Create a new platform user account.
+
+    This endpoint is used by students/teachers/admins during sign-up.
+    It enforces unique email and minimum password quality via the auth service.
+    """
     try:
         return _service(db).register(payload)
     except AuthConflictError as exc:
@@ -40,6 +48,10 @@ def register(payload: RegisterIn, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=AuthOut, status_code=status.HTTP_200_OK)
 def login(payload: LoginIn, db: Session = Depends(get_db)):
+    """Authenticate a user and issue a JWT access token.
+
+    The response includes role and user identity fields required by frontend state.
+    """
     try:
         return _service(db).login(payload)
     except AuthUnauthorizedError as exc:
@@ -52,6 +64,10 @@ def change_password(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    """Change password for the currently authenticated user.
+
+    Requires a valid bearer token and the current password for verification.
+    """
     try:
         _service(db).change_password(current_user.id, payload)
         return MessageOut(message="Password changed successfully.")

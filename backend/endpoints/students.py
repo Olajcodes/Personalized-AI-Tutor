@@ -1,3 +1,9 @@
+"""Student onboarding and learning-scope profile endpoints.
+
+These routes manage curriculum scope (SSS level, term, subjects) and
+student learning preferences.
+"""
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from uuid import UUID
@@ -15,13 +21,18 @@ from backend.core.auth import get_current_user  # Assumes auth team provides thi
 
 router = APIRouter(prefix="/students", tags=["Students"])
 
+
 @router.post("/profile/setup", response_model=StudentProfileResponse)
 async def setup_profile(
     request: StudentProfileSetupRequest,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)   # Ensures user is authenticated
+    current_user=Depends(get_current_user),  # Ensures user is authenticated
 ):
-    """Create initial student profile with context."""
+    """Create the initial student learning profile.
+
+    This endpoint is usually called once after registration/login.
+    Security rule: `request.student_id` must match authenticated user id.
+    """
     if request.student_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -31,39 +42,49 @@ async def setup_profile(
     service = StudentService(db)
     return service.setup_profile(request)
 
+
 @router.get("/profile", response_model=StudentProfileResponse)
 async def get_profile(
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
-    """Get current student's profile."""
+    """Return the authenticated student's profile and active learning scope.
+
+    Used by dashboard/settings pages to preload profile data.
+    """
     service = StudentService(db)
-    # current_user should have an 'id' field that matches student_id in our model
     return service.get_profile(current_user.id)
+
 
 @router.put("/profile", response_model=StudentProfileResponse)
 async def update_profile(
     updates: StudentProfileUpdateRequest,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
-    """Update standard profile fields."""
+    """Update the authenticated student's profile scope fields.
+
+    Supports changing SSS level, active term, and enrolled subjects.
+    """
     service = StudentService(db)
     return service.update_profile(current_user.id, updates)
+
 
 @router.put("/users/{user_id}/preferences", response_model=LearningPreferenceResponse)
 async def update_preferences(
     user_id: UUID,
     updates: LearningPreferenceUpdateRequest,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
-    """Update learning preferences for a user."""
-    # Ensure user can only update their own preferences
+    """Legacy-compatible path for updating learning preferences.
+
+    Security rule: users can only update their own preference record.
+    """
     if current_user.id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to update this user's preferences"
+            detail="Not authorized to update this user's preferences",
         )
     service = StudentService(db)
     return service.update_preferences(user_id, updates)

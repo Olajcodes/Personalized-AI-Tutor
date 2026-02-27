@@ -28,6 +28,11 @@ def _check_optional_config(value: str) -> dict:
 
 @router.get("/health")
 def health():
+    """Return service health snapshot across configured dependencies.
+
+    Postgres is actively pinged; other dependencies are reported as configured
+    or not configured based on environment settings.
+    """
     checks = {
         "postgres": _check_postgres(),
         "redis": _check_optional_config(settings.redis_url),

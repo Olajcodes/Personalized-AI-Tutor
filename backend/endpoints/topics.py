@@ -1,3 +1,5 @@
+"""Topic listing endpoints constrained by student profile scope."""
+
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -17,6 +19,11 @@ def list_topics(
     term: int | None = Query(None),
     db: Session = Depends(get_db),
 ):
+    """Return approved topics available to the student in current scope.
+
+    Topic visibility is restricted by student profile level/term/subjects.
+    Optional `subject` and `term` query params narrow the result.
+    """
     # Fetch student scope
     sp = db.execute(select(StudentProfile).where(StudentProfile.student_id == student_id)).scalar_one_or_none()
     if not sp:

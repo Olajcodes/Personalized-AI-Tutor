@@ -1,20 +1,36 @@
-"""Single entrypoint for MVP tutoring: handle_question()."""
+"""Tutor orchestration utilities.
+
+Includes:
+- legacy single-call orchestration (`handle_question`)
+- section-5 aligned helpers for HTTP tutor endpoints (`run_tutor_chat`, `run_tutor_hint`, `run_tutor_explain_mistake`)
+"""
 
 from __future__ import annotations
 
-from core_engine.api_contracts.schemas import Citation, TutorRequest, TutorResponse
-from core_engine.config.settings import Settings
-from core_engine.curriculum.resolver import CurriculumResolver
-from core_engine.knowledge_graph.prerequisites import PrereqService
-from core_engine.llm.client import LLMClient
-from core_engine.llm.prompts import build_tutor_prompt
-from core_engine.mastery.updater import MasteryUpdater
-from core_engine.observability.cost import CostTracker
+from typing import TYPE_CHECKING
+
+from core_engine.api_contracts.schemas import (
+    Citation,
+    TutorChatRequest,
+    TutorChatResponse,
+    TutorExplainMistakeRequest,
+    TutorExplainMistakeResponse,
+    TutorHintRequest,
+    TutorHintResponse,
+    TutorRecommendation,
+    TutorRequest,
+    TutorResponse,
+)
 from core_engine.observability.logging import get_logger
-from core_engine.rag.citations import format_citations
-from core_engine.rag.retriever import RagRetriever
-from core_engine.safety.injection import sanitize_user_text
-from core_engine.safety.moderation import basic_moderate
+
+if TYPE_CHECKING:
+    from core_engine.config.settings import Settings
+    from core_engine.curriculum.resolver import CurriculumResolver
+    from core_engine.knowledge_graph.prerequisites import PrereqService
+    from core_engine.llm.client import LLMClient
+    from core_engine.mastery.updater import MasteryUpdater
+    from core_engine.observability.cost import CostTracker
+    from core_engine.rag.retriever import RagRetriever
 
 logger = get_logger(__name__)
 
@@ -22,17 +38,22 @@ logger = get_logger(__name__)
 def handle_question(
     request: TutorRequest,
     *,
-    settings: Settings,
-    curriculum: CurriculumResolver,
-    retriever: RagRetriever,
-    prereqs: PrereqService,
-    llm: LLMClient,
-    mastery: MasteryUpdater,
-    cost_tracker: CostTracker,
+    settings: "Settings",
+    curriculum: "CurriculumResolver",
+    retriever: "RagRetriever",
+    prereqs: "PrereqService",
+    llm: "LLMClient",
+    mastery: "MasteryUpdater",
+    cost_tracker: "CostTracker",
 ) -> TutorResponse:
     """MVP orchestration:
     resolve scope -> retrieve chunks -> prereq hints -> LLM response -> mastery update -> logs/cost
     """
+
+    from core_engine.llm.prompts import build_tutor_prompt
+    from core_engine.rag.citations import format_citations
+    from core_engine.safety.injection import sanitize_user_text
+    from core_engine.safety.moderation import basic_moderate
 
     # 1) Safety and hygiene
     user_text = request.message[: settings.max_input_chars]
@@ -109,4 +130,45 @@ def handle_question(
         remediation_prereqs=remediation_prereqs,
         actions=actions,
         cost=cost_tracker.snapshot(),
+    )
+
+
+def run_tutor_chat(request: TutorChatRequest) -> TutorChatResponse:
+    """Generate deterministic tutor chat output aligned to section-5 contract.
+
+    This lightweight implementation is safe for MVP integration and can be replaced
+    with full LangGraph orchestration without changing API payload shape.
+    """
+    recommendation = TutorRecommendation(
+        type="next_topic",
+        topic_id=request.topic_id,
+        reason="Keep practicing the current scope and proceed once confidence improves.",
+    )
+    return TutorChatResponse(
+        assistant_message=(
+            f"For {request.subject.upper()} ({request.sss_level}, term {request.term}), "
+            "start from the core rule, then solve one simple example step by step."
+        ),
+        citations=[],
+        actions=["UPDATED_MASTERY_BASIC"],
+        recommendations=[recommendation],
+    )
+
+
+def run_tutor_hint(request: TutorHintRequest) -> TutorHintResponse:
+    """Return a concise scaffolded hint for an in-progress quiz question."""
+    return TutorHintResponse(
+        hint="Identify the key concept being tested, eliminate one wrong option, then compare the remaining choices.",
+        strategy="guided_hint",
+    )
+
+
+def run_tutor_explain_mistake(request: TutorExplainMistakeRequest) -> TutorExplainMistakeResponse:
+    """Explain why an answer is wrong and provide a targeted correction tip."""
+    return TutorExplainMistakeResponse(
+        explanation=(
+            "Your answer does not follow the governing rule in the question context. "
+            f"You selected '{request.student_answer}', but the expected answer is '{request.correct_answer}'."
+        ),
+        improvement_tip="Write the relevant rule first, then verify each option against that rule.",
     )

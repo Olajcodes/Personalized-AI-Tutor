@@ -91,6 +91,13 @@ Expected head includes:
 - `0008_tutor_sessions_and_history`
 - `0009_quiz_tables`
 - `0010_graph_mastery_tracking`
+- `0011_quiz_question_concept_id`
+- `0012_student_stats_created_fix`
+- `0013_activity_logs_timestamp_fix`
+- `0014_tutor_sessions_reconcile`
+- `0015_activity_event_check`
+- `0016_activity_fk_reconcile`
+- `0017_user_identity_fields`
 
 ### Important for shared DB
 
@@ -168,6 +175,8 @@ Base prefix: `/api/v1`
 - `GET /students/profile`
 - `PUT /students/profile`
 - `PUT /students/users/{user_id}/preferences`
+- `GET /users/me`
+- `PUT /users/me`
 - `PUT /users/{user_id}/preferences`
 - `GET /metadata/subjects`
 - `GET /metadata/levels`
@@ -180,6 +189,9 @@ Base prefix: `/api/v1`
 - `POST /tutor/sessions/start`
 - `GET /tutor/sessions/{session_id}/history`
 - `POST /tutor/sessions/{session_id}/end`
+- `POST /tutor/chat`
+- `POST /tutor/hint`
+- `POST /tutor/explain-mistake`
 - `GET /internal/postgres/profile`
 - `GET /internal/postgres/history`
 - `POST /internal/postgres/quiz-attempt`
@@ -193,6 +205,7 @@ Base prefix: `/api/v1`
 - `POST /learning/quizzes/generate`
 - `POST /learning/quizzes/{quiz_id}/submit`
 - `GET /learning/quizzes/{quiz_id}/results`
+- `GET /learning/mastery`
 
 ## Shared DB Test Runbook (Team Standard)
 
@@ -209,7 +222,9 @@ Sample payload (use unique email every time):
 {
   "email": "yourname+test001@example.com",
   "password": "password123",
-  "role": "student"
+  "role": "student",
+  "first_name": "Olasquare",
+  "last_name": "Adeola"
 }
 ```
 
@@ -234,7 +249,10 @@ Expected login response now includes `user_id`:
 {
   "access_token": "<jwt>",
   "user_id": "<uuid>",
-  "role": "student"
+  "role": "student",
+  "first_name": "Olasquare",
+  "last_name": "Adeola",
+  "display_name": "Olasquare Adeola"
 }
 ```
 
@@ -261,6 +279,29 @@ Use `user_id` from register response as `student_id`.
 
 Important:
 - If you set a different `student_id` than your auth user ID, `GET /students/profile` will likely return not found.
+
+### 3a) User profile identity (dashboard card)
+
+- `GET /api/v1/users/me`
+
+Expected fields:
+- `first_name`
+- `last_name`
+- `display_name`
+- `avatar_url`
+- `phone`
+
+- `PUT /api/v1/users/me`
+
+Sample payload:
+
+```json
+{
+  "display_name": "Olasquare A.",
+  "phone": "+2348012345678",
+  "avatar_url": "https://cdn.example.com/avatar/olasquare.png"
+}
+```
 
 ### 4) Verify profile
 
@@ -635,3 +676,40 @@ Smoke test steps:
 7. Run backend section-4 unit tests: `python -m pytest -q backend/tests/unit/test_quiz_generate_service.py backend/tests/unit/test_quiz_submit_service.py backend/tests/unit/test_quiz_results_service.py backend/tests/unit/test_quiz_endpoints.py`
 8. Run ai-core quiz tests: `python -m pytest -q ai_core/tests/unit/test_quiz_engine.py`
 9. Integration note: set `TEST_DATABASE_URL=postgresql://...` and run `python -m pytest -q backend/tests/integration/test_section4_quiz_flow.py` for real section-4 E2E.
+
+### Section 5 - Tutor AI + Mastery Dashboard MVP
+
+Smoke test steps:
+1. Ensure database is migrated: `python -m alembic -c backend/alembic.ini upgrade head`
+2. Start backend: `python -m uvicorn backend.main:app --reload`
+3. Start ai-core (optional; fallback works if unavailable): `python -m uvicorn ai_core.main:app --port 8001 --reload`
+4. Create/start a tutor session:
+   - `POST /api/v1/tutor/sessions/start`
+   - Save returned `session_id`.
+5. Send tutor chat:
+   - `POST /api/v1/tutor/chat`
+   - Sample body:
+   ```json
+   {
+     "student_id": "PUT_USER_ID_HERE",
+     "session_id": "PUT_SESSION_ID_HERE",
+     "subject": "math",
+     "sss_level": "SSS2",
+     "term": 1,
+     "topic_id": "PUT_TOPIC_ID_HERE",
+     "message": "Explain linear equations with one example."
+   }
+   ```
+6. Request a hint:
+   - `POST /api/v1/tutor/hint`
+7. Request explain-mistake:
+   - `POST /api/v1/tutor/explain-mistake`
+8. Fetch mastery dashboard:
+   - `GET /api/v1/learning/mastery?student_id=...&subject=math&term=1&view=concept`
+9. Run section-5 unit tests:
+   - `python -m pytest -q backend/tests/unit/test_tutor_orchestration_service.py backend/tests/unit/test_mastery_dashboard_service.py backend/tests/unit/test_tutor_endpoints.py backend/tests/unit/test_mastery_endpoints.py`
+10. Run ai-core tutor tests:
+    - `python -m pytest -q ai_core/tests/unit/test_tutor_engine.py`
+11. Integration note:
+    - set `TEST_DATABASE_URL=postgresql://...`
+    - run `python -m pytest -q backend/tests/integration/test_section5_tutor_mastery_flow.py`

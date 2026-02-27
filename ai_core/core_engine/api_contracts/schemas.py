@@ -32,3 +32,61 @@ class TutorResponse(BaseModel):
     remediation_prereqs: List[str] = Field(default_factory=list)
     actions: List[str] = Field(default_factory=list)
     cost: Dict[str, Any] = Field(default_factory=dict)
+
+
+# Section 5 aligned tutor API contract (backend <-> ai-core HTTP)
+class TutorChatRequest(BaseModel):
+    student_id: str
+    session_id: str
+    subject: Literal["math", "english", "civic"]
+    sss_level: Literal["SSS1", "SSS2", "SSS3"]
+    term: Literal[1, 2, 3]
+    topic_id: Optional[str] = None
+    message: str
+
+
+class TutorRecommendation(BaseModel):
+    type: str
+    topic_id: Optional[str] = None
+    reason: str
+
+
+class TutorChatResponse(BaseModel):
+    assistant_message: str
+    citations: List[Citation] = Field(default_factory=list)
+    actions: List[str] = Field(default_factory=list)
+    recommendations: List[TutorRecommendation] = Field(default_factory=list)
+
+
+class TutorHintRequest(BaseModel):
+    student_id: str
+    session_id: Optional[str] = None
+    quiz_id: str
+    question_id: str
+    subject: Literal["math", "english", "civic"]
+    sss_level: Literal["SSS1", "SSS2", "SSS3"]
+    term: Literal[1, 2, 3]
+    topic_id: Optional[str] = None
+    message: Optional[str] = None
+
+
+class TutorHintResponse(BaseModel):
+    hint: str
+    strategy: str = "guided_hint"
+
+
+class TutorExplainMistakeRequest(BaseModel):
+    student_id: str
+    session_id: Optional[str] = None
+    subject: Literal["math", "english", "civic"]
+    sss_level: Literal["SSS1", "SSS2", "SSS3"]
+    term: Literal[1, 2, 3]
+    topic_id: Optional[str] = None
+    question: str
+    student_answer: str
+    correct_answer: str
+
+
+class TutorExplainMistakeResponse(BaseModel):
+    explanation: str
+    improvement_tip: str

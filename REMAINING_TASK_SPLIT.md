@@ -211,37 +211,37 @@ Lane D:
 
 ---
 
-## [❌] Section 5 (P0) Tutor AI + Mastery Dashboard MVP [NOT STARTED]
+## [✅] Section 5 (P0) Tutor AI + Mastery Dashboard MVP [COMPLETED]
 
 Lane A:
-- [❌] `backend/alembic/versions/0012_mastery_dashboard_tables.py`
-- [❌] `backend/models/mastery_snapshot.py`
-- [❌] `backend/models/student_badge.py`
-- [❌] `backend/alembic/env.py` imports for mastery models
+- [✅] `backend/alembic/versions/0018_mastery_dashboard_tables.py` - created mastery snapshot/badge tables with constraints and indexes.
+- [✅] `backend/models/mastery_snapshot.py` - ORM model added for daily mastery snapshot payloads.
+- [✅] `backend/models/student_badge.py` - ORM model added for gamification badge awards.
+- [✅] `backend/alembic/env.py` imports for mastery models - imports updated.
 
 Lane B:
-- [❌] `backend/schemas/tutor_schema.py`
-- [❌] `backend/schemas/mastery_schema.py`
-- [❌] `backend/repositories/mastery_repo.py`
-- [❌] `backend/services/tutor_orchestration_service.py`
-- [❌] `backend/services/mastery_dashboard_service.py`
-- [🟡] `ai_core/core_engine/orchestration/tutor_engine.py` exists but not integrated to backend contracts yet
-- [🟡] `ai_core/core_engine/api_contracts/schemas.py` exists but needs section-5 contract alignment
+- [✅] `backend/schemas/tutor_schema.py` - added chat/hint/explain request-response contracts.
+- [✅] `backend/schemas/mastery_schema.py` - added mastery dashboard and snapshot contracts.
+- [✅] `backend/repositories/mastery_repo.py` - added concept/topic mastery, streak/badge, snapshot persistence methods.
+- [✅] `backend/services/tutor_orchestration_service.py` - added ai-core tutor orchestration client with validated fallback behavior.
+- [✅] `backend/services/mastery_dashboard_service.py` - added mastery dashboard aggregation + MVP badge award logic.
+- [✅] `ai_core/core_engine/orchestration/tutor_engine.py` - aligned with section-5 contracts via `run_tutor_chat`, `run_tutor_hint`, `run_tutor_explain_mistake`.
+- [✅] `ai_core/core_engine/api_contracts/schemas.py` - section-5 tutor contract models added/aligned.
 
 Lane C:
-- [❌] `backend/endpoints/tutor.py`
-- [❌] `backend/endpoints/mastery.py`
-- [❌] `backend/main.py` tutor/mastery router mount
-- [❌] `ai_core/main.py` callable endpoints for tutor flows (if HTTP integration path is chosen)
+- [✅] `backend/endpoints/tutor.py` - chat/hint/explain endpoints added with auth + session ownership validation.
+- [✅] `backend/endpoints/mastery.py` - `/learning/mastery` endpoint added with student ownership checks.
+- [✅] `backend/main.py` tutor/mastery router mount completed.
+- [✅] `ai_core/main.py` callable tutor HTTP endpoints added: `/tutor/chat`, `/tutor/hint`, `/tutor/explain-mistake`.
 
 Lane D:
-- [❌] `backend/tests/unit/test_tutor_orchestration_service.py`
-- [❌] `backend/tests/unit/test_mastery_dashboard_service.py`
-- [❌] `backend/tests/unit/test_tutor_endpoints.py`
-- [❌] `backend/tests/unit/test_mastery_endpoints.py`
-- [❌] `backend/tests/integration/test_section5_tutor_mastery_flow.py`
-- [❌] `ai_core/tests/unit/test_tutor_engine.py`
-- [❌] `backend/README.md` section-5 smoke block
+- [✅] `backend/tests/unit/test_tutor_orchestration_service.py`
+- [✅] `backend/tests/unit/test_mastery_dashboard_service.py`
+- [✅] `backend/tests/unit/test_tutor_endpoints.py`
+- [✅] `backend/tests/unit/test_mastery_endpoints.py`
+- [✅] `backend/tests/integration/test_section5_tutor_mastery_flow.py` (runs with `TEST_DATABASE_URL`; skipped safely when unset)
+- [✅] `ai_core/tests/unit/test_tutor_engine.py`
+- [✅] `backend/README.md` section-5 smoke block
 
 ---
 
