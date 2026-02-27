@@ -4,7 +4,9 @@ Logic:
 - Wires routers under /api/v1
 """
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from backend.core.config import settings
 from backend.endpoints.auth import router as auth_router
 from backend.endpoints.lessons import router as lessons_router
 from backend.endpoints.metadata import router as metadata_router
@@ -29,6 +31,14 @@ from backend.endpoints.quizzes import router as quizzes_router
 API_PREFIX = "/api/v1"
 
 app = FastAPI(title="Mastery AI Backend", version="0.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # Register the routers

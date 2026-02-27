@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import os
+import json
 from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from ai_core.core_engine.orchestration.quiz_engine import (
     generate_quiz_questions,
@@ -19,6 +21,31 @@ from ai_core.core_engine.api_contracts.quiz_schemas import (
 )
 
 app = FastAPI(title="Mastery AI Core", version="0.1.0")
+
+
+def _parse_cors_origins(raw_value: str) -> list[str]:
+    value = (raw_value or "").strip()
+    if not value:
+        return ["*"]
+    if value == "*":
+        return ["*"]
+    if value.startswith("["):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+        except json.JSONDecodeError:
+            pass
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_parse_cors_origins(os.getenv("CORS_ORIGINS", "*")),
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/")

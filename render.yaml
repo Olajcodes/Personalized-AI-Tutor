@@ -20,9 +20,11 @@ services:
       - key: ENV
         value: prod
       - key: AI_CORE_BASE_URL
-        value: https://mastery-ai-core.onrender.com
+        sync: false
       - key: AI_CORE_TIMEOUT_SECONDS
         value: "8"
+      - key: CORS_ORIGINS
+        sync: false
 
   - type: web
     name: mastery-ai-core
@@ -47,4 +49,6 @@ services:
       - key: REDIS_URL
         sync: false
       - key: VECTOR_INDEX_NAME
+        sync: false
+      - key: CORS_ORIGINS
         sync: false

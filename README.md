@@ -191,6 +191,9 @@ JWT_SECRET=change_me
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=1440
 ENV=dev
+AI_CORE_BASE_URL=http://127.0.0.1:8100
+AI_CORE_TIMEOUT_SECONDS=8
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:4173
 ```
 
 ### 3) Install Dependencies
@@ -239,6 +242,7 @@ Services:
 Notes:
 - Compose runs backend migrations automatically at container startup.
 - Backend uses `DATABASE_URL` from compose env (defaults to local compose Postgres).
+- Backend -> ai_core service-to-service calls use `AI_CORE_BASE_URL` (compose default: `http://ai-core:8100`).
 - Existing `backend/.env` and `ai_core/.env` are still loaded via `env_file`.
 
 Stop services:
@@ -265,7 +269,7 @@ This repo is configured for Render Blueprint deployment with [`render.yaml`](./r
    - `mastery-backend` (Dockerfile: `backend/Dockerfile`)
    - `mastery-ai-core` (Dockerfile: `ai_core/Dockerfile`)
 4. Set required secret env vars before first deploy:
-   - Backend: `DATABASE_URL`, `JWT_SECRET`
+   - Backend: `DATABASE_URL`, `JWT_SECRET`, `AI_CORE_BASE_URL`, `CORS_ORIGINS`
    - AI Core: `LLM_API_KEY` (plus any datastore secrets you use)
 5. Deploy.
 
