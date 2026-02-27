@@ -149,6 +149,10 @@ Base URL: `/api/v1`
 - `GET /students/leaderboard`
 - `GET /system/health`
 
+Auth note:
+- Login response includes `user_id`.
+- JWT payload includes `user_id` and `student_id` claims (same UUID) for frontend mapping.
+
 ### Examples of Planned MVP Routes
 
 - `POST /tutor/chat`

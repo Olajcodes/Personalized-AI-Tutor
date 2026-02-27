@@ -19,9 +19,20 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, hashed: str) -> bool:
     return pwd_context.verify(password, hashed)
 
-def create_access_token(subject: str, role: str, expires_minutes: int | None = None) -> str:
+
+def create_access_token(
+    *,
+    subject: str,
+    role: str,
+    user_id: str | None = None,
+    expires_minutes: int | None = None,
+) -> str:
     exp = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes or settings.access_token_expire_minutes)
     payload = {"sub": subject, "role": role, "exp": exp}
+    if user_id:
+        # Keep both names for frontend/backward compatibility across teams.
+        payload["user_id"] = user_id
+        payload["student_id"] = user_id
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 

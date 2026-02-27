@@ -228,6 +228,18 @@ Why:
 }
 ```
 
+Expected login response now includes `user_id`:
+
+```json
+{
+  "access_token": "<jwt>",
+  "user_id": "<uuid>",
+  "role": "student"
+}
+```
+
+JWT payload includes both `user_id` and `student_id` claims (same UUID).
+
 - Copy `access_token`
 - Click `Authorize` in Swagger and provide:
   - `Bearer <access_token>`

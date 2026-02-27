@@ -56,8 +56,8 @@ class AuthService:
         if not user.is_active:
             raise AuthUnauthorizedError("User account is inactive.")
 
-        token = create_access_token(subject=user.email, role=user.role)
-        return AuthOut(access_token=token, role=user.role)
+        token = create_access_token(subject=user.email, role=user.role, user_id=str(user.id))
+        return AuthOut(access_token=token, user_id=str(user.id), role=user.role)
 
     def change_password(self, user_id, payload: ChangePasswordIn) -> None:
         user = self.repo.get_user_by_id(user_id)

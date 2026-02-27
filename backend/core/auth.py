@@ -1,6 +1,7 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
+from uuid import UUID
 
 from backend.core.database import get_db
 from backend.core.security import decode_access_token
@@ -21,11 +22,21 @@ def get_current_user(
     except ValueError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token.")
 
-    subject = payload.get("sub")
-    if not subject:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload.")
+    repo = AuthRepository(db)
+    user = None
 
-    user = AuthRepository(db).get_user_by_email(subject)
+    user_id_claim = payload.get("user_id") or payload.get("student_id")
+    if user_id_claim:
+        try:
+            user = repo.get_user_by_id(UUID(str(user_id_claim)))
+        except (TypeError, ValueError):
+            user = None
+
+    if user is None:
+        subject = payload.get("sub")
+        if subject:
+            user = repo.get_user_by_email(subject)
+
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not authorized.")
 
