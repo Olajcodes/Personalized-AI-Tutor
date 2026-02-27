@@ -70,50 +70,57 @@ class QuizSubmitService:
             if is_correct:
                 correct_count += 1
 
-            concept_id = str(getattr(question, "concept_id", question.id))
+            concept_id = str(getattr(question, "concept_id", "")).strip()
+            if not concept_id:
+                concept_id = str(quiz.topic_id or question.id)
             concept_results.append((concept_id, is_correct))
 
         score = round((correct_count / total_questions) * 100, 2) if total_questions > 0 else 0.0
         xp = int(score)
 
-        attempt = self.repo.create_attempt(
-            quiz_id,
-            request.student_id,
-            request.time_taken_seconds,
-            raw_answers=normalized_answers,
-        )
-
-        answers_with_score = []
-        for answer in normalized_answers:
-            qid = answer["question_id"]
-            question = question_map.get(qid)
-            if not question:
-                continue
-
-            expected = (question.correct_answer or "").strip().lower()
-            is_correct = answer["answer"].strip().lower() == expected
-            answers_with_score.append(
-                {
-                    "question_id": question.id,
-                    "answer": answer["answer"],
-                    "is_correct": is_correct,
-                }
+        try:
+            attempt = self.repo.create_attempt(
+                quiz_id,
+                request.student_id,
+                request.time_taken_seconds,
+                raw_answers=normalized_answers,
             )
 
-        self.repo.save_answers(attempt.id, answers_with_score)
-        self.repo.update_attempt_score(attempt.id, score, xp)
+            answers_with_score = []
+            for answer in normalized_answers:
+                qid = answer["question_id"]
+                question = question_map.get(qid)
+                if not question:
+                    continue
 
-        activity_payload = ActivityLogCreate(
-            student_id=request.student_id,
-            subject=quiz.subject,
-            term=quiz.term,
-            event_type="quiz_submitted",
-            ref_id=str(quiz_id),
-            duration_seconds=request.time_taken_seconds,
-        )
-        activity_result = self.activity_service.log_activity(activity_payload)
-        if inspect.isawaitable(activity_result):
-            await activity_result
+                expected = (question.correct_answer or "").strip().lower()
+                is_correct = answer["answer"].strip().lower() == expected
+                answers_with_score.append(
+                    {
+                        "question_id": question.id,
+                        "answer": answer["answer"],
+                        "is_correct": is_correct,
+                    }
+                )
+
+            self.repo.save_answers(attempt.id, answers_with_score)
+            self.repo.update_attempt_score(attempt.id, score, xp)
+
+            activity_payload = ActivityLogCreate(
+                student_id=request.student_id,
+                subject=quiz.subject,
+                term=quiz.term,
+                event_type="quiz_submitted",
+                ref_id=str(quiz_id),
+                duration_seconds=request.time_taken_seconds,
+            )
+            activity_result = self.activity_service.log_activity(activity_payload)
+            if inspect.isawaitable(activity_result):
+                await activity_result
+            self.repo.db.commit()
+        except Exception:
+            self.repo.db.rollback()
+            raise
 
         source = quiz.purpose if quiz.purpose in {"practice", "diagnostic", "exam_prep"} else "practice"
         concept_breakdown = [

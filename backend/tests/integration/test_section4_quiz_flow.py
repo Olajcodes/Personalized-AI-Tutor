@@ -1,62 +1,103 @@
+import os
+from uuid import uuid4
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from uuid import uuid4
 
-from backend.main import app
 from backend.core.database import Base, get_db
-from backend.models.quiz import Quiz, QuizQuestion, QuizAttempt, QuizAnswer
+from backend.main import app
 from backend.models.subject import Subject
-from backend.core.config import settings
+from backend.models.topic import Topic
+from backend.models.user import User
 
-# Use an in-memory SQLite database for integration tests
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-if engine.dialect.name == "sqlite":
+TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "").strip()
+if not TEST_DATABASE_URL:
     pytest.skip(
-        "Section 4 integration flow requires a Postgres-compatible JSONB test database.",
+        "Section 4 integration flow requires TEST_DATABASE_URL (PostgreSQL) to run safely.",
+        allow_module_level=True,
+    )
+
+if not TEST_DATABASE_URL.startswith("postgresql"):
+    pytest.skip(
+        "Section 4 integration flow requires a PostgreSQL-compatible TEST_DATABASE_URL.",
         allow_module_level=True,
     )
 
 
+engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
 def override_get_db():
+    db = TestingSessionLocal()
     try:
-        db = TestingSessionLocal()
         yield db
     finally:
         db.close()
 
 
 app.dependency_overrides[get_db] = override_get_db
-
 client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
 def setup_database():
     Base.metadata.create_all(bind=engine)
-    # Seed subjects (required for foreign key constraints)
     db = TestingSessionLocal()
-    if not db.query(Subject).first():
-        subjects = [
-            Subject(id=uuid4(), slug="math", name="Mathematics"),
-            Subject(id=uuid4(), slug="english", name="English"),
-            Subject(id=uuid4(), slug="civic", name="Civic"),
-        ]
-        db.add_all(subjects)
-        db.commit()
-    db.close()
-    yield
-    Base.metadata.drop_all(bind=engine)
 
-
-def test_full_quiz_flow():
-    # Step 1: Generate quiz
     student_id = uuid4()
     topic_id = uuid4()
+    created_subject = False
+
+    subject_row = db.query(Subject).filter(Subject.slug == "math").first()
+    if subject_row is None:
+        subject_row = Subject(id=uuid4(), slug="math", name="Mathematics")
+        db.add(subject_row)
+        db.flush()
+        created_subject = True
+    subject_id = subject_row.id
+
+    db.add(
+        User(
+            id=student_id,
+            email=f"section4.student.{student_id}@example.com",
+            password_hash="hash",
+            role="student",
+            is_active=True,
+        )
+    )
+    db.add(
+        Topic(
+            id=topic_id,
+            subject_id=subject_id,
+            sss_level="SSS2",
+            term=1,
+            title=f"Algebra Foundations {topic_id.hex[:8]}",
+            description="Intro algebra",
+            is_approved=True,
+        )
+    )
+    db.commit()
+    db.close()
+
+    yield {"student_id": student_id, "topic_id": topic_id, "subject_id": subject_id, "created_subject": created_subject}
+
+    cleanup = TestingSessionLocal()
+    cleanup.query(Topic).filter(Topic.id == topic_id).delete(synchronize_session=False)
+    if created_subject:
+        cleanup.query(Subject).filter(Subject.id == subject_id).delete(synchronize_session=False)
+    cleanup.query(User).filter(User.id == student_id).delete(synchronize_session=False)
+    cleanup.commit()
+    cleanup.close()
+
+
+def test_full_quiz_flow(setup_database):
+    student_id = setup_database["student_id"]
+    topic_id = setup_database["topic_id"]
+
     generate_payload = {
         "student_id": str(student_id),
         "subject": "math",
@@ -74,7 +115,6 @@ def test_full_quiz_flow():
     questions = gen_data["questions"]
     assert len(questions) == 2
 
-    # Step 2: Submit quiz
     submit_payload = {
         "student_id": str(student_id),
         "answers": [
@@ -89,7 +129,6 @@ def test_full_quiz_flow():
     attempt_id = submit_data["attempt_id"]
     assert "score" in submit_data
 
-    # Step 3: Get results
     results_response = client.get(
         f"/api/v1/learning/quizzes/{quiz_id}/results",
         params={"student_id": str(student_id), "attempt_id": attempt_id},

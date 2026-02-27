@@ -193,6 +193,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES=1440
 ENV=dev
 AI_CORE_BASE_URL=http://127.0.0.1:8100
 AI_CORE_TIMEOUT_SECONDS=8
+AI_CORE_ALLOW_FALLBACK=true
 CORS_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:4173
 ```
 
@@ -270,6 +271,7 @@ This repo is configured for Render Blueprint deployment with [`render.yaml`](./r
    - `mastery-ai-core` (Dockerfile: `ai_core/Dockerfile`)
 4. Set required secret env vars before first deploy:
    - Backend: `DATABASE_URL`, `JWT_SECRET`, `AI_CORE_BASE_URL`, `CORS_ORIGINS`
+   - Backend recommended: `AI_CORE_ALLOW_FALLBACK=false` in production
    - AI Core: `LLM_API_KEY` (plus any datastore secrets you use)
 5. Deploy.
 

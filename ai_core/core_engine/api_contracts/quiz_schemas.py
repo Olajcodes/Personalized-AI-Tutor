@@ -14,13 +14,14 @@ SupportedLevel = Literal["SSS1", "SSS2", "SSS3"]
 
 
 class QuizGenerateRequest(BaseModel):
+    student_id: UUID | None = None
     subject: SupportedSubject
     sss_level: SupportedLevel
-    term: int = Field(ge=1, le=3)
+    term: Literal[1, 2, 3]
     topic_id: UUID
     purpose: QuizPurpose
     difficulty: Difficulty
-    num_questions: int = Field(ge=1, le=50)
+    num_questions: int = Field(default=10, ge=1, le=50)
 
 
 class QuestionSchema(BaseModel):
@@ -34,3 +35,7 @@ class QuestionSchema(BaseModel):
 
 class QuizGenerateResponse(BaseModel):
     questions: list[QuestionSchema]
+
+
+class QuizInsightsResponse(BaseModel):
+    insights: list[str]

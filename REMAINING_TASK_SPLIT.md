@@ -1,6 +1,6 @@
 ﻿# Mastery AI Remaining Task Split (Phased + Lane File Ownership)
 
-Last updated: 2026-02-26
+Last updated: 2026-02-27
 
 Legend:
 - `[✅]` complete and correct
@@ -174,25 +174,26 @@ Lane D:
 
 ---
 
-## [🟡] Section 4 (P0) Quiz Lifecycle (Generate, Submit, Results) [PARTIAL]
+## [✅] Section 4 (P0) Quiz Lifecycle (Generate, Submit, Results) [COMPLETED]
 
 Lane A:
 - [✅] `backend/alembic/versions/0009_quiz_tables.py` - migration exists (revision number is `0009`, not `0008`).
-- [🟡] `backend/models/quiz.py` - exists; minor reserved-name issue corrected (`metadata` -> `extra_metadata` mapped to `metadata` column).
-- [🟡] `backend/models/quiz_question.py` - exists; still missing persisted `concept_id`, so concept-level mastery updates fall back to question IDs.
+- [✅] `backend/alembic/versions/0011_add_concept_id_to_quiz_questions.py` - adds persisted `concept_id` to `quiz_questions` with backfill + index.
+- [✅] `backend/models/quiz.py` - reserved-name issue corrected (`metadata` -> `extra_metadata` mapped to `metadata` column).
+- [✅] `backend/models/quiz_question.py` - persisted `concept_id` added and indexed for mastery/recommendation flows.
 - [✅] `backend/models/quiz_attempt.py` - aligned with submit/results flow (`raw_answers`, status, score, time fields).
 - [✅] `backend/models/quiz_answer.py`
 - [✅] `backend/alembic/env.py` imports for quiz models are present.
 
 Lane B:
-- [🟡] `backend/schemas/quiz_schema.py` - exists; partially aligned and needs final contract cleanup.
-- [🟡] `backend/repositories/quiz_repo.py` - core mappings are corrected; still blocked by missing `concept_id` persistence in question model.
-- [🟡] `backend/services/quiz_generate_service.py` - uses ai-core HTTP client with resilient fallback; strict contract parity and provider-level error policy still pending.
-- [🟡] `backend/services/quiz_submit_service.py` - grading/activity/graph hooks are active; concept mapping quality is limited until `quiz_questions` stores `concept_id`.
-- [🟡] `backend/services/quiz_results_service.py` - results flow works; `_get_topic_for_concept()` still returns `None` and needs real mapping logic.
+- [✅] `backend/schemas/quiz_schema.py` - final contract cleanup completed (strict fields + term bounds for mastery payloads).
+- [✅] `backend/repositories/quiz_repo.py` - persists `concept_id`, normalizes options, validates IDs, and supports topic existence checks.
+- [✅] `backend/services/quiz_generate_service.py` - strict ai-core error mapping + transaction commit/rollback + DB question ID response fix.
+- [✅] `backend/services/quiz_submit_service.py` - grading/activity/graph flow committed transactionally; concept mapping normalized with safe fallback.
+- [✅] `backend/services/quiz_results_service.py` - `_get_topic_for_concept()` implemented with topic parsing + fallback mapping.
 - [✅] `backend/services/graph_mastery_update_service.py` - retry/timeout handling and normalized payload dispatch are implemented.
-- [🟡] `ai_core/core_engine/orchestration/quiz_engine.py` - import path corrected; implementation is still mock-only.
-- [🟡] `ai_core/core_engine/api_contracts/quiz_schemas.py` - exists; requires strict parity validation with backend contract.
+- [✅] `ai_core/core_engine/orchestration/quiz_engine.py` - deterministic curriculum-scoped generator/insights implemented (no placeholder stubs).
+- [✅] `ai_core/core_engine/api_contracts/quiz_schemas.py` - request/response contracts aligned for backend->ai-core integration.
 
 Lane C:
 - [✅] `backend/endpoints/quizzes.py` - corrected route prefix to `/learning/quizzes` and fixed async/db wiring.
@@ -204,7 +205,7 @@ Lane D:
 - [✅] `backend/tests/unit/test_quiz_submit_service.py`
 - [✅] `backend/tests/unit/test_quiz_results_service.py`
 - [✅] `backend/tests/unit/test_quiz_endpoints.py`
-- [🟡] `backend/tests/integration/test_section4_quiz_flow.py` - currently skips on SQLite; requires Postgres-compatible JSONB test DB for true E2E.
+- [✅] `backend/tests/integration/test_section4_quiz_flow.py` - Postgres integration flow is runnable via `TEST_DATABASE_URL`.
 - [✅] `ai_core/tests/unit/test_quiz_engine.py`
 - [✅] `backend/README.md` section-4 smoke block
 
@@ -213,7 +214,7 @@ Lane D:
 ## [❌] Section 5 (P0) Tutor AI + Mastery Dashboard MVP [NOT STARTED]
 
 Lane A:
-- [❌] `backend/alembic/versions/0011_mastery_dashboard_tables.py`
+- [❌] `backend/alembic/versions/0012_mastery_dashboard_tables.py`
 - [❌] `backend/models/mastery_snapshot.py`
 - [❌] `backend/models/student_badge.py`
 - [❌] `backend/alembic/env.py` imports for mastery models
@@ -348,10 +349,10 @@ Lane D:
 - [✅] `backend/endpoints/test.py` deleted (legacy prototype, unused).
 - [✅] `backend/endpoints/database_setup.sql` deleted (misplaced SQL DDL, superseded by Alembic).
 - [✅] `backend/endpoints/internal_postgres_service.py` deleted and replaced by `backend/endpoints/internal_postgres.py`.
-- [🟡] `backend/core/ai_core_client.py` now supports ai-core HTTP calls with fallback generation; tighten failure policy (fallback vs fail-fast) before production freeze.
-- [🟡] `backend/repositories/quiz_repo.py`, `backend/services/quiz_generate_service.py`, `backend/services/quiz_submit_service.py`, `backend/services/quiz_results_service.py` are functional but still partially blocked by missing `concept_id` storage and topic-recommendation mapping.
-- [🟡] `backend/schemas/quiz_schema.py` and `ai_core/core_engine/api_contracts/quiz_schemas.py` are not fully aligned yet (`student_id` and response fields differ), so direct backend->ai-core quiz integration remains blocked.
-- [🟡] `backend/tests/integration/test_section4_quiz_flow.py` is intentionally SQLite-skipped because project models use PostgreSQL-specific JSONB types.
+- [✅] `backend/core/ai_core_client.py` enforces response contract validation and supports configurable fallback policy (`AI_CORE_ALLOW_FALLBACK`).
+- [✅] `backend/repositories/quiz_repo.py`, `backend/services/quiz_generate_service.py`, `backend/services/quiz_submit_service.py`, `backend/services/quiz_results_service.py` now persist `concept_id`, commit transactions, and map recommendation topics.
+- [✅] `backend/schemas/quiz_schema.py` and `ai_core/core_engine/api_contracts/quiz_schemas.py` are aligned for section-4 quiz contracts.
+- [✅] `backend/tests/integration/test_section4_quiz_flow.py` is runnable with `TEST_DATABASE_URL` (PostgreSQL).
 - [✅] `backend/pyproject.toml`, `ai_core/pyproject.toml` updated with `asyncio_default_fixture_loop_scope = "function"` to remove pytest-asyncio deprecation warnings.
 - [🟡] Local-only artifacts (`test.db`, `**/__pycache__/`, `**/.pytest_cache/`) are not necessary for source control; keep them ignored and clean periodically.
 - [✅] `test.db` removed from local workspace; continue keeping it untracked.

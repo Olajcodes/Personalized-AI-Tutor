@@ -17,6 +17,7 @@ class QuizQuestion(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     question_number: Mapped[int] = mapped_column(Integer, nullable=False)
     question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    concept_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
 
     # For MCQ etc.
     options: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)

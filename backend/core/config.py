@@ -35,6 +35,17 @@ def _parse_cors_origins(raw_value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def _parse_bool(raw_value: str | None, default: bool) -> bool:
+    if raw_value is None:
+        return default
+    normalized = raw_value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
 class Settings(BaseModel):
     database_url: str = os.getenv("DATABASE_URL", "")
     jwt_secret: str = os.getenv("JWT_SECRET", "change_me")
@@ -49,6 +60,7 @@ class Settings(BaseModel):
 
     ai_core_base_url: str = os.getenv("AI_CORE_BASE_URL", "")
     ai_core_timeout_seconds: float = float(os.getenv("AI_CORE_TIMEOUT_SECONDS", "8"))
+    ai_core_allow_fallback: bool = _parse_bool(os.getenv("AI_CORE_ALLOW_FALLBACK"), default=True)
     cors_origins: list[str] = _parse_cors_origins(os.getenv("CORS_ORIGINS", ""))
 
     internal_graph_base_url: str = os.getenv(

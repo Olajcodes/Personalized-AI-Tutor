@@ -9,6 +9,7 @@ from backend.models.quiz import Quiz
 from backend.models.quiz_answer import QuizAnswer
 from backend.models.quiz_attempt import QuizAttempt
 from backend.models.quiz_question import QuizQuestion
+from backend.models.topic import Topic
 
 
 class QuizRepository:
@@ -18,7 +19,7 @@ class QuizRepository:
     @staticmethod
     def _normalize_options(raw_options: Any) -> list:
         if isinstance(raw_options, list):
-            return raw_options
+            return [str(item) for item in raw_options]
         return []
 
     # --- Quiz Generation ---
@@ -56,12 +57,25 @@ class QuizRepository:
 
         order = int(question_data.get("order", 0))
         question_number = max(order + 1, 1)
+        question_id = question_data.get("id")
+        if not isinstance(question_id, UUID):
+            try:
+                question_id = UUID(str(question_id)) if question_id else uuid4()
+            except (TypeError, ValueError):
+                question_id = uuid4()
+
+        raw_concept_id = question_data.get("concept_id")
+        concept_id = str(raw_concept_id).strip() if raw_concept_id is not None else ""
+        if not concept_id:
+            fallback_topic_id = question_data.get("topic_id")
+            concept_id = str(fallback_topic_id or question_id)
 
         question = QuizQuestion(
-            id=uuid4(),
+            id=question_id,
             quiz_id=quiz_id,
             question_number=question_number,
             question_text=question_text,
+            concept_id=concept_id,
             options=self._normalize_options(question_data.get("options")),
             correct_answer=question_data.get("correct_answer"),
             explanation=question_data.get("explanation"),
@@ -143,3 +157,6 @@ class QuizRepository:
             .order_by(QuizQuestion.question_number)
             .all()
         )
+
+    def topic_exists(self, topic_id: UUID) -> bool:
+        return self.db.query(Topic.id).filter(Topic.id == topic_id).first() is not None

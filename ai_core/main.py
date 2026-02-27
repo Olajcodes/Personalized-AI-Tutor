@@ -17,6 +17,7 @@ from ai_core.core_engine.orchestration.quiz_engine import (
 from ai_core.core_engine.api_contracts.quiz_schemas import (
     QuizGenerateRequest,
     QuizGenerateResponse,
+    QuizInsightsResponse,
     QuestionSchema,
 )
 
@@ -86,7 +87,7 @@ async def quiz_generate(payload: QuizGenerateRequest):
     return QuizGenerateResponse(questions=questions)
 
 
-@app.get("/quiz/{quiz_id}/attempt/{attempt_id}/insights")
+@app.get("/quiz/{quiz_id}/attempt/{attempt_id}/insights", response_model=QuizInsightsResponse)
 async def quiz_insights(quiz_id: UUID, attempt_id: UUID):
     insights = await generate_quiz_insights(quiz_id=quiz_id, attempt_id=attempt_id)
-    return {"insights": insights}
+    return QuizInsightsResponse(insights=insights)
