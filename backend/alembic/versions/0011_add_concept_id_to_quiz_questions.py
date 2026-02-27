@@ -1,6 +1,6 @@
 """add concept_id to quiz_questions
 
-Revision ID: 0011_add_concept_id_to_quiz_questions
+Revision ID: 0011_quiz_question_concept_id
 Revises: 0010_graph_mastery_tracking
 Create Date: 2026-02-27
 """
@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0011_add_concept_id_to_quiz_questions"
+revision = "0011_quiz_question_concept_id"
 down_revision = "0010_graph_mastery_tracking"
 branch_labels = None
 depends_on = None
