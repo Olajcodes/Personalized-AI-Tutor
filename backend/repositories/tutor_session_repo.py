@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from uuid import UUID
 
+from sqlalchemy import inspect
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -11,26 +12,66 @@ class TutorSessionRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def create_session(self, *, student_id: UUID, subject: str, term: int) -> dict:
-        session_id = uuid.uuid4()
+    def _tutor_sessions_columns(self) -> dict[str, dict]:
+        table_info = {
+            col["name"]: col
+            for col in inspect(self.db.bind).get_columns("tutor_sessions")
+        }
+        return table_info
+
+    def _resolve_student_profile_id(self, student_id: UUID) -> UUID | None:
         row = self.db.execute(
             text(
                 """
+                SELECT id
+                FROM student_profiles
+                WHERE student_id = :student_id
+                LIMIT 1
+                """
+            ),
+            {"student_id": student_id},
+        ).first()
+        return row[0] if row else None
+
+    def create_session(self, *, student_id: UUID, subject: str, term: int) -> dict:
+        session_id = uuid.uuid4()
+        columns = self._tutor_sessions_columns()
+
+        requires_profile_id = "student_profile_id" in columns and not bool(columns["student_profile_id"]["nullable"])
+        student_profile_id = None
+        if requires_profile_id:
+            student_profile_id = self._resolve_student_profile_id(student_id)
+            if student_profile_id is None:
+                raise ValueError("Student profile is required before starting tutor session.")
+
+        insert_columns = ["id", "student_id", "subject", "term", "status", "started_at", "created_at", "updated_at"]
+        insert_values = [":id", ":student_id", ":subject", ":term", "'active'", "NOW()", "NOW()", "NOW()"]
+
+        if "student_profile_id" in columns:
+            insert_columns.insert(1, "student_profile_id")
+            insert_values.insert(1, ":student_profile_id")
+
+        sql = f"""
                 INSERT INTO tutor_sessions (
-                    id, student_id, subject, term, status, started_at, created_at, updated_at
+                    {", ".join(insert_columns)}
                 )
                 VALUES (
-                    :id, :student_id, :subject, :term, 'active', NOW(), NOW(), NOW()
+                    {", ".join(insert_values)}
                 )
                 RETURNING id, student_id, subject, term, started_at
                 """
-            ),
-            {
-                "id": session_id,
-                "student_id": student_id,
-                "subject": subject,
-                "term": term,
-            },
+
+        params = {
+            "id": session_id,
+            "student_id": student_id,
+            "subject": subject,
+            "term": term,
+            "student_profile_id": student_profile_id,
+        }
+
+        row = self.db.execute(
+            text(sql),
+            params,
         ).mappings().first()
         self.db.commit()
         return dict(row) if row else {}
