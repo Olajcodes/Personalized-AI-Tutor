@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from backend.core.security import decode_access_token
 from backend.services.auth_service import (
     AuthConflictError,
     AuthService,
@@ -86,6 +87,7 @@ def test_change_password_success():
 
     login = service.login(LoginIn(email="student@example.com", password="newpassword123"))
 
+    assert login.user_id == str(user.id)
     assert login.role == "student"
     assert out.user_id == str(user.id)
 
@@ -102,3 +104,19 @@ def test_change_password_same_value_fails():
             user.id,
             ChangePasswordIn(current_password="password123", new_password="password123"),
         )
+
+
+def test_login_token_contains_user_and_student_id_claims():
+    repo = FakeAuthRepo()
+    service = AuthService(repo)
+
+    service.register(RegisterIn(email="claims@example.com", password="password123", role="student"))
+    user = repo.get_user_by_email("claims@example.com")
+
+    login = service.login(LoginIn(email="claims@example.com", password="password123"))
+    payload = decode_access_token(login.access_token)
+
+    assert payload["sub"] == "claims@example.com"
+    assert payload["role"] == "student"
+    assert payload["user_id"] == str(user.id)
+    assert payload["student_id"] == str(user.id)

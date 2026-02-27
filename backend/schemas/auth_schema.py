@@ -18,6 +18,7 @@ class LoginIn(BaseModel):
 
 class AuthOut(BaseModel):
     access_token: str
+    user_id: str
     role: str
 
 
