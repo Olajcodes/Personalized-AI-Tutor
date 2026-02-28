@@ -57,6 +57,10 @@ AI_CORE_BASE_URL=http://127.0.0.1:8100
 AI_CORE_TIMEOUT_SECONDS=8
 AI_CORE_ALLOW_FALLBACK=true
 CORS_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:4173
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=your-password
+USE_NEO4J_GRAPH=false
 ```
 
 Notes:
@@ -141,6 +145,43 @@ $env:SEED_STUDENT_ID = "11111111-1111-1111-1111-111111111111"
 python -m backend.scripts.seed_lessons
 ```
 
+## Neo4j Graph Setup (Optional, Can Be Used Now)
+
+You do not need to wait for a later section to seed graph data.
+
+When enabled, internal graph endpoints (`/internal/graph/context` and `/internal/graph/update-mastery`) use Neo4j as primary storage and gracefully fall back to Postgres if Neo4j is unavailable.
+
+### 1) Enable Neo4j in `backend/.env`
+
+```env
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=your-password
+USE_NEO4J_GRAPH=true
+```
+
+### 2) Seed Topic/Concept Graph from Postgres Topics
+
+```bash
+python -m backend.scripts.seed_neo4j_graph
+```
+
+Optional demo student mastery edges:
+
+PowerShell:
+
+```powershell
+$env:NEO4J_SEED_STUDENT_ID = "00000000-0000-0000-0000-000000000001"
+python -m backend.scripts.seed_neo4j_graph
+```
+
+### 3) Verify Quickly
+
+- `GET /api/v1/internal/graph/context?student_id=<uuid>&subject=math&sss_level=SSS1&term=1`
+- `POST /api/v1/internal/graph/update-mastery` with valid payload
+
+If Neo4j is reachable and enabled, updates are mirrored there; if not, requests still work via Postgres fallback.
+
 ## Run API
 
 From repo root:
@@ -206,6 +247,16 @@ Base prefix: `/api/v1`
 - `POST /learning/quizzes/{quiz_id}/submit`
 - `GET /learning/quizzes/{quiz_id}/results`
 - `GET /learning/mastery`
+- `GET /teachers/classes`
+- `POST /teachers/classes`
+- `POST /teachers/classes/{class_id}/enroll`
+- `DELETE /teachers/classes/{class_id}/enroll/{student_id}`
+- `GET /teachers/classes/{class_id}/dashboard`
+- `GET /teachers/classes/{class_id}/heatmap`
+- `GET /teachers/classes/{class_id}/alerts`
+- `GET /teachers/classes/{class_id}/students/{student_id}/timeline`
+- `POST /teachers/assignments`
+- `POST /teachers/interventions`
 
 ## Shared DB Test Runbook (Team Standard)
 
@@ -713,3 +764,44 @@ Smoke test steps:
 11. Integration note:
     - set `TEST_DATABASE_URL=postgresql://...`
     - run `python -m pytest -q backend/tests/integration/test_section5_tutor_mastery_flow.py`
+
+### Section 6 - Teacher Intelligence (Classes, Analytics, Interventions)
+
+Smoke test steps:
+1. Ensure database is migrated: `python -m alembic -c backend/alembic.ini upgrade head`
+2. Start backend: `python -m uvicorn backend.main:app --reload`
+3. Authenticate as a `teacher` user.
+4. Create class:
+   - `POST /api/v1/teachers/classes`
+   - Example body:
+   ```json
+   {
+     "name": "SSS2 Math Cohort A",
+     "description": "Term 1 cohort",
+     "subject": "math",
+     "sss_level": "SSS2",
+     "term": 1
+   }
+   ```
+5. Enroll students:
+   - `POST /api/v1/teachers/classes/{class_id}/enroll`
+   - Example body:
+   ```json
+   { "student_ids": ["PUT_STUDENT_UUID_HERE"] }
+   ```
+6. Verify class and analytics:
+   - `GET /api/v1/teachers/classes`
+   - `GET /api/v1/teachers/classes/{class_id}/dashboard`
+   - `GET /api/v1/teachers/classes/{class_id}/heatmap`
+   - `GET /api/v1/teachers/classes/{class_id}/alerts`
+   - `GET /api/v1/teachers/classes/{class_id}/students/{student_id}/timeline`
+7. Create assignment and intervention:
+   - `POST /api/v1/teachers/assignments`
+   - `POST /api/v1/teachers/interventions`
+8. Remove enrollment:
+   - `DELETE /api/v1/teachers/classes/{class_id}/enroll/{student_id}`
+9. Run section-6 unit tests:
+   - `python -m pytest -q backend/tests/unit/test_teacher_service.py backend/tests/unit/test_teacher_analytics_service.py backend/tests/unit/test_teachers_endpoints.py`
+10. Integration note:
+   - set `TEST_DATABASE_URL=postgresql://...`
+   - run `python -m pytest -q backend/tests/integration/test_section6_teacher_flow.py`

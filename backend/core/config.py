@@ -55,6 +55,9 @@ class Settings(BaseModel):
 
     redis_url: str = os.getenv("REDIS_URL", "")
     neo4j_uri: str = os.getenv("NEO4J_URI", "")
+    neo4j_user: str = os.getenv("NEO4J_USER", "")
+    neo4j_password: str = os.getenv("NEO4J_PASSWORD", "")
+    use_neo4j_graph: bool = _parse_bool(os.getenv("USE_NEO4J_GRAPH"), default=False)
     vector_db_url: str = os.getenv("VECTOR_DB_URL", "")
     llm_api_base: str = os.getenv("LLM_API_BASE", "")
 

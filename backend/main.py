@@ -31,6 +31,7 @@ from backend.endpoints.quizzes import router as quizzes_router
 # Section 5 Routers
 from backend.endpoints.tutor import router as tutor_router
 from backend.endpoints.mastery import router as mastery_router
+from backend.endpoints.teachers import router as teachers_router
 
 API_PREFIX = "/api/v1"
 
@@ -39,7 +40,6 @@ app = FastAPI(title="Mastery AI Backend", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -72,6 +72,9 @@ app.include_router(quizzes_router, prefix=API_PREFIX)
 # Section 5 router wiring
 app.include_router(tutor_router, prefix=API_PREFIX)
 app.include_router(mastery_router, prefix=API_PREFIX)
+
+# Section 6 router wiring
+app.include_router(teachers_router, prefix=API_PREFIX)
 
 @app.get("/")
 async def root():

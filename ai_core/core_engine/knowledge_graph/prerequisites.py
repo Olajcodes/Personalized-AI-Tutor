@@ -13,11 +13,11 @@ class PrereqService:
         """Return prerequisite concept IDs for a topic.
 
 Graph assumption:
-(:Topic {id})-[:MAPS_TO]->(:Concept)
+(:Topic {id})-[:COVERS]->(:Concept)
 (:Concept)-[:PREREQUISITE_OF]->(:Concept)
         """
         cypher = """
-        MATCH (t:Topic {id: $topic_id})-[:MAPS_TO]->(c:Concept)
+        MATCH (t:Topic {id: $topic_id})-[:COVERS]->(c:Concept)
         MATCH (p:Concept)-[:PREREQUISITE_OF*1..5]->(c)
         RETURN DISTINCT p.id AS prereq_id
         """
