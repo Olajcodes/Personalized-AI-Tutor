@@ -10,7 +10,15 @@ from ai_core.core_engine.orchestration.tutor_engine import (
 )
 
 
-def test_run_tutor_chat_contract():
+def test_run_tutor_chat_contract(monkeypatch):
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._internal_rag_retrieve",
+        lambda request: [],
+    )
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._llm_generate",
+        lambda prompt: "This is a scoped tutor response.",
+    )
     out = run_tutor_chat(
         TutorChatRequest(
             student_id="user-1",
@@ -27,7 +35,11 @@ def test_run_tutor_chat_contract():
     assert isinstance(out.recommendations, list)
 
 
-def test_run_tutor_hint_contract():
+def test_run_tutor_hint_contract(monkeypatch):
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._llm_generate",
+        lambda prompt: "Start by identifying the main rule.",
+    )
     out = run_tutor_hint(
         TutorHintRequest(
             student_id="user-1",
@@ -45,7 +57,11 @@ def test_run_tutor_hint_contract():
     assert out.strategy == "guided_hint"
 
 
-def test_run_tutor_explain_mistake_contract():
+def test_run_tutor_explain_mistake_contract(monkeypatch):
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._llm_generate",
+        lambda prompt: "You mixed up the branches of government.",
+    )
     out = run_tutor_explain_mistake(
         TutorExplainMistakeRequest(
             student_id="user-1",

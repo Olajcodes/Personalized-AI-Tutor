@@ -274,42 +274,42 @@ Lane D:
 
 ---
 
-## [❌] Section 7 (P1) Admin Curriculum + Governance + Internal RAG + Deep Health [NOT STARTED]
+## [✅] Section 7 (P1) Admin Curriculum + Governance + Internal RAG + Deep Health [COMPLETED]
 
 Lane A:
-- [❌] `backend/alembic/versions/0013_admin_curriculum_governance_tables.py`
-- [❌] `backend/models/curriculum_ingestion_job.py`
-- [❌] `backend/models/curriculum_version.py`
-- [❌] `backend/models/curriculum_topic_map.py`
-- [❌] `backend/models/governance_hallucination.py`
-- [❌] `backend/alembic/env.py` imports
+- [✅] `backend/alembic/versions/0020_admin_curriculum_ops.py` (created section-7 tables + topic FK reconcile)
+- [✅] `backend/models/curriculum_ingestion_job.py`
+- [✅] `backend/models/curriculum_version.py`
+- [✅] `backend/models/curriculum_topic_map.py`
+- [✅] `backend/models/governance_hallucination.py`
+- [✅] `backend/alembic/env.py` imports
 
 Lane B:
-- [❌] `backend/schemas/admin_curriculum_schema.py`
-- [❌] `backend/schemas/governance_schema.py`
-- [❌] `backend/schemas/internal_rag_schema.py`
-- [❌] `backend/repositories/admin_curriculum_repo.py`
-- [❌] `backend/repositories/governance_repo.py`
-- [❌] `backend/services/admin_curriculum_service.py`
-- [❌] `backend/services/governance_service.py`
-- [❌] `backend/services/rag_retrieve_service.py`
-- [❌] `backend/services/system_health_service.py`
-- [🟡] `ai_core/core_engine/rag/retriever.py` exists but not yet wired to backend internal-rag contract
+- [✅] `backend/schemas/admin_curriculum_schema.py`
+- [✅] `backend/schemas/governance_schema.py`
+- [✅] `backend/schemas/internal_rag_schema.py`
+- [✅] `backend/repositories/admin_curriculum_repo.py`
+- [✅] `backend/repositories/governance_repo.py`
+- [✅] `backend/services/admin_curriculum_service.py` (real doc parsing + chunking + Qdrant indexing flow)
+- [✅] `backend/services/governance_service.py`
+- [✅] `backend/services/rag_retrieve_service.py`
+- [✅] `backend/services/system_health_service.py`
+- [✅] `ai_core/core_engine/rag/retriever.py` (Qdrant + fastembed retrieval implementation)
 
 Lane C:
-- [❌] `backend/endpoints/admin_curriculum.py`
-- [❌] `backend/endpoints/admin_governance.py`
-- [❌] `backend/endpoints/internal_rag.py`
-- [🟡] `backend/endpoints/system.py` exists (basic health only); deep dependency checks still pending
-- [❌] `backend/main.py` section-7 router mount
+- [✅] `backend/endpoints/admin_curriculum.py`
+- [✅] `backend/endpoints/admin_governance.py`
+- [✅] `backend/endpoints/internal_rag.py`
+- [✅] `backend/endpoints/system.py` now uses deep dependency checks service
+- [✅] `backend/main.py` section-7 router mount
 
 Lane D:
-- [❌] `backend/tests/unit/test_admin_curriculum_service.py`
-- [❌] `backend/tests/unit/test_governance_service.py`
-- [❌] `backend/tests/unit/test_internal_rag_endpoint.py`
-- [❌] `backend/tests/unit/test_system_health_endpoint.py`
-- [❌] `backend/tests/integration/test_section7_admin_flow.py`
-- [❌] `backend/README.md` section-7 smoke block
+- [✅] `backend/tests/unit/test_admin_curriculum_service.py`
+- [✅] `backend/tests/unit/test_governance_service.py`
+- [✅] `backend/tests/unit/test_internal_rag_endpoint.py`
+- [✅] `backend/tests/unit/test_system_health_endpoint.py`
+- [✅] `backend/tests/integration/test_section7_admin_flow.py`
+- [✅] `backend/README.md` section-7 smoke block
 
 ---
 

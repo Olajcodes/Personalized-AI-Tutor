@@ -15,3 +15,7 @@ bcrypt<4.1
 alembic
 httpx
 neo4j
+redis
+qdrant-client
+fastembed
+python-docx

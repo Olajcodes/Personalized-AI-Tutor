@@ -1,7 +1,7 @@
 from backend.endpoints import system
 
 
-def test_health_returns_service_snapshot(monkeypatch):
+def test_system_health_endpoint_uses_snapshot(monkeypatch):
     expected = {
         "status": "ok",
         "timestamp": "2026-02-28T00:00:00Z",

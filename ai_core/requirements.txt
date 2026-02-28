@@ -8,3 +8,6 @@ python-dotenv
 requests
 langchain_community
 neo4j
+qdrant-client
+fastembed
+redis

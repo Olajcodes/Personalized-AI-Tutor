@@ -33,6 +33,11 @@ from backend.endpoints.tutor import router as tutor_router
 from backend.endpoints.mastery import router as mastery_router
 from backend.endpoints.teachers import router as teachers_router
 
+# Section 7 Routers
+from backend.endpoints.admin_curriculum import router as admin_curriculum_router
+from backend.endpoints.admin_governance import router as admin_governance_router
+from backend.endpoints.internal_rag import router as internal_rag_router
+
 API_PREFIX = "/api/v1"
 
 app = FastAPI(title="Mastery AI Backend", version="0.1.0")

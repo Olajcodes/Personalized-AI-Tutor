@@ -7,7 +7,10 @@ Includes:
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING
+
+import requests
 
 from core_engine.api_contracts.schemas import (
     Citation,
@@ -21,6 +24,7 @@ from core_engine.api_contracts.schemas import (
     TutorRequest,
     TutorResponse,
 )
+from core_engine.llm.client import LLMClient, LLMClientError
 from core_engine.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -33,6 +37,71 @@ if TYPE_CHECKING:
     from core_engine.rag.retriever import RagRetriever
 
 logger = get_logger(__name__)
+
+
+def _internal_rag_retrieve(request: TutorChatRequest) -> list[Citation]:
+    base_url = os.getenv("BACKEND_INTERNAL_RAG_URL", "http://127.0.0.1:8000/api/v1/internal/rag/retrieve").strip()
+    timeout = float(os.getenv("INTERNAL_RAG_TIMEOUT_SECONDS", "6"))
+    top_k = int(os.getenv("INTERNAL_RAG_TOP_K", "6"))
+
+    payload = {
+        "query": request.message,
+        "subject": request.subject,
+        "sss_level": request.sss_level,
+        "term": int(request.term),
+        "topic_ids": [request.topic_id] if request.topic_id else [],
+        "top_k": max(1, min(top_k, 20)),
+        "approved_only": True,
+    }
+
+    response = requests.post(base_url, json=payload, timeout=timeout)
+    response.raise_for_status()
+    data = response.json()
+    chunks = data.get("chunks", [])
+
+    citations: list[Citation] = []
+    for chunk in chunks:
+        text = str(chunk.get("text") or "")
+        snippet = " ".join(text.split())[:220]
+        citations.append(
+            Citation(
+                source_id=str(chunk.get("source_id") or ""),
+                chunk_id=str(chunk.get("chunk_id") or ""),
+                snippet=snippet,
+                metadata=dict(chunk.get("metadata") or {}),
+            )
+        )
+    return citations
+
+
+def _llm_generate(prompt: str) -> str:
+    client = LLMClient(
+        provider=os.getenv("LLM_PROVIDER", "groq"),
+        model=os.getenv("LLM_MODEL", "openai/gpt-oss-20b"),
+        api_key=os.getenv("LLM_API_KEY"),
+    )
+    return client.generate(prompt)
+
+
+def _chat_prompt(request: TutorChatRequest, citations: list[Citation]) -> str:
+    if citations:
+        citations_block = "\n".join(
+            f"- ({item.source_id}#{item.chunk_id}) {item.snippet}" for item in citations
+        )
+    else:
+        citations_block = "- No verified curriculum context retrieved."
+
+    return (
+        "You are Mastery AI, a curriculum-bound tutor for Nigerian SSS learners.\n"
+        f"Scope: subject={request.subject}, level={request.sss_level}, term={request.term}.\n"
+        "Rules:\n"
+        "- Stay inside scope.\n"
+        "- Explain with clear, simple steps.\n"
+        "- Give one worked example when relevant.\n"
+        "- If context is missing, state assumptions briefly and ask a focused follow-up question.\n\n"
+        f"Student question: {request.message}\n\n"
+        f"Retrieved context:\n{citations_block}\n"
+    )
 
 
 def handle_question(
@@ -134,41 +203,74 @@ def handle_question(
 
 
 def run_tutor_chat(request: TutorChatRequest) -> TutorChatResponse:
-    """Generate deterministic tutor chat output aligned to section-5 contract.
+    """Run agentic tutor chat flow using retrieval tool + LLM generation."""
+    citations: list[Citation] = []
+    actions: list[str] = ["CALLED_TOOL:internal_rag.retrieve"]
 
-    This lightweight implementation is safe for MVP integration and can be replaced
-    with full LangGraph orchestration without changing API payload shape.
-    """
+    try:
+        citations = _internal_rag_retrieve(request)
+    except Exception as exc:
+        logger.warning("tutor.run_tutor_chat retrieval failed: %s", exc)
+        actions.append("RAG_RETRIEVAL_FAILED")
+    else:
+        actions.append("USED_RAG_CONTEXT" if citations else "NO_RAG_CONTEXT")
+
+    prompt = _chat_prompt(request, citations)
+    try:
+        assistant_message = _llm_generate(prompt)
+    except (LLMClientError, Exception) as exc:
+        logger.warning("tutor.run_tutor_chat llm generation failed: %s", exc)
+        assistant_message = (
+            "I could not reach the model right now. "
+            "Please retry in a moment, or ask for a short hint while we reconnect."
+        )
+        actions.append("LLM_UNAVAILABLE")
+
     recommendation = TutorRecommendation(
         type="next_topic",
         topic_id=request.topic_id,
-        reason="Keep practicing the current scope and proceed once confidence improves.",
+        reason="Continue in the current topic until accuracy and speed improve consistently.",
     )
     return TutorChatResponse(
-        assistant_message=(
-            f"For {request.subject.upper()} ({request.sss_level}, term {request.term}), "
-            "start from the core rule, then solve one simple example step by step."
-        ),
-        citations=[],
-        actions=["UPDATED_MASTERY_BASIC"],
+        assistant_message=assistant_message,
+        citations=citations,
+        actions=actions + ["UPDATED_MASTERY_BASIC"],
         recommendations=[recommendation],
     )
 
 
 def run_tutor_hint(request: TutorHintRequest) -> TutorHintResponse:
     """Return a concise scaffolded hint for an in-progress quiz question."""
-    return TutorHintResponse(
-        hint="Identify the key concept being tested, eliminate one wrong option, then compare the remaining choices.",
-        strategy="guided_hint",
+    prompt = (
+        "You are an exam coach. Give a short guided hint only, no full answer.\n"
+        f"Scope: {request.subject}, {request.sss_level}, term {request.term}.\n"
+        f"Question ID: {request.question_id}\n"
+        f"Student note: {request.message or ''}\n"
     )
+    try:
+        hint_text = _llm_generate(prompt)
+    except (LLMClientError, Exception):
+        hint_text = "Focus on the core rule, eliminate one wrong option, then compare the remaining choices."
+    return TutorHintResponse(hint=hint_text, strategy="guided_hint")
 
 
 def run_tutor_explain_mistake(request: TutorExplainMistakeRequest) -> TutorExplainMistakeResponse:
     """Explain why an answer is wrong and provide a targeted correction tip."""
+    prompt = (
+        "Explain the student's mistake briefly and give one improvement tip.\n"
+        f"Scope: {request.subject}, {request.sss_level}, term {request.term}.\n"
+        f"Question: {request.question}\n"
+        f"Student answer: {request.student_answer}\n"
+        f"Correct answer: {request.correct_answer}\n"
+    )
+    try:
+        explanation = _llm_generate(prompt)
+    except (LLMClientError, Exception):
+        explanation = (
+            "Your answer did not follow the governing rule in this question. "
+            f"You selected '{request.student_answer}' while the correct answer is '{request.correct_answer}'."
+        )
     return TutorExplainMistakeResponse(
-        explanation=(
-            "Your answer does not follow the governing rule in the question context. "
-            f"You selected '{request.student_answer}', but the expected answer is '{request.correct_answer}'."
-        ),
+        explanation=explanation,
         improvement_tip="Write the relevant rule first, then verify each option against that rule.",
     )
