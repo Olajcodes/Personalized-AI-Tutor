@@ -14,6 +14,12 @@ class InternalPostgresRepository:
     def _table_exists(self, table_name: str) -> bool:
         return inspect(self.db.bind).has_table(table_name)
 
+    def _column_exists(self, table_name: str, column_name: str) -> bool:
+        inspector = inspect(self.db.bind)
+        if not inspector.has_table(table_name):
+            return False
+        return any(col["name"] == column_name for col in inspector.get_columns(table_name))
+
     def get_profile_context(self, *, student_id: UUID) -> dict:
         row = self.db.execute(
             text(
@@ -117,12 +123,17 @@ class InternalPostgresRepository:
         if not self._table_exists("class_enrollments"):
             return []
 
+        status_filter = ""
+        if self._column_exists("class_enrollments", "status"):
+            status_filter = " AND status = 'active'"
+
         rows = self.db.execute(
             text(
-                """
+                f"""
                 SELECT student_id
                 FROM class_enrollments
                 WHERE class_id = :class_id
+                {status_filter}
                 ORDER BY student_id
                 """
             ),

@@ -26,10 +26,10 @@ from backend.models.student_concept_mastery import StudentConceptMastery
 from backend.models.mastery_update_event import MasteryUpdateEvent
 from backend.models.mastery_snapshot import MasterySnapshot
 from backend.models.student_badge import StudentBadge
-from backend.models.curriculum_version import CurriculumVersion
-from backend.models.curriculum_ingestion_job import CurriculumIngestionJob
-from backend.models.curriculum_topic_map import CurriculumTopicMap
-from backend.models.governance_hallucination import GovernanceHallucination
+from backend.models.teacher_class import TeacherClass
+from backend.models.class_enrollment import ClassEnrollment
+from backend.models.teacher_assignment import TeacherAssignment
+from backend.models.teacher_intervention import TeacherIntervention
 
 config = context.config
 fileConfig(config.config_file_name)

@@ -55,7 +55,7 @@ Implemented and currently mounted:
 - `GET /api/v1/learning/quizzes/{quiz_id}/results`
 
 Not yet completed end-to-end:
-- Part 7, 8, 9, 10, 11
+- Part 7, 8, 9, 11
 - Internal APIs: `/internal/rag/*`
 
 ---
@@ -245,32 +245,32 @@ Lane D:
 
 ---
 
-## [❌] Section 6 (P1) Teacher Intelligence (Basic MVP) [NOT STARTED]
+## [✅] Section 6 (P1) Teacher Intelligence (Basic MVP) [COMPLETED]
 
 Lane A:
-- [❌] `backend/alembic/versions/0012_teacher_intelligence_tables.py`
-- [❌] `backend/models/teacher_class.py`
-- [❌] `backend/models/class_enrollment.py`
-- [❌] `backend/models/teacher_assignment.py`
-- [❌] `backend/models/teacher_intervention.py`
-- [❌] `backend/alembic/env.py` imports
+- [✅] `backend/alembic/versions/0019_teacher_intelligence_tables.py` - additive migration with constraints/indexes for class, enrollment, assignment, and intervention tables.
+- [✅] `backend/models/teacher_class.py`
+- [✅] `backend/models/class_enrollment.py`
+- [✅] `backend/models/teacher_assignment.py`
+- [✅] `backend/models/teacher_intervention.py`
+- [✅] `backend/alembic/env.py` imports
 
 Lane B:
-- [❌] `backend/schemas/teacher_schema.py`
-- [❌] `backend/repositories/teacher_repo.py`
-- [❌] `backend/services/teacher_service.py`
-- [❌] `backend/services/teacher_analytics_service.py`
+- [✅] `backend/schemas/teacher_schema.py`
+- [✅] `backend/repositories/teacher_repo.py`
+- [✅] `backend/services/teacher_service.py`
+- [✅] `backend/services/teacher_analytics_service.py`
 
 Lane C:
-- [❌] `backend/endpoints/teachers.py`
-- [❌] `backend/main.py` teacher router mount
+- [✅] `backend/endpoints/teachers.py` - full teacher class, analytics, assignment, and intervention endpoints with role/ownership validation.
+- [✅] `backend/main.py` teacher router mount
 
 Lane D:
-- [❌] `backend/tests/unit/test_teacher_service.py`
-- [❌] `backend/tests/unit/test_teacher_analytics_service.py`
-- [❌] `backend/tests/unit/test_teachers_endpoints.py`
-- [❌] `backend/tests/integration/test_section6_teacher_flow.py`
-- [❌] `backend/README.md` section-6 smoke block
+- [✅] `backend/tests/unit/test_teacher_service.py`
+- [✅] `backend/tests/unit/test_teacher_analytics_service.py`
+- [✅] `backend/tests/unit/test_teachers_endpoints.py`
+- [✅] `backend/tests/integration/test_section6_teacher_flow.py` (runs with `TEST_DATABASE_URL`; skipped safely when unset)
+- [✅] `backend/README.md` section-6 smoke block
 
 ---
 
@@ -339,7 +339,7 @@ Lane D:
 
 ## 3) Test Snapshot (Current)
 
-- [✅] `python -m pytest -q backend/tests` -> `63 passed, 2 skipped`
+- [✅] `python -m pytest -q backend/tests` -> `75 passed, 3 skipped`
 - [✅] `python -m pytest -q ai_core/tests` -> `11 passed`
 
 ---
