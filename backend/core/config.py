@@ -59,6 +59,10 @@ class Settings(BaseModel):
     neo4j_password: str = os.getenv("NEO4J_PASSWORD", "")
     use_neo4j_graph: bool = _parse_bool(os.getenv("USE_NEO4J_GRAPH"), default=False)
     vector_db_url: str = os.getenv("VECTOR_DB_URL", "")
+    qdrant_url: str = os.getenv("QDRANT_URL", os.getenv("VECTOR_DB_URL", ""))
+    qdrant_api_key: str = os.getenv("QDRANT_API_KEY", "")
+    qdrant_collection: str = os.getenv("QDRANT_COLLECTION", "MasteryAI")
+    qdrant_embedding_model: str = os.getenv("QDRANT_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
     llm_api_base: str = os.getenv("LLM_API_BASE", "")
 
     ai_core_base_url: str = os.getenv("AI_CORE_BASE_URL", "")

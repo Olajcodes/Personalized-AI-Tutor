@@ -69,12 +69,16 @@ def root():
 
 @app.get("/health")
 def health():
+    llm_key_present = bool(os.getenv("GROQ_API_KEY") or os.getenv("LLM_API_KEY"))
     checks = {
-        "llm_api_key": "configured" if os.getenv("LLM_API_KEY") else "not_configured",
+        "llm_api_key": "configured" if llm_key_present else "not_configured",
         "postgres_dsn": "configured" if os.getenv("POSTGRES_DSN") else "not_configured",
         "neo4j_uri": "configured" if os.getenv("NEO4J_URI") else "not_configured",
         "redis_url": "configured" if os.getenv("REDIS_URL") else "not_configured",
-        "vector_index_name": "configured" if os.getenv("VECTOR_INDEX_NAME") else "not_configured",
+        "qdrant_url": "configured" if os.getenv("QDRANT_URL") else "not_configured",
+        "vector_index_name": "configured"
+        if (os.getenv("QDRANT_COLLECTION") or os.getenv("VECTOR_INDEX_NAME"))
+        else "not_configured",
     }
     return {
         "status": "ok",
