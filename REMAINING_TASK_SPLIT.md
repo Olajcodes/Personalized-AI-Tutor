@@ -274,7 +274,7 @@ Lane D:
 
 ---
 
-## [🟡] Section 7 (P1) Admin Curriculum + Governance + Internal RAG + Deep Health [LANE A+B DONE]
+## [✅] Section 7 (P1) Admin Curriculum + Governance + Internal RAG + Deep Health [COMPLETED]
 
 Lane A:
 - [✅] `backend/alembic/versions/0020_admin_curriculum_ops.py` (created section-7 tables + topic FK reconcile)
@@ -297,19 +297,19 @@ Lane B:
 - [✅] `ai_core/core_engine/rag/retriever.py` (Qdrant + fastembed retrieval implementation)
 
 Lane C:
-- [❌] `backend/endpoints/admin_curriculum.py`
-- [❌] `backend/endpoints/admin_governance.py`
-- [❌] `backend/endpoints/internal_rag.py`
+- [✅] `backend/endpoints/admin_curriculum.py`
+- [✅] `backend/endpoints/admin_governance.py`
+- [✅] `backend/endpoints/internal_rag.py`
 - [✅] `backend/endpoints/system.py` now uses deep dependency checks service
-- [❌] `backend/main.py` section-7 router mount
+- [✅] `backend/main.py` section-7 router mount
 
 Lane D:
-- [❌] `backend/tests/unit/test_admin_curriculum_service.py`
-- [❌] `backend/tests/unit/test_governance_service.py`
-- [❌] `backend/tests/unit/test_internal_rag_endpoint.py`
-- [❌] `backend/tests/unit/test_system_health_endpoint.py`
-- [❌] `backend/tests/integration/test_section7_admin_flow.py`
-- [❌] `backend/README.md` section-7 smoke block
+- [✅] `backend/tests/unit/test_admin_curriculum_service.py`
+- [✅] `backend/tests/unit/test_governance_service.py`
+- [✅] `backend/tests/unit/test_internal_rag_endpoint.py`
+- [✅] `backend/tests/unit/test_system_health_endpoint.py`
+- [✅] `backend/tests/integration/test_section7_admin_flow.py`
+- [✅] `backend/README.md` section-7 smoke block
 
 ---
 

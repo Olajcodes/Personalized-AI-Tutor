@@ -754,3 +754,58 @@ Smoke test steps:
 11. Integration note:
     - set `TEST_DATABASE_URL=postgresql://...`
     - run `python -m pytest -q backend/tests/integration/test_section5_tutor_mastery_flow.py`
+
+### Section 7 - Admin Curriculum + Governance + Internal RAG
+
+Smoke test steps (run in order):
+1. Install new dependencies:
+   - `python -m pip install -r backend/requirements.txt`
+2. Apply migrations:
+   - `python -m alembic -c backend/alembic.ini upgrade head`
+3. Ensure env is configured for vector retrieval:
+   - `QDRANT_URL`
+   - `QDRANT_API_KEY`
+   - `QDRANT_COLLECTION`
+   - `QDRANT_EMBEDDING_MODEL`
+4. Start backend:
+   - `python -m uvicorn backend.main:app --reload`
+5. Login as an `admin` user and authorize token in Swagger.
+6. Upload curriculum scope:
+   - `POST /api/v1/admin/curriculum/upload`
+   - sample payload:
+   ```json
+   {
+     "subject": "math",
+     "sss_level": "SSS1",
+     "term": 1,
+     "source_root": "C:/Users/OLASQUARE/Desktop/GEN AI Works/Personalized-AI-Tutor/docs/SSS_NOTES_2026",
+     "version_name": "math-sss1-term1-2026-v1"
+   }
+   ```
+7. Track ingestion:
+   - `GET /api/v1/admin/curriculum/ingestion-status`
+   - optional filter: `GET /api/v1/admin/curriculum/ingestion-status?job_id=<job_id>`
+8. Check approval queue:
+   - `GET /api/v1/admin/curriculum/pending-approvals`
+9. Publish a version:
+   - `POST /api/v1/admin/curriculum/versions/{version_id}/approve`
+10. Retrieve internal RAG chunks:
+    - `POST /api/v1/internal/rag/retrieve`
+    - sample payload:
+    ```json
+    {
+      "query": "Explain linear equation with one solved example",
+      "subject": "math",
+      "sss_level": "SSS1",
+      "term": 1,
+      "topic_ids": [],
+      "top_k": 6,
+      "approved_only": true
+    }
+    ```
+11. Governance metrics and review:
+    - `GET /api/v1/admin/governance/metrics`
+    - `GET /api/v1/admin/governance/hallucinations?status=open&limit=20`
+    - `POST /api/v1/admin/governance/hallucinations/{id}/resolve`
+12. Run section-7 tests:
+    - `python -m pytest -q backend/tests/unit/test_admin_curriculum_service.py backend/tests/unit/test_governance_service.py backend/tests/unit/test_internal_rag_endpoint.py backend/tests/unit/test_system_health_endpoint.py backend/tests/integration/test_section7_admin_flow.py`
