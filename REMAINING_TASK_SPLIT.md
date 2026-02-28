@@ -1,6 +1,6 @@
 ﻿# Mastery AI Remaining Task Split (Phased + Lane File Ownership)
 
-Last updated: 2026-02-27
+Last updated: 2026-02-28
 
 Legend:
 - `[✅]` complete and correct
@@ -339,8 +339,8 @@ Lane D:
 
 ## 3) Test Snapshot (Current)
 
-- [✅] `python -m pytest -q backend/tests` -> `51 passed, 1 skipped`
-- [✅] `python -m pytest -q ai_core/tests` -> `8 passed`
+- [✅] `python -m pytest -q backend/tests` -> `63 passed, 2 skipped`
+- [✅] `python -m pytest -q ai_core/tests` -> `11 passed`
 
 ---
 
@@ -354,6 +354,7 @@ Lane D:
 - [✅] `backend/schemas/quiz_schema.py` and `ai_core/core_engine/api_contracts/quiz_schemas.py` are aligned for section-4 quiz contracts.
 - [✅] `backend/tests/integration/test_section4_quiz_flow.py` is runnable with `TEST_DATABASE_URL` (PostgreSQL).
 - [✅] `backend/pyproject.toml`, `ai_core/pyproject.toml` updated with `asyncio_default_fixture_loop_scope = "function"` to remove pytest-asyncio deprecation warnings.
+- [✅] Neo4j topic->concept relationship standardized to `COVERS`; legacy `MAPS_TO` cleanup is built into `backend/scripts/seed_neo4j_graph.py`.
 - [🟡] Local-only artifacts (`test.db`, `**/__pycache__/`, `**/.pytest_cache/`) are not necessary for source control; keep them ignored and clean periodically.
 - [✅] `test.db` removed from local workspace; continue keeping it untracked.
 

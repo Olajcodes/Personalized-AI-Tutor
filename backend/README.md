@@ -57,6 +57,10 @@ AI_CORE_BASE_URL=http://127.0.0.1:8100
 AI_CORE_TIMEOUT_SECONDS=8
 AI_CORE_ALLOW_FALLBACK=true
 CORS_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:4173
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=your-password
+USE_NEO4J_GRAPH=false
 ```
 
 Notes:
@@ -140,6 +144,43 @@ PowerShell:
 $env:SEED_STUDENT_ID = "11111111-1111-1111-1111-111111111111"
 python -m backend.scripts.seed_lessons
 ```
+
+## Neo4j Graph Setup (Optional, Can Be Used Now)
+
+You do not need to wait for a later section to seed graph data.
+
+When enabled, internal graph endpoints (`/internal/graph/context` and `/internal/graph/update-mastery`) use Neo4j as primary storage and gracefully fall back to Postgres if Neo4j is unavailable.
+
+### 1) Enable Neo4j in `backend/.env`
+
+```env
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=your-password
+USE_NEO4J_GRAPH=true
+```
+
+### 2) Seed Topic/Concept Graph from Postgres Topics
+
+```bash
+python -m backend.scripts.seed_neo4j_graph
+```
+
+Optional demo student mastery edges:
+
+PowerShell:
+
+```powershell
+$env:NEO4J_SEED_STUDENT_ID = "00000000-0000-0000-0000-000000000001"
+python -m backend.scripts.seed_neo4j_graph
+```
+
+### 3) Verify Quickly
+
+- `GET /api/v1/internal/graph/context?student_id=<uuid>&subject=math&sss_level=SSS1&term=1`
+- `POST /api/v1/internal/graph/update-mastery` with valid payload
+
+If Neo4j is reachable and enabled, updates are mirrored there; if not, requests still work via Postgres fallback.
 
 ## Run API
 

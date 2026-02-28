@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+import logging
 from statistics import mean
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from backend.core.config import settings
 from backend.repositories.diagnostic_repo import DiagnosticRepository
 from backend.repositories.graph_repo import GraphRepository
+from backend.repositories.neo4j_graph_repo import (
+    Neo4jGraphConfig,
+    Neo4jGraphRepository,
+    Neo4jGraphRepositoryError,
+)
 from backend.schemas.internal_graph_schema import (
     InternalGraphContextOut,
     InternalGraphUpdateIn,
@@ -16,6 +23,7 @@ from backend.schemas.internal_graph_schema import (
 )
 
 
+logger = logging.getLogger(__name__)
 MASTERY_UNLOCK_THRESHOLD = 0.7
 
 
@@ -27,6 +35,74 @@ class GraphClientService:
     @staticmethod
     def _topic_concept_id(topic_id) -> str:
         return str(topic_id)
+
+    @staticmethod
+    def _build_context_response(
+        *,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+        topic_id: str | None,
+        concept_ids: list[str],
+        mastery_map: dict[str, float],
+        prereq_edges: list[tuple[str, str]],
+    ) -> InternalGraphContextOut:
+        mastery_nodes = [
+            MasteryNodeOut(concept_id=concept_id, score=round(mastery_map.get(concept_id, 0.0), 4))
+            for concept_id in concept_ids
+        ]
+
+        prereq_nodes = [
+            PrereqEdgeOut(prerequisite_concept_id=prereq, concept_id=concept)
+            for prereq, concept in prereq_edges
+        ]
+
+        prereq_by_concept: dict[str, set[str]] = {}
+        for prereq, concept in prereq_edges:
+            prereq_by_concept.setdefault(concept, set()).add(prereq)
+
+        unlocked_nodes: list[str] = []
+        for concept_id in concept_ids:
+            prereqs = prereq_by_concept.get(concept_id, set())
+            if not prereqs:
+                unlocked_nodes.append(concept_id)
+                continue
+            if all(mastery_map.get(prereq, 0.0) >= MASTERY_UNLOCK_THRESHOLD for prereq in prereqs):
+                unlocked_nodes.append(concept_id)
+
+        overall_mastery = round(mean([node.score for node in mastery_nodes]), 4) if mastery_nodes else 0.0
+
+        return InternalGraphContextOut(
+            student_id=student_id,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+            topic_id=topic_id,
+            mastery=mastery_nodes,
+            prereqs=prereq_nodes,
+            unlocked_nodes=unlocked_nodes,
+            overall_mastery=overall_mastery,
+        )
+
+    @staticmethod
+    def _sequential_prereq_edges(concept_ids: list[str]) -> list[tuple[str, str]]:
+        if len(concept_ids) <= 1:
+            return []
+        return [(concept_ids[idx - 1], concept_ids[idx]) for idx in range(1, len(concept_ids))]
+
+    @staticmethod
+    def _neo4j_repo_or_none() -> Neo4jGraphRepository | None:
+        if not settings.use_neo4j_graph:
+            return None
+        config = Neo4jGraphConfig(
+            uri=settings.neo4j_uri,
+            user=settings.neo4j_user,
+            password=settings.neo4j_password,
+        )
+        if not config.is_configured:
+            return None
+        return Neo4jGraphRepository(config)
 
     def get_student_graph_context(
         self,
@@ -50,6 +126,44 @@ class GraphClientService:
             )
 
         topics = diagnostic_repo.get_scope_topics(subject=subject, sss_level=sss_level, term=term)
+        concept_ids = [self._topic_concept_id(topic.id) for topic in topics]
+
+        neo_repo = self._neo4j_repo_or_none()
+        if neo_repo is not None:
+            try:
+                neo_repo.ensure_topic_concepts(
+                    subject=subject,
+                    sss_level=sss_level,
+                    term=term,
+                    topic_ids=concept_ids,
+                )
+                neo_repo.ensure_prerequisite_chain(concept_ids=concept_ids)
+                mastery_map = neo_repo.get_mastery_map(
+                    student_id=str(student_id),
+                    subject=subject,
+                    sss_level=sss_level,
+                    term=term,
+                    concept_ids=concept_ids,
+                )
+                prereq_edges = neo_repo.get_prerequisite_edges(concept_ids=concept_ids)
+                if not prereq_edges:
+                    prereq_edges = self._sequential_prereq_edges(concept_ids)
+
+                return self._build_context_response(
+                    student_id=student_id,
+                    subject=subject,
+                    sss_level=sss_level,
+                    term=term,
+                    topic_id=topic_id,
+                    concept_ids=concept_ids,
+                    mastery_map=mastery_map,
+                    prereq_edges=prereq_edges,
+                )
+            except Neo4jGraphRepositoryError as exc:
+                logger.warning("Neo4j graph context failed; falling back to Postgres graph store: %s", exc)
+            finally:
+                neo_repo.close()
+
         graph_repo = GraphRepository(db)
         mastery_map = graph_repo.get_mastery_map(
             student_id=student_id,
@@ -57,45 +171,16 @@ class GraphClientService:
             sss_level=sss_level,
             term=term,
         )
-
-        mastery_nodes: list[MasteryNodeOut] = []
-        prereq_edges: list[PrereqEdgeOut] = []
-        unlocked_nodes: list[str] = []
-
-        for idx, topic in enumerate(topics):
-            concept_id = self._topic_concept_id(topic.id)
-            score = round(mastery_map.get(concept_id, 0.0), 4)
-            mastery_nodes.append(MasteryNodeOut(concept_id=concept_id, score=score))
-
-            if idx > 0:
-                prereq_topic = topics[idx - 1]
-                prereq_edges.append(
-                    PrereqEdgeOut(
-                        prerequisite_concept_id=self._topic_concept_id(prereq_topic.id),
-                        concept_id=concept_id,
-                    )
-                )
-
-            if idx == 0:
-                unlocked_nodes.append(concept_id)
-            else:
-                prev_topic = topics[idx - 1]
-                prev_score = mastery_map.get(self._topic_concept_id(prev_topic.id), 0.0)
-                if prev_score >= MASTERY_UNLOCK_THRESHOLD:
-                    unlocked_nodes.append(concept_id)
-
-        overall_mastery = round(mean([node.score for node in mastery_nodes]), 4) if mastery_nodes else 0.0
-
-        return InternalGraphContextOut(
+        prereq_edges = self._sequential_prereq_edges(concept_ids)
+        return self._build_context_response(
             student_id=student_id,
             subject=subject,
             sss_level=sss_level,
             term=term,
             topic_id=topic_id,
-            mastery=mastery_nodes,
-            prereqs=prereq_edges,
-            unlocked_nodes=unlocked_nodes,
-            overall_mastery=overall_mastery,
+            concept_ids=concept_ids,
+            mastery_map=mastery_map,
+            prereq_edges=prereq_edges,
         )
 
     def push_mastery_update(self, db: Session, *, payload: InternalGraphUpdateIn) -> InternalGraphUpdateOut:
@@ -157,6 +242,39 @@ class GraphClientService:
         )
         db.commit()
 
+        neo_repo = self._neo4j_repo_or_none()
+        if neo_repo is not None:
+            try:
+                concept_ids = [item.concept_id for item in payload.concept_breakdown]
+                neo_repo.ensure_concepts(
+                    subject=payload.subject,
+                    sss_level=payload.sss_level,
+                    term=payload.term,
+                    concept_ids=concept_ids,
+                )
+                for row in event_mastery:
+                    neo_repo.upsert_mastery(
+                        student_id=str(payload.student_id),
+                        concept_id=row["concept_id"],
+                        score=float(row["new_score"]),
+                        source=payload.source,
+                        evaluated_at=payload.timestamp,
+                    )
+                neo_repo.record_update_event(
+                    student_id=str(payload.student_id),
+                    quiz_id=str(payload.quiz_id) if payload.quiz_id else None,
+                    attempt_id=str(payload.attempt_id) if payload.attempt_id else None,
+                    subject=payload.subject,
+                    sss_level=payload.sss_level,
+                    term=payload.term,
+                    source=payload.source,
+                    concept_breakdown=[item.model_dump() for item in payload.concept_breakdown],
+                )
+            except Neo4jGraphRepositoryError as exc:
+                logger.warning("Neo4j mastery mirror write failed: %s", exc)
+            finally:
+                neo_repo.close()
+
         overall_mastery = round(mean(mastery_map.values()), 4) if mastery_map else 0.0
         return InternalGraphUpdateOut(
             success=True,
@@ -166,4 +284,3 @@ class GraphClientService:
 
 
 graph_client_service = GraphClientService()
-
