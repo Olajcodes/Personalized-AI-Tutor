@@ -247,6 +247,16 @@ Base prefix: `/api/v1`
 - `POST /learning/quizzes/{quiz_id}/submit`
 - `GET /learning/quizzes/{quiz_id}/results`
 - `GET /learning/mastery`
+- `GET /teachers/classes`
+- `POST /teachers/classes`
+- `POST /teachers/classes/{class_id}/enroll`
+- `DELETE /teachers/classes/{class_id}/enroll/{student_id}`
+- `GET /teachers/classes/{class_id}/dashboard`
+- `GET /teachers/classes/{class_id}/heatmap`
+- `GET /teachers/classes/{class_id}/alerts`
+- `GET /teachers/classes/{class_id}/students/{student_id}/timeline`
+- `POST /teachers/assignments`
+- `POST /teachers/interventions`
 
 ## Shared DB Test Runbook (Team Standard)
 
@@ -754,3 +764,44 @@ Smoke test steps:
 11. Integration note:
     - set `TEST_DATABASE_URL=postgresql://...`
     - run `python -m pytest -q backend/tests/integration/test_section5_tutor_mastery_flow.py`
+
+### Section 6 - Teacher Intelligence (Classes, Analytics, Interventions)
+
+Smoke test steps:
+1. Ensure database is migrated: `python -m alembic -c backend/alembic.ini upgrade head`
+2. Start backend: `python -m uvicorn backend.main:app --reload`
+3. Authenticate as a `teacher` user.
+4. Create class:
+   - `POST /api/v1/teachers/classes`
+   - Example body:
+   ```json
+   {
+     "name": "SSS2 Math Cohort A",
+     "description": "Term 1 cohort",
+     "subject": "math",
+     "sss_level": "SSS2",
+     "term": 1
+   }
+   ```
+5. Enroll students:
+   - `POST /api/v1/teachers/classes/{class_id}/enroll`
+   - Example body:
+   ```json
+   { "student_ids": ["PUT_STUDENT_UUID_HERE"] }
+   ```
+6. Verify class and analytics:
+   - `GET /api/v1/teachers/classes`
+   - `GET /api/v1/teachers/classes/{class_id}/dashboard`
+   - `GET /api/v1/teachers/classes/{class_id}/heatmap`
+   - `GET /api/v1/teachers/classes/{class_id}/alerts`
+   - `GET /api/v1/teachers/classes/{class_id}/students/{student_id}/timeline`
+7. Create assignment and intervention:
+   - `POST /api/v1/teachers/assignments`
+   - `POST /api/v1/teachers/interventions`
+8. Remove enrollment:
+   - `DELETE /api/v1/teachers/classes/{class_id}/enroll/{student_id}`
+9. Run section-6 unit tests:
+   - `python -m pytest -q backend/tests/unit/test_teacher_service.py backend/tests/unit/test_teacher_analytics_service.py backend/tests/unit/test_teachers_endpoints.py`
+10. Integration note:
+   - set `TEST_DATABASE_URL=postgresql://...`
+   - run `python -m pytest -q backend/tests/integration/test_section6_teacher_flow.py`
