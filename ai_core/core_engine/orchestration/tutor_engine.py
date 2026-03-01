@@ -26,6 +26,8 @@ from core_engine.api_contracts.schemas import (
 )
 from core_engine.llm.client import LLMClient, LLMClientError
 from core_engine.observability.logging import get_logger
+from core_engine.safety.injection import sanitize_user_text
+from core_engine.safety.moderation import ModerationError, basic_moderate
 
 if TYPE_CHECKING:
     from core_engine.config.settings import Settings
@@ -37,6 +39,12 @@ if TYPE_CHECKING:
     from core_engine.rag.retriever import RagRetriever
 
 logger = get_logger(__name__)
+
+
+def _sanitize_and_moderate(text: str, *, max_chars: int = 6000) -> str:
+    cleaned = sanitize_user_text((text or "")[:max_chars])
+    basic_moderate(cleaned)
+    return cleaned
 
 
 def _internal_rag_retrieve(request: TutorChatRequest) -> list[Citation]:
@@ -94,11 +102,13 @@ def _chat_prompt(request: TutorChatRequest, citations: list[Citation]) -> str:
     return (
         "You are Mastery AI, a curriculum-bound tutor for Nigerian SSS learners.\n"
         f"Scope: subject={request.subject}, level={request.sss_level}, term={request.term}.\n"
-        "Rules:\n"
-        "- Stay inside scope.\n"
-        "- Explain with clear, simple steps.\n"
-        "- Give one worked example when relevant.\n"
-        "- If context is missing, state assumptions briefly and ask a focused follow-up question.\n\n"
+        "Hard constraints:\n"
+        "- Do not answer outside this exact scope (subject, level, and term).\n"
+        "- Do not fabricate facts, sources, or curriculum claims.\n"
+        "- Use retrieved context as primary evidence and cite source/chunk IDs when possible.\n"
+        "- If context is insufficient, say what is missing and ask one focused follow-up question.\n"
+        "- Keep explanation concise, stepwise, and student-friendly.\n"
+        "- For unsafe requests, refuse and redirect to safe learning support.\n\n"
         f"Student question: {request.message}\n\n"
         f"Retrieved context:\n{citations_block}\n"
     )
@@ -121,9 +131,6 @@ def handle_question(
 
     from core_engine.llm.prompts import build_tutor_prompt
     from core_engine.rag.citations import format_citations
-    from core_engine.safety.injection import sanitize_user_text
-    from core_engine.safety.moderation import basic_moderate
-
     # 1) Safety and hygiene
     user_text = request.message[: settings.max_input_chars]
     user_text = sanitize_user_text(user_text)
@@ -204,8 +211,22 @@ def handle_question(
 
 def run_tutor_chat(request: TutorChatRequest) -> TutorChatResponse:
     """Run agentic tutor chat flow using retrieval tool + LLM generation."""
+    try:
+        safe_message = _sanitize_and_moderate(request.message)
+    except ModerationError:
+        return TutorChatResponse(
+            assistant_message=(
+                "I can't help with that request. "
+                "Please ask a curriculum-based study question for your selected scope."
+            ),
+            citations=[],
+            actions=["REFUSED_SAFETY_POLICY"],
+            recommendations=[],
+        )
+
+    request = request.model_copy(update={"message": safe_message})
     citations: list[Citation] = []
-    actions: list[str] = ["CALLED_TOOL:internal_rag.retrieve"]
+    actions: list[str] = ["ENFORCED_SCOPE_POLICY", "CALLED_TOOL:internal_rag.retrieve"]
 
     try:
         citations = _internal_rag_retrieve(request)
@@ -241,11 +262,19 @@ def run_tutor_chat(request: TutorChatRequest) -> TutorChatResponse:
 
 def run_tutor_hint(request: TutorHintRequest) -> TutorHintResponse:
     """Return a concise scaffolded hint for an in-progress quiz question."""
+    try:
+        safe_note = _sanitize_and_moderate(request.message or "")
+    except ModerationError:
+        return TutorHintResponse(
+            hint="I cannot assist with that request. Ask a safe, curriculum-focused question.",
+            strategy="policy_refusal",
+        )
+
     prompt = (
         "You are an exam coach. Give a short guided hint only, no full answer.\n"
         f"Scope: {request.subject}, {request.sss_level}, term {request.term}.\n"
         f"Question ID: {request.question_id}\n"
-        f"Student note: {request.message or ''}\n"
+        f"Student note: {safe_note}\n"
     )
     try:
         hint_text = _llm_generate(prompt)
@@ -256,12 +285,22 @@ def run_tutor_hint(request: TutorHintRequest) -> TutorHintResponse:
 
 def run_tutor_explain_mistake(request: TutorExplainMistakeRequest) -> TutorExplainMistakeResponse:
     """Explain why an answer is wrong and provide a targeted correction tip."""
+    try:
+        safe_question = _sanitize_and_moderate(request.question)
+        safe_student_answer = _sanitize_and_moderate(request.student_answer, max_chars=500)
+        safe_correct_answer = _sanitize_and_moderate(request.correct_answer, max_chars=500)
+    except ModerationError:
+        return TutorExplainMistakeResponse(
+            explanation="I cannot process that content. Please submit a safe curriculum question.",
+            improvement_tip="Rephrase your question using neutral academic language.",
+        )
+
     prompt = (
         "Explain the student's mistake briefly and give one improvement tip.\n"
         f"Scope: {request.subject}, {request.sss_level}, term {request.term}.\n"
-        f"Question: {request.question}\n"
-        f"Student answer: {request.student_answer}\n"
-        f"Correct answer: {request.correct_answer}\n"
+        f"Question: {safe_question}\n"
+        f"Student answer: {safe_student_answer}\n"
+        f"Correct answer: {safe_correct_answer}\n"
     )
     try:
         explanation = _llm_generate(prompt)

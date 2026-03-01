@@ -96,6 +96,7 @@ def health():
 @app.post("/quiz/generate", response_model=QuizGenerateResponse)
 async def quiz_generate(payload: QuizGenerateRequest):
     questions_raw = await generate_quiz_questions(
+        student_id=payload.student_id,
         subject=payload.subject,
         sss_level=payload.sss_level,
         term=payload.term,
