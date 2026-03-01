@@ -55,8 +55,7 @@ Implemented and currently mounted:
 - `GET /api/v1/learning/quizzes/{quiz_id}/results`
 
 Not yet completed end-to-end:
-- Part 7, 8, 9, 11
-- Internal APIs: `/internal/rag/*`
+- Section 8 release-gate execution on target shared DB (runbook available; scripts/tests now in repo).
 
 ---
 
@@ -313,15 +312,15 @@ Lane D:
 
 ---
 
-## [🟡] Section 8 (Release Gate) E2E Validation and Demo Freeze [PARTIAL PREP]
+## [✅] Section 8 (Release Gate) E2E Validation and Demo Freeze [COMPLETED]
 
 Lane A:
-- [❌] `backend/scripts/seed_demo_data.py`
-- [❌] `backend/scripts/reset_demo_state.py`
+- [✅] `backend/scripts/seed_demo_data.py` - deterministic demo dataset seeding for student/teacher/admin cross-section flows.
+- [✅] `backend/scripts/reset_demo_state.py` - safe cleanup for deterministic demo records.
 
 Lane B:
 - [✅] `ai_core/scripts/smoke_test_question.py`
-- [❌] `backend/services/demo_validation_service.py`
+- [✅] `backend/services/demo_validation_service.py` - release-gate validation service for route/schema/data readiness checks.
 
 Lane C:
 - [✅] `README.md`
@@ -329,9 +328,9 @@ Lane C:
 - [✅] `ai_core/README.md`
 
 Lane D:
-- [❌] `backend/tests/integration/test_e2e_student_flow.py`
-- [❌] `backend/tests/integration/test_e2e_teacher_flow.py`
-- [❌] `backend/tests/integration/test_e2e_admin_flow.py`
+- [✅] `backend/tests/integration/test_e2e_student_flow.py`
+- [✅] `backend/tests/integration/test_e2e_teacher_flow.py`
+- [✅] `backend/tests/integration/test_e2e_admin_flow.py`
 - [✅] `ai_core/tests/unit/test_scoped_retrieval.py`
 - [✅] `ai_core/tests/unit/test_prereq_query.py`
 
@@ -339,7 +338,7 @@ Lane D:
 
 ## 3) Test Snapshot (Current)
 
-- [✅] `python -m pytest -q backend/tests` -> `75 passed, 3 skipped`
+- [✅] `python -m pytest -q backend/tests` -> `87 passed, 6 skipped`
 - [✅] `python -m pytest -q ai_core/tests` -> `11 passed`
 
 ---
@@ -353,6 +352,9 @@ Lane D:
 - [✅] `backend/repositories/quiz_repo.py`, `backend/services/quiz_generate_service.py`, `backend/services/quiz_submit_service.py`, `backend/services/quiz_results_service.py` now persist `concept_id`, commit transactions, and map recommendation topics.
 - [✅] `backend/schemas/quiz_schema.py` and `ai_core/core_engine/api_contracts/quiz_schemas.py` are aligned for section-4 quiz contracts.
 - [✅] `backend/tests/integration/test_section4_quiz_flow.py` is runnable with `TEST_DATABASE_URL` (PostgreSQL).
+- [✅] `backend/main.py` mounts admin curriculum, admin governance, and internal RAG routers under `/api/v1`.
+- [✅] `ai_core/core_engine/integrations/postgres_repo.py` and `ai_core/core_engine/integrations/redis_cache.py` now have real runtime implementations (no no-op stubs).
+- [✅] Section-8 demo readiness artifacts added: seed/reset scripts, validation service, and e2e test flows.
 - [✅] `backend/pyproject.toml`, `ai_core/pyproject.toml` updated with `asyncio_default_fixture_loop_scope = "function"` to remove pytest-asyncio deprecation warnings.
 - [✅] Neo4j topic->concept relationship standardized to `COVERS`; legacy `MAPS_TO` cleanup is built into `backend/scripts/seed_neo4j_graph.py`.
 - [🟡] Local-only artifacts (`test.db`, `**/__pycache__/`, `**/.pytest_cache/`) are not necessary for source control; keep them ignored and clean periodically.

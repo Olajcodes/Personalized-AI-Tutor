@@ -110,6 +110,9 @@ class RagRetriever:
     ) -> List[RagChunk]:
         if not query.strip() or not allowed_topic_ids:
             return []
+        if not self.qdrant_url:
+            # ai-core should degrade gracefully when vector DB is not configured.
+            return []
 
         cache_key = self._cache_key(
             query=query,
