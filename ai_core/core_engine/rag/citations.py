@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from typing import Any, Dict, List
-from core_engine.rag.retriever import RagChunk
+from ai_core.core_engine.rag.retriever import RagChunk
 
 
 def _snippet(text: str, max_len: int = 240) -> str:

@@ -1,6 +1,6 @@
 import pytest
 
-from core_engine.curriculum.policies import (
+from ai_core.core_engine.curriculum.policies import (
     CurriculumPolicyError,
     assert_sss_level_allowed,
     assert_term_allowed,

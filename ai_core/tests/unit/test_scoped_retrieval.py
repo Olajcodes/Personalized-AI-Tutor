@@ -1,5 +1,5 @@
-from core_engine.integrations.postgres_repo import PostgresRepo
-from core_engine.rag.retriever import RagRetriever
+from ai_core.core_engine.integrations.postgres_repo import PostgresRepo
+from ai_core.core_engine.rag.retriever import RagRetriever
 
 
 def test_retrieve_returns_list_for_scoped_query_contract():

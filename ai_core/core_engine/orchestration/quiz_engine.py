@@ -58,7 +58,7 @@ def _load_postgres_repo(dsn: str):
     try:
         from ai_core.core_engine.integrations.postgres_repo import PostgresRepo
     except ModuleNotFoundError:
-        from core_engine.integrations.postgres_repo import PostgresRepo  # pragma: no cover
+        from ai_core.core_engine.integrations.postgres_repo import PostgresRepo  # pragma: no cover
     return PostgresRepo(dsn=dsn)
 
 

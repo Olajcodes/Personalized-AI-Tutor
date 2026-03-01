@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core_engine.config.constants import SSSLevel, Term
+from ai_core.core_engine.config.constants import SSSLevel, Term
 
 
 class CurriculumPolicyError(ValueError):
