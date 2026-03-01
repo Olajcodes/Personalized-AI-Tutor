@@ -8,6 +8,7 @@ Logic:
 import os
 import json
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -46,8 +47,46 @@ def _parse_bool(raw_value: str | None, default: bool) -> bool:
     return default
 
 
+def _normalize_database_url(raw_value: str) -> str:
+    """Normalize database URL for known managed Postgres providers.
+
+    Supabase pooler connections commonly require `sslmode=require`.
+    This adds the query param when missing, while keeping other URLs unchanged.
+    """
+    value = (raw_value or "").strip()
+    if not value:
+        return value
+
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return value
+
+    if not parsed.scheme.startswith("postgresql"):
+        return value
+
+    host = (parsed.hostname or "").lower()
+    query_pairs = dict(parse_qsl(parsed.query, keep_blank_values=True))
+
+    if "supabase.com" in host and "sslmode" not in query_pairs:
+        query_pairs["sslmode"] = "require"
+        return urlunsplit(
+            (parsed.scheme, parsed.netloc, parsed.path, urlencode(query_pairs), parsed.fragment)
+        )
+
+    return value
+
+
 class Settings(BaseModel):
-    database_url: str = os.getenv("DATABASE_URL", "")
+    database_url: str = _normalize_database_url(os.getenv("DATABASE_URL", ""))
+    db_pool_size: int = int(os.getenv("DB_POOL_SIZE", "5"))
+    db_max_overflow: int = int(os.getenv("DB_MAX_OVERFLOW", "10"))
+    db_pool_timeout_seconds: int = int(os.getenv("DB_POOL_TIMEOUT_SECONDS", "30"))
+    db_pool_recycle_seconds: int = int(os.getenv("DB_POOL_RECYCLE_SECONDS", "300"))
+    db_connect_timeout_seconds: int = int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "10"))
+    db_keepalives_idle_seconds: int = int(os.getenv("DB_KEEPALIVES_IDLE_SECONDS", "30"))
+    db_keepalives_interval_seconds: int = int(os.getenv("DB_KEEPALIVES_INTERVAL_SECONDS", "10"))
+    db_keepalives_count: int = int(os.getenv("DB_KEEPALIVES_COUNT", "5"))
     jwt_secret: str = os.getenv("JWT_SECRET", "change_me")
     jwt_algorithm: str = os.getenv("JWT_ALGORITHM", "HS256")
     access_token_expire_minutes: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))

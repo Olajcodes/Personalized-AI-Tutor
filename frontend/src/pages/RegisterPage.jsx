@@ -21,6 +21,7 @@ const RegisterPage = () => {
 
   const rawClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
   const GOOGLE_CLIENT_ID = rawClientId.replace(/['"]/g, '').trim();
+  const hasGoogleClientId = Boolean(GOOGLE_CLIENT_ID);
 
   const handleGoogleSuccess = async (credentialResponse) => {
     setError("Google signup is not configured for this environment. Use email/password.");
@@ -165,11 +166,26 @@ const RegisterPage = () => {
             </div>
           )}
 
-          <div className="flex justify-center w-full [&>div]:w-full">
-            <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-              <GoogleLogin onSuccess={handleGoogleSuccess} onError={() => setError("Google Signup Failed.")} useOneTap theme="outline" size="large" text="signup_with" width="100%" shape="rectangular" />
-            </GoogleOAuthProvider>
-          </div>
+          {hasGoogleClientId ? (
+            <div className="flex justify-center w-full [&>div]:w-full">
+              <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={() => setError("Google Signup Failed.")}
+                  useOneTap
+                  theme="outline"
+                  size="large"
+                  text="signup_with"
+                  width="400"
+                  shape="rectangular"
+                />
+              </GoogleOAuthProvider>
+            </div>
+          ) : (
+            <div className="text-xs text-slate-400 text-center">
+              Google sign-up is disabled in this environment.
+            </div>
+          )}
 
           <div className="relative flex items-center py-2">
             <div className="flex-grow border-t border-slate-200"></div>

@@ -3,6 +3,7 @@ import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
+import OnboardingGuard from "./components/OnboardingGuard";
 
 import Navbar from "./components/Navbar";
 import TeacherSidebar from "./components/TeacherSidebar";
@@ -63,16 +64,18 @@ function App() {
           <Route path="/AssessmentSplash" element={<Navigate to="/assessmentsplash" replace />} />
           <Route path="/assessmentsplash" element={<AssessmentSplash />} />
 
-          <Route element={<StudentLayout />}>
-            <Route path="/mastery-path" element={<ExplainMistakePage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/quiz/:quizId" element={<Quizzes />} />
-            <Route path="/quiz/:quizId/in-progress" element={<InProgress />} />
-            <Route path="/quiz/:quizId/completed" element={<Completed />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/learning-path" element={<LessonPage />} />
-            <Route path="/module-quiz" element={<ModuleQuizPage />} />
-            <Route path="/quiz-result" element={<QuizResult />} />
+          <Route element={<OnboardingGuard />}>
+            <Route element={<StudentLayout />}>
+              <Route path="/mastery-path" element={<ExplainMistakePage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/quiz/:quizId" element={<Quizzes />} />
+              <Route path="/quiz/:quizId/in-progress" element={<InProgress />} />
+              <Route path="/quiz/:quizId/completed" element={<Completed />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/learning-path" element={<LessonPage />} />
+              <Route path="/module-quiz" element={<ModuleQuizPage />} />
+              <Route path="/quiz-result" element={<QuizResult />} />
+            </Route>
           </Route>
 
           <Route path="/teacher" element={<TeacherLayout />}>

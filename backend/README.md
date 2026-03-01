@@ -70,6 +70,7 @@ CURRICULUM_CONCEPT_LLM_MODEL=openai/gpt-oss-20b
 
 Notes:
 - `backend/core/config.py` loads `backend/.env` directly.
+- For Supabase pooler, use `DATABASE_URL` with `?sslmode=require` (the app also auto-adds this for `*.supabase.com` when missing).
 - Run API commands from repo root to avoid import path issues.
 - Curriculum ingestion concept mapping is deterministic by default; enable
   `CURRICULUM_CONCEPT_USE_LLM=true` to refine extracted concept labels with the configured LLM once per upload.
