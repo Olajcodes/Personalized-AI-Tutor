@@ -37,6 +37,36 @@ def test_collect_supported_files_handles_docx_and_txt(tmp_path: Path):
     assert skipped_names == ["three.pdf"]
 
 
+def test_extract_document_chunks_builds_scoped_concepts(tmp_path: Path):
+    topic_id = uuid4()
+    topic = SimpleNamespace(id=topic_id, title="Linear Equations")
+
+    text_file = tmp_path / "linear_equations_notes.txt"
+    text_file.write_text(
+        "LINEAR EQUATIONS\n"
+        "Definition and examples.\n"
+        "\n"
+        "SIMULTANEOUS EQUATIONS\n"
+        "Elimination and substitution methods.\n",
+        encoding="utf-8",
+    )
+
+    service = AdminCurriculumService(db=object())
+    parsed = service._extract_document_chunks(
+        file_path=text_file,
+        scope_topics=[topic],
+        subject="math",
+        sss_level="SSS1",
+        term=1,
+    )
+
+    assert parsed is not None
+    assert parsed.topic_id == topic_id
+    assert parsed.concept_sections
+    assert all(section.concept_id.startswith("math:sss1:t1:") for section in parsed.concept_sections)
+    assert all(section.chunks for section in parsed.concept_sections)
+
+
 def test_get_ingestion_status_maps_repository_rows(monkeypatch):
     service = AdminCurriculumService(db=object())
     now = datetime.now(timezone.utc)

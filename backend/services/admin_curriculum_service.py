@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import os
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -46,17 +48,26 @@ class AdminCurriculumNotFoundError(LookupError):
 
 
 @dataclass(frozen=True)
+class ConceptSection:
+    concept_id: str
+    concept_label: str
+    prereq_concept_ids: list[str]
+    confidence: float
+    chunks: list[str]
+
+
+@dataclass(frozen=True)
 class ChunkedDocument:
     source_id: str
     topic_id: UUID
     topic_title: str
-    concept_id: str
-    chunks: list[str]
+    concept_sections: list[ConceptSection]
 
 
 class AdminCurriculumService:
     CHUNK_WORD_SIZE = 190
     CHUNK_OVERLAP_WORDS = 40
+    MAX_CONCEPTS_PER_DOC = 12
     _CHUNK_NAMESPACE = UUID("f5cfde7f-0b62-46bf-bf17-838311a90be4")
 
     def __init__(self, db: Session):
@@ -74,6 +85,12 @@ class AdminCurriculumService:
     @staticmethod
     def _normalize_text(value: str) -> str:
         return re.sub(r"\s+", " ", value or "").strip().lower()
+
+    @staticmethod
+    def _is_truthy_env(value: str | None) -> bool:
+        if value is None:
+            return False
+        return value.strip().lower() in {"1", "true", "yes", "on"}
 
     @classmethod
     def _is_heading(cls, line: str) -> bool:
@@ -103,22 +120,155 @@ class AdminCurriculumService:
         return chunks
 
     @classmethod
-    def _split_sections(cls, text: str) -> list[str]:
+    def _split_sections(cls, text: str) -> list[tuple[str, str]]:
         lines = [line.strip() for line in text.splitlines() if line.strip()]
         if not lines:
             return []
 
-        sections: list[str] = []
+        sections: list[tuple[str, str]] = []
+        current_heading = ""
         buffer: list[str] = []
         for line in lines:
             if cls._is_heading(line) and buffer:
-                sections.append("\n".join(buffer))
+                sections.append((current_heading, "\n".join(buffer)))
+                current_heading = line
                 buffer = [line]
             else:
+                if cls._is_heading(line):
+                    current_heading = line
                 buffer.append(line)
         if buffer:
-            sections.append("\n".join(buffer))
+            sections.append((current_heading, "\n".join(buffer)))
         return sections
+
+    @staticmethod
+    def _slugify(value: str, *, max_length: int = 48) -> str:
+        slug = re.sub(r"[^a-z0-9]+", "-", (value or "").lower()).strip("-")
+        slug = re.sub(r"-{2,}", "-", slug)
+        if not slug:
+            slug = "concept"
+        return slug[:max_length].strip("-") or "concept"
+
+    @classmethod
+    def _section_label(cls, *, heading: str, section_text: str, topic_title: str, index: int) -> str:
+        clean_heading = re.sub(r"^[\d\W_]+", "", (heading or "")).strip(" -:\t")
+        if clean_heading:
+            return clean_heading
+
+        sentence = re.split(r"[.!?]", section_text)[0].strip()
+        if sentence:
+            words = sentence.split()
+            trimmed = " ".join(words[:8]).strip()
+            if len(trimmed) >= 4:
+                return trimmed
+        return f"{topic_title} concept {index + 1}"
+
+    @classmethod
+    def _scoped_concept_ids(
+        cls,
+        *,
+        labels: list[str],
+        subject: str,
+        sss_level: str,
+        term: int,
+    ) -> list[str]:
+        ids: list[str] = []
+        seen: dict[str, int] = {}
+        scope_prefix = f"{subject}:{sss_level.lower()}:t{term}"
+        for label in labels:
+            slug = cls._slugify(label)
+            base = f"{scope_prefix}:{slug}"[:120]
+            sequence = seen.get(base, 0) + 1
+            seen[base] = sequence
+            concept_id = base if sequence == 1 else f"{base}-{sequence}"
+            ids.append(concept_id[:128])
+        return ids
+
+    @staticmethod
+    def _extract_json_object(raw: str) -> dict | None:
+        content = (raw or "").strip()
+        if not content:
+            return None
+        try:
+            parsed = json.loads(content)
+            return parsed if isinstance(parsed, dict) else None
+        except json.JSONDecodeError:
+            pass
+        match = re.search(r"\{[\s\S]*\}", content)
+        if not match:
+            return None
+        try:
+            parsed = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+
+    def _maybe_refine_concept_labels_with_llm(
+        self,
+        *,
+        topic_title: str,
+        subject: str,
+        sss_level: str,
+        term: int,
+        labels: list[str],
+    ) -> list[str]:
+        if not labels:
+            return labels
+        if not self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_USE_LLM")):
+            return labels
+
+        provider = os.getenv("LLM_PROVIDER", "groq").strip().lower()
+        model = os.getenv("CURRICULUM_CONCEPT_LLM_MODEL", os.getenv("LLM_MODEL", "openai/gpt-oss-20b")).strip()
+
+        api_key = (
+            os.getenv("GROQ_API_KEY")
+            if provider == "groq"
+            else (os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY"))
+        )
+        if not api_key:
+            return labels
+
+        try:
+            from openai import OpenAI
+        except ModuleNotFoundError:
+            return labels
+
+        base_url = ""
+        if provider == "groq":
+            base_url = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1").strip()
+        elif provider not in {"openai", ""} and os.getenv("LLM_API_BASE"):
+            base_url = os.getenv("LLM_API_BASE", "").strip()
+
+        try:
+            client = OpenAI(api_key=api_key, base_url=base_url or None)
+            prompt = (
+                "You are normalizing curriculum concept labels.\n"
+                f"Scope: {subject} {sss_level} term {term}. Topic: {topic_title}.\n"
+                "Given candidate labels, return compact pedagogical concept names in JSON only.\n"
+                "Keep meaning unchanged. Do not add or remove items.\n"
+                'Return format: {"concepts":["..."]}\n'
+                f"Candidates: {json.dumps(labels, ensure_ascii=True)}"
+            )
+            response = client.chat.completions.create(
+                model=model,
+                temperature=0,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            content = ""
+            if response.choices:
+                content = str(response.choices[0].message.content or "")
+            parsed = self._extract_json_object(content)
+            if not parsed:
+                return labels
+            concepts = parsed.get("concepts")
+            if not isinstance(concepts, list) or len(concepts) != len(labels):
+                return labels
+            cleaned = [re.sub(r"\s+", " ", str(item)).strip() for item in concepts]
+            if not all(cleaned):
+                return labels
+            return cleaned
+        except Exception:
+            return labels
 
     @staticmethod
     def _read_docx(path: Path) -> str:
@@ -207,6 +357,9 @@ class AdminCurriculumService:
         *,
         file_path: Path,
         scope_topics: list,
+        subject: str,
+        sss_level: str,
+        term: int,
     ) -> ChunkedDocument | None:
         if file_path.suffix.lower() == ".docx":
             text = self._read_docx(file_path)
@@ -225,22 +378,63 @@ class AdminCurriculumService:
             return None
         topic_id, topic_title = match
 
-        chunks: list[str] = []
-        sections = self._split_sections(text)
-        if not sections:
-            sections = [text]
-        for section in sections:
-            section_chunks = self._chunk_text(section)
-            chunks.extend(section_chunks)
-        if not chunks:
+        section_pairs = self._split_sections(text)
+        if not section_pairs:
+            section_pairs = [("", text)]
+
+        section_payloads: list[tuple[str, str, list[str], float]] = []
+        for index, (heading, section_text) in enumerate(section_pairs):
+            section_chunks = self._chunk_text(section_text)
+            if not section_chunks:
+                continue
+            label = self._section_label(
+                heading=heading,
+                section_text=section_text,
+                topic_title=topic_title,
+                index=index,
+            )
+            confidence = 0.9 if heading else 0.72
+            section_payloads.append((heading, label, section_chunks, confidence))
+
+        if not section_payloads:
             return None
+
+        # Keep ingestion bounded for very long notes.
+        section_payloads = section_payloads[: self.MAX_CONCEPTS_PER_DOC]
+        labels = [item[1] for item in section_payloads]
+        labels = self._maybe_refine_concept_labels_with_llm(
+            topic_title=topic_title,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+            labels=labels,
+        )
+        concept_ids = self._scoped_concept_ids(
+            labels=labels,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+        )
+
+        concept_sections: list[ConceptSection] = []
+        for index, (_, label, chunks, confidence) in enumerate(section_payloads):
+            concept_id = concept_ids[index]
+            prereqs = [concept_ids[index - 1]] if index > 0 else []
+            concept_sections.append(
+                ConceptSection(
+                    concept_id=concept_id,
+                    concept_label=label,
+                    prereq_concept_ids=prereqs,
+                    confidence=confidence,
+                    chunks=chunks,
+                )
+            )
 
         return ChunkedDocument(
             source_id=file_path.name,
             topic_id=topic_id,
             topic_title=topic_title,
-            concept_id=str(topic_id),
-            chunks=chunks,
+            concept_sections=concept_sections,
         )
 
     def upload_curriculum(
@@ -305,11 +499,18 @@ class AdminCurriculumService:
         try:
             chunk_rows: list[dict] = []
             mapped_topic_ids: set[UUID] = set()
+            mapped_concept_ids: set[str] = set()
             processed_file_count = 0
             processed_chunks = 0
 
             for index, file_path in enumerate(supported_files, start=1):
-                parsed = self._extract_document_chunks(file_path=file_path, scope_topics=scope_topics)
+                parsed = self._extract_document_chunks(
+                    file_path=file_path,
+                    scope_topics=scope_topics,
+                    subject=payload.subject,
+                    sss_level=payload.sss_level,
+                    term=payload.term,
+                )
                 if parsed is None:
                     self.repo.append_ingestion_log(
                         job,
@@ -321,38 +522,41 @@ class AdminCurriculumService:
 
                 processed_file_count += 1
                 mapped_topic_ids.add(parsed.topic_id)
-                self.repo.upsert_topic_map(
-                    version_id=version.id,
-                    topic_id=parsed.topic_id,
-                    concept_id=parsed.concept_id,
-                    prereq_concept_ids=[],
-                    confidence=0.75,
-                    is_manual_override=False,
-                    created_by=actor_user_id,
-                )
-
-                for chunk_index, chunk_text in enumerate(parsed.chunks):
-                    deterministic_id = uuid5(
-                        self._CHUNK_NAMESPACE,
-                        f"{version.id}:{parsed.source_id}:{parsed.topic_id}:{chunk_index}",
+                for concept in parsed.concept_sections:
+                    mapped_concept_ids.add(concept.concept_id)
+                    self.repo.upsert_topic_map(
+                        version_id=version.id,
+                        topic_id=parsed.topic_id,
+                        concept_id=concept.concept_id,
+                        prereq_concept_ids=list(concept.prereq_concept_ids),
+                        confidence=float(concept.confidence),
+                        is_manual_override=False,
+                        created_by=actor_user_id,
                     )
-                    chunk_payload = {
-                        "chunk_id": str(deterministic_id),
-                        "source_id": parsed.source_id,
-                        "text": chunk_text,
-                        "subject": payload.subject,
-                        "sss_level": payload.sss_level,
-                        "term": payload.term,
-                        "topic_id": str(parsed.topic_id),
-                        "topic_title": parsed.topic_title,
-                        "concept_id": parsed.concept_id,
-                        "curriculum_version_id": str(version.id),
-                        "approved": False,
-                        "chunk_index": chunk_index,
-                    }
-                    chunk_rows.append({"id": deterministic_id, "text": chunk_text, "payload": chunk_payload})
 
-                processed_chunks += len(parsed.chunks)
+                    for chunk_index, chunk_text in enumerate(concept.chunks):
+                        deterministic_id = uuid5(
+                            self._CHUNK_NAMESPACE,
+                            f"{version.id}:{parsed.source_id}:{parsed.topic_id}:{concept.concept_id}:{chunk_index}",
+                        )
+                        chunk_payload = {
+                            "chunk_id": str(deterministic_id),
+                            "source_id": parsed.source_id,
+                            "text": chunk_text,
+                            "subject": payload.subject,
+                            "sss_level": payload.sss_level,
+                            "term": payload.term,
+                            "topic_id": str(parsed.topic_id),
+                            "topic_title": parsed.topic_title,
+                            "concept_id": concept.concept_id,
+                            "concept_label": concept.concept_label,
+                            "curriculum_version_id": str(version.id),
+                            "approved": False,
+                            "chunk_index": chunk_index,
+                        }
+                        chunk_rows.append({"id": deterministic_id, "text": chunk_text, "payload": chunk_payload})
+
+                    processed_chunks += len(concept.chunks)
                 progress = int((index / max(len(supported_files), 1)) * 55)
                 self.repo.update_ingestion_job(
                     job,
@@ -391,6 +595,7 @@ class AdminCurriculumService:
                 {
                     "processed_files_count": processed_file_count,
                     "processed_chunks_count": processed_chunks,
+                    "processed_concepts_count": len(mapped_concept_ids),
                     "indexed_at": datetime.now(timezone.utc).isoformat(),
                     "affected_topics": affected_topics,
                 }
