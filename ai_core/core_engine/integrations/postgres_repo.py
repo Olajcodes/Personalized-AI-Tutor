@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from uuid import UUID
 from typing import Any, Dict, List
 
 
@@ -23,30 +24,100 @@ class PostgresRepo:
 
         return psycopg.connect(self.dsn)
 
+    @staticmethod
+    def _is_uuid(value: str) -> bool:
+        try:
+            UUID(str(value))
+            return True
+        except (TypeError, ValueError):
+            return False
+
     def list_topics(self, *, subject_id: str, sss_level: str, term: int) -> List[Dict[str, Any]]:
-        """Return approved topic IDs and titles for a subject/level/term scope."""
-        sql = """
-            SELECT id::text AS id, title
-            FROM topics
-            WHERE subject_id = %s::uuid
-              AND sss_level = %s
-              AND term = %s
-              AND is_approved = TRUE
-            ORDER BY title ASC
+        """Return approved topic IDs and titles for a subject/level/term scope.
+
+        `subject_id` may be either:
+        - subject UUID
+        - subject slug (`math|english|civic`)
         """
+        sql = """
+            SELECT t.id::text AS id, t.title
+            FROM topics t
+            JOIN subjects s ON s.id = t.subject_id
+            WHERE (
+                t.subject_id::text = %s
+                OR s.slug = %s
+            )
+              AND t.sss_level = %s
+              AND t.term = %s
+              AND t.is_approved = TRUE
+            ORDER BY t.title ASC
+        """
+        normalized_subject = str(subject_id).strip().lower()
         try:
             with self._connect() as conn:
                 with conn.cursor() as cursor:
-                    cursor.execute(sql, (subject_id, sss_level, term))
+                    cursor.execute(sql, (str(subject_id), normalized_subject, sss_level, term))
                     rows = cursor.fetchall()
         except Exception as exc:
             raise PostgresRepoError(f"Failed to list scoped topics: {exc}") from exc
 
         return [{"id": row[0], "title": row[1]} for row in rows]
 
+    def list_scope_concepts(
+        self,
+        *,
+        subject: str,
+        sss_level: str,
+        term: int,
+        topic_id: str | None = None,
+        limit: int = 200,
+    ) -> List[str]:
+        """Return concept IDs mapped to a curriculum scope.
+
+        Priority is confidence-based when explicit mappings exist.
+        """
+        scoped_topic_id = str(topic_id).strip() if topic_id else None
+        if scoped_topic_id and not self._is_uuid(scoped_topic_id):
+            scoped_topic_id = None
+
+        topic_filter_sql = "AND t.id = %s::uuid" if scoped_topic_id else ""
+        sql = f"""
+            SELECT m.concept_id
+            FROM curriculum_topic_maps m
+            JOIN topics t ON t.id = m.topic_id
+            JOIN subjects s ON s.id = t.subject_id
+            WHERE s.slug = %s
+              AND t.sss_level = %s
+              AND t.term = %s
+              AND t.is_approved = TRUE
+              {topic_filter_sql}
+            GROUP BY m.concept_id
+            ORDER BY MAX(m.confidence) DESC, m.concept_id ASC
+            LIMIT %s
+        """
+
+        params: list[Any] = [subject.strip().lower(), sss_level, term]
+        if scoped_topic_id:
+            params.append(scoped_topic_id)
+        params.append(max(1, min(int(limit), 500)))
+
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(sql, tuple(params))
+                    rows = cursor.fetchall()
+        except Exception as exc:
+            raise PostgresRepoError(f"Failed to list scoped concept IDs: {exc}") from exc
+
+        return [str(row[0]) for row in rows if row and row[0]]
+
     def list_learning_objective_ids(self, *, topic_ids: List[str]) -> List[str]:
         """Return concept IDs mapped to supplied topic IDs."""
         if not topic_ids:
+            return []
+
+        valid_topic_ids = [str(topic_id) for topic_id in topic_ids if self._is_uuid(str(topic_id))]
+        if not valid_topic_ids:
             return []
 
         sql = """
@@ -59,15 +130,56 @@ class PostgresRepo:
         try:
             with self._connect() as conn:
                 with conn.cursor() as cursor:
-                    cursor.execute(sql, (topic_ids,))
+                    cursor.execute(sql, (valid_topic_ids,))
                     rows = cursor.fetchall()
         except Exception as exc:
             raise PostgresRepoError(f"Failed to list learning objective IDs: {exc}") from exc
 
         return [str(row[0]) for row in rows if row[0]]
 
+    def list_topic_concepts(
+        self,
+        *,
+        topic_id: str,
+    ) -> List[str]:
+        """Return concept IDs mapped to a single topic."""
+        return self.list_learning_objective_ids(topic_ids=[topic_id])
+
+    def find_topic_id_for_concept(
+        self,
+        *,
+        concept_id: str,
+        subject: str,
+        sss_level: str,
+        term: int,
+    ) -> str | None:
+        """Resolve a recommended topic ID from concept mapping for a scope."""
+        sql = """
+            SELECT t.id::text AS topic_id
+            FROM curriculum_topic_maps m
+            JOIN topics t ON t.id = m.topic_id
+            JOIN subjects s ON s.id = t.subject_id
+            WHERE m.concept_id = %s
+              AND s.slug = %s
+              AND t.sss_level = %s
+              AND t.term = %s
+              AND t.is_approved = TRUE
+            ORDER BY m.confidence DESC, m.updated_at DESC
+            LIMIT 1
+        """
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(sql, (concept_id, subject, sss_level, term))
+                    row = cursor.fetchone()
+        except Exception as exc:
+            raise PostgresRepoError(f"Failed to resolve topic for concept: {exc}") from exc
+        return str(row[0]) if row and row[0] else None
+
     def _resolve_subject_slug(self, cursor, subject_id: str) -> str:
         """Resolve subject slug from ID; fallback to provided value if already slug."""
+        if not self._is_uuid(subject_id):
+            return str(subject_id).strip().lower()
         sql = "SELECT slug FROM subjects WHERE id = %s::uuid LIMIT 1"
         cursor.execute(sql, (subject_id,))
         row = cursor.fetchone()
