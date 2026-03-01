@@ -29,3 +29,11 @@ That function performs, in order:
 ## Service Endpoints (Container Runtime)
 - `GET /` -> service status
 - `GET /health` -> config presence checks for LLM/Postgres/Neo4j/Redis/Vector settings
+
+## Environment Loading
+- `ai_core` now auto-loads `ai_core/.env` at startup.
+- `POSTGRES_DSN` is the ai-core Postgres variable (separate name from backend `DATABASE_URL`).
+- If `POSTGRES_DSN` is not set, ai-core falls back to `DATABASE_URL`.
+- If both services should use the same shared DB, set:
+  - backend `DATABASE_URL=<shared_postgres_url>`
+  - ai-core `POSTGRES_DSN=<shared_postgres_url>`

@@ -17,6 +17,7 @@ async def test_generate_quiz_questions_returns_correct_structure():
     num_questions = 3
 
     questions = await generate_quiz_questions(
+        student_id=uuid.uuid4(),
         subject=subject,
         sss_level=sss_level,
         term=term,

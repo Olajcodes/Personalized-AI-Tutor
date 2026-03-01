@@ -7,6 +7,13 @@ In FastAPI, import `get_settings()` once at startup and pass settings downstream
 from __future__ import annotations
 from dataclasses import dataclass
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+
+_ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
+load_dotenv(dotenv_path=_ENV_PATH)
 
 
 @dataclass(frozen=True)
@@ -43,12 +50,13 @@ def _bool(name: str, default: bool) -> bool:
 
 def get_settings() -> Settings:
     vector_collection = os.getenv("QDRANT_COLLECTION") or os.getenv("VECTOR_INDEX_NAME", "MasteryAI")
+    postgres_dsn = os.getenv("POSTGRES_DSN") or os.getenv("DATABASE_URL", "")
     return Settings(
         llm_provider=os.getenv("LLM_PROVIDER", "openai"),
         llm_model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
         llm_api_key=os.getenv("LLM_API_KEY"),
         groq_api_key=os.getenv("GROQ_API_KEY"),
-        postgres_dsn=os.getenv("POSTGRES_DSN", ""),
+        postgres_dsn=postgres_dsn,
         neo4j_uri=os.getenv("NEO4J_URI", ""),
         neo4j_user=os.getenv("NEO4J_USER", ""),
         neo4j_password=os.getenv("NEO4J_PASSWORD", ""),
