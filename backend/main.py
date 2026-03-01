@@ -6,6 +6,9 @@ Logic:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# Load ORM model registry once at startup so relationship() string refs resolve.
+import backend.models  # noqa: F401
+
 from backend.core.config import settings
 from backend.endpoints.auth import router as auth_router
 from backend.endpoints.lessons import router as lessons_router
