@@ -2,20 +2,29 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
+from types import SimpleNamespace
 
 from backend.main import app
-from backend.core.database import get_db
+from backend.core.auth import get_current_user
 from backend.services.quiz_generate_service import QuizGenerateService
 from backend.services.quiz_submit_service import QuizSubmitService
 from backend.services.quiz_results_service import QuizResultsService
 
 client = TestClient(app)
+STUDENT_ID = uuid4()
 
 
 @pytest.fixture
 def mock_db():
     # Override dependency if needed, but we'll mock services
     pass
+
+
+@pytest.fixture(autouse=True)
+def override_auth():
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=STUDENT_ID)
+    yield
+    app.dependency_overrides.pop(get_current_user, None)
 
 
 def test_generate_quiz_endpoint():
@@ -40,7 +49,7 @@ def test_generate_quiz_endpoint():
         response = client.post(
             "/api/v1/learning/quizzes/generate",
             json={
-                "student_id": str(uuid4()),
+                "student_id": str(STUDENT_ID),
                 "subject": "math",
                 "sss_level": "SSS2",
                 "term": 1,
@@ -66,7 +75,7 @@ def test_submit_quiz_endpoint():
         response = client.post(
             f"/api/v1/learning/quizzes/{quiz_id}/submit",
             json={
-                "student_id": str(uuid4()),
+                "student_id": str(STUDENT_ID),
                 "answers": [{"question_id": str(uuid4()), "answer": "A"}],
                 "time_taken_seconds": 120,
             },
@@ -77,7 +86,7 @@ def test_submit_quiz_endpoint():
 
 def test_get_results_endpoint():
     quiz_id = uuid4()
-    student_id = uuid4()
+    student_id = STUDENT_ID
     attempt_id = uuid4()
     mock_response = {
         "score": 80.0,
