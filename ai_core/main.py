@@ -5,10 +5,12 @@ from __future__ import annotations
 import os
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import UUID
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
 
 from ai_core.core_engine.orchestration.quiz_engine import (
     generate_quiz_questions,
@@ -35,6 +37,9 @@ from ai_core.core_engine.api_contracts.quiz_schemas import (
 )
 
 app = FastAPI(title="Mastery AI Core", version="0.1.0")
+
+_ENV_PATH = Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=_ENV_PATH)
 
 
 def _parse_cors_origins(raw_value: str) -> list[str]:
@@ -70,9 +75,10 @@ def root():
 @app.get("/health")
 def health():
     llm_key_present = bool(os.getenv("GROQ_API_KEY") or os.getenv("LLM_API_KEY"))
+    postgres_dsn_present = bool(os.getenv("POSTGRES_DSN") or os.getenv("DATABASE_URL"))
     checks = {
         "llm_api_key": "configured" if llm_key_present else "not_configured",
-        "postgres_dsn": "configured" if os.getenv("POSTGRES_DSN") else "not_configured",
+        "postgres_dsn": "configured" if postgres_dsn_present else "not_configured",
         "neo4j_uri": "configured" if os.getenv("NEO4J_URI") else "not_configured",
         "redis_url": "configured" if os.getenv("REDIS_URL") else "not_configured",
         "qdrant_url": "configured" if os.getenv("QDRANT_URL") else "not_configured",
