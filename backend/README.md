@@ -61,11 +61,18 @@ NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=your-password
 USE_NEO4J_GRAPH=false
+LLM_PROVIDER=groq
+LLM_MODEL=openai/gpt-oss-20b
+GROQ_API_KEY=<optional-for-concept-mapping>
+CURRICULUM_CONCEPT_USE_LLM=false
+CURRICULUM_CONCEPT_LLM_MODEL=openai/gpt-oss-20b
 ```
 
 Notes:
 - `backend/core/config.py` loads `backend/.env` directly.
 - Run API commands from repo root to avoid import path issues.
+- Curriculum ingestion concept mapping is deterministic by default; enable
+  `CURRICULUM_CONCEPT_USE_LLM=true` to refine extracted concept labels with the configured LLM once per upload.
 
 ## Install Dependencies
 
@@ -257,6 +264,18 @@ Base prefix: `/api/v1`
 - `GET /teachers/classes/{class_id}/students/{student_id}/timeline`
 - `POST /teachers/assignments`
 - `POST /teachers/interventions`
+- `POST /admin/curriculum/upload`
+- `GET /admin/curriculum/ingestion-status`
+- `GET /admin/curriculum/pending-approvals`
+- `GET /admin/curriculum/topics/{topic_id}`
+- `GET /admin/curriculum/concepts/{concept_id}`
+- `PUT /admin/curriculum/topics/{topic_id}/map`
+- `POST /admin/curriculum/versions/{version_id}/approve`
+- `POST /admin/curriculum/versions/{version_id}/rollback`
+- `GET /admin/governance/metrics`
+- `GET /admin/governance/hallucinations`
+- `POST /admin/governance/hallucinations/{hallucination_id}/resolve`
+- `POST /internal/rag/retrieve`
 
 ## Shared DB Test Runbook (Team Standard)
 
@@ -805,3 +824,38 @@ Smoke test steps:
 10. Integration note:
    - set `TEST_DATABASE_URL=postgresql://...`
    - run `python -m pytest -q backend/tests/integration/test_section6_teacher_flow.py`
+
+### Section 8 - Demo Freeze and E2E Validation
+
+Run deterministic demo seed:
+
+```bash
+python -m backend.scripts.seed_demo_data
+```
+
+Reset deterministic demo seed:
+
+```bash
+python -m backend.scripts.reset_demo_state
+```
+
+Run release-gate validation checks from Python shell:
+
+```python
+from backend.core.database import SessionLocal
+from backend.services.demo_validation_service import DemoValidationService
+
+db = SessionLocal()
+try:
+    print(DemoValidationService(db).validate())
+finally:
+    db.close()
+```
+
+Run section-8 E2E tests (requires `TEST_DATABASE_URL`):
+
+```bash
+python -m pytest -q backend/tests/integration/test_e2e_student_flow.py
+python -m pytest -q backend/tests/integration/test_e2e_teacher_flow.py
+python -m pytest -q backend/tests/integration/test_e2e_admin_flow.py
+```
