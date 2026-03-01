@@ -108,7 +108,7 @@ const SubjectSelection = () => {
         subjects: selectedSubjects,
         term: selectedScope.term,
       });
-      navigate("/LearningPreferences");
+      navigate("/learningpreferences");
     } catch (err) {
       setError(err.message || "Failed to setup profile.");
     } finally {

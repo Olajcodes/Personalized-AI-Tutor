@@ -54,14 +54,14 @@ function App() {
         <Route path="/register" element={<RegisterPage />} />
 
         <Route element={<ProtectedRoute />}>
-          <Route path="/classselection" element={<Navigate to="/ClassSelection" replace />} />
-          <Route path="/ClassSelection" element={<ClassSelection />} />
-          <Route path="/subjectselection" element={<Navigate to="/SubjectSelection" replace />} />
-          <Route path="/SubjectSelection" element={<SubjectSelection />} />
-          <Route path="/learningpreferences" element={<Navigate to="/LearningPreferences" replace />} />
-          <Route path="/LearningPreferences" element={<LearningPreferences />} />
-          <Route path="/assessmentsplash" element={<Navigate to="/AssessmentSplash" replace />} />
-          <Route path="/AssessmentSplash" element={<AssessmentSplash />} />
+          <Route path="/ClassSelection" element={<Navigate to="/classselection" replace />} />
+          <Route path="/classselection" element={<ClassSelection />} />
+          <Route path="/SubjectSelection" element={<Navigate to="/subjectselection" replace />} />
+          <Route path="/subjectselection" element={<SubjectSelection />} />
+          <Route path="/LearningPreferences" element={<Navigate to="/learningpreferences" replace />} />
+          <Route path="/learningpreferences" element={<LearningPreferences />} />
+          <Route path="/AssessmentSplash" element={<Navigate to="/assessmentsplash" replace />} />
+          <Route path="/assessmentsplash" element={<AssessmentSplash />} />
 
           <Route element={<StudentLayout />}>
             <Route path="/mastery-path" element={<ExplainMistakePage />} />
@@ -79,9 +79,11 @@ function App() {
             <Route index element={<Navigate to="analytics" replace />} />
             <Route path="analytics" element={<ConceptAnalyticsPage />} />
           </Route>
+
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
 
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </AuthProvider>
   );

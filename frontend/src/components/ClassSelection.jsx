@@ -62,7 +62,7 @@ const ClassSelection = () => {
     setIsLoading(true);
     const scope = { sss_level: selectedGrade, term: Number(selectedTerm) };
     localStorage.setItem("mastery_onboarding_scope", JSON.stringify(scope));
-    navigate("/SubjectSelection", { state: scope });
+    navigate("/subjectselection", { state: scope });
     setIsLoading(false);
   };
 

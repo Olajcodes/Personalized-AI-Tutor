@@ -92,7 +92,7 @@ const RegisterPage = () => {
       if (studentId) localStorage.setItem("mastery_student_id", studentId);
 
       login(loginData);
-      navigate('/ClassSelection');
+      navigate('/classselection');
 
     } catch (err) {
       console.error("Signup Error:", err);

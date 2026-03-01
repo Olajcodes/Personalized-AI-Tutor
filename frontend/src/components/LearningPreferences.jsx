@@ -79,7 +79,7 @@ const LearningPreferences = () => {
         );
 
       await api.updatePreferences(token, userId, merged);
-      navigate("/AssessmentSplash");
+      navigate("/assessmentsplash");
     } catch (err) {
       setError(err.message || "Failed to save preferences.");
     } finally {
@@ -139,7 +139,7 @@ const LearningPreferences = () => {
         </div>
 
         <div className="border-t pt-8 flex items-center justify-between" style={{ borderColor: "#E5E7EB" }}>
-          <button type="button" onClick={() => navigate("/SubjectSelection")} disabled={isLoading} className="flex items-center gap-2 font-bold transition-colors hover:opacity-70 text-sm" style={{ color: "#6B7280", cursor: "pointer" }}>
+          <button type="button" onClick={() => navigate("/subjectselection")} disabled={isLoading} className="flex items-center gap-2 font-bold transition-colors hover:opacity-70 text-sm" style={{ color: "#6B7280", cursor: "pointer" }}>
             <span>←</span> Back
           </button>
 
