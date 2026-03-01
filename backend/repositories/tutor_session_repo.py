@@ -36,20 +36,31 @@ class TutorSessionRepository:
     def create_session(self, *, student_id: UUID, subject: str, term: int) -> dict:
         session_id = uuid.uuid4()
         columns = self._tutor_sessions_columns()
+        has_student_id = "student_id" in columns
+        has_student_profile_id = "student_profile_id" in columns
+        if not has_student_id and not has_student_profile_id:
+            raise ValueError("tutor_sessions schema is missing student ownership columns.")
 
-        requires_profile_id = "student_profile_id" in columns and not bool(columns["student_profile_id"]["nullable"])
+        requires_profile_id = has_student_profile_id and not bool(columns["student_profile_id"]["nullable"])
         student_profile_id = None
         if requires_profile_id:
             student_profile_id = self._resolve_student_profile_id(student_id)
             if student_profile_id is None:
                 raise ValueError("Student profile is required before starting tutor session.")
 
-        insert_columns = ["id", "student_id", "subject", "term", "status", "started_at", "created_at", "updated_at"]
-        insert_values = [":id", ":student_id", ":subject", ":term", "'active'", "NOW()", "NOW()", "NOW()"]
+        insert_columns = ["id", "subject", "term", "status", "started_at", "created_at", "updated_at"]
+        insert_values = [":id", ":subject", ":term", "'active'", "NOW()", "NOW()", "NOW()"]
 
-        if "student_profile_id" in columns:
+        if has_student_id:
+            insert_columns.insert(1, "student_id")
+            insert_values.insert(1, ":student_id")
+        if has_student_profile_id:
             insert_columns.insert(1, "student_profile_id")
             insert_values.insert(1, ":student_profile_id")
+
+        returning_cols = ["id", "subject", "term", "started_at"]
+        if has_student_id:
+            returning_cols.insert(1, "student_id")
 
         sql = f"""
                 INSERT INTO tutor_sessions (
@@ -58,7 +69,7 @@ class TutorSessionRepository:
                 VALUES (
                     {", ".join(insert_values)}
                 )
-                RETURNING id, student_id, subject, term, started_at
+                RETURNING {", ".join(returning_cols)}
                 """
 
         params = {
@@ -74,18 +85,30 @@ class TutorSessionRepository:
             params,
         ).mappings().first()
         self.db.commit()
-        return dict(row) if row else {}
+        payload = dict(row) if row else {}
+        if payload and "student_id" not in payload:
+            payload["student_id"] = student_id
+        return payload
 
     def session_exists_for_student(self, *, session_id: UUID, student_id: UUID) -> bool:
-        row = self.db.execute(
-            text(
-                """
+        columns = self._tutor_sessions_columns()
+        if "student_id" in columns:
+            sql = """
                 SELECT 1
                 FROM tutor_sessions
                 WHERE id = :session_id
                   AND student_id = :student_id
-                """
-            ),
+            """
+        else:
+            sql = """
+                SELECT 1
+                FROM tutor_sessions ts
+                JOIN student_profiles sp ON sp.id = ts.student_profile_id
+                WHERE ts.id = :session_id
+                  AND sp.student_id = :student_id
+            """
+        row = self.db.execute(
+            text(sql),
             {"session_id": session_id, "student_id": student_id},
         ).first()
         return row is not None
@@ -135,9 +158,19 @@ class TutorSessionRepository:
         cost_usd: float | None,
         end_reason: str | None,
     ) -> dict:
+        columns = self._tutor_sessions_columns()
+        if "student_id" in columns:
+            ownership_filter = "student_id = :student_id"
+        else:
+            ownership_filter = """
+                student_profile_id IN (
+                    SELECT id FROM student_profiles WHERE student_id = :student_id
+                )
+            """
+
         row = self.db.execute(
             text(
-                """
+                f"""
                 UPDATE tutor_sessions
                 SET
                     status = 'ended',
@@ -153,7 +186,7 @@ class TutorSessionRepository:
                     end_reason = COALESCE(:end_reason, end_reason),
                     updated_at = NOW()
                 WHERE id = :session_id
-                  AND student_id = :student_id
+                  AND {ownership_filter}
                 RETURNING id, status, ended_at, duration_seconds, total_tokens, prompt_tokens, completion_tokens, cost_usd
                 """
             ),

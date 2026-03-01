@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID, uuid4
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.models.quiz import Quiz
@@ -160,3 +161,44 @@ class QuizRepository:
 
     def topic_exists(self, topic_id: UUID) -> bool:
         return self.db.query(Topic.id).filter(Topic.id == topic_id).first() is not None
+
+    def find_topic_id_for_concept(
+        self,
+        *,
+        concept_id: str,
+        subject: str,
+        sss_level: str,
+        term: int,
+    ) -> UUID | None:
+        row = self.db.execute(
+            text(
+                """
+                SELECT t.id
+                FROM curriculum_topic_maps m
+                JOIN topics t ON t.id = m.topic_id
+                JOIN subjects s ON s.id = t.subject_id
+                WHERE m.concept_id = :concept_id
+                  AND s.slug = :subject
+                  AND t.sss_level = :sss_level
+                  AND t.term = :term
+                  AND t.is_approved = TRUE
+                ORDER BY m.confidence DESC, m.updated_at DESC
+                LIMIT 1
+                """
+            ),
+            {
+                "concept_id": concept_id,
+                "subject": subject,
+                "sss_level": sss_level,
+                "term": term,
+            },
+        ).first()
+        if not row:
+            return None
+        value = row[0]
+        if isinstance(value, UUID):
+            return value
+        try:
+            return UUID(str(value))
+        except (TypeError, ValueError):
+            return None

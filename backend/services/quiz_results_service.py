@@ -65,7 +65,11 @@ class QuizResultsService:
 
         recommended_topic = None
         if weakest_concept is not None:
-            recommended_topic = await self._get_topic_for_concept(weakest_concept, fallback_topic_id=quiz.topic_id)
+            recommended_topic = await self._get_topic_for_concept(
+                weakest_concept,
+                quiz=quiz,
+                fallback_topic_id=quiz.topic_id,
+            )
 
         return QuizResultsResponse(
             score=float(attempt.score or 0.0),
@@ -74,7 +78,13 @@ class QuizResultsService:
             recommended_revision_topic_id=recommended_topic,
         )
 
-    async def _get_topic_for_concept(self, concept_id: str, fallback_topic_id: UUID | None) -> UUID | None:
+    async def _get_topic_for_concept(
+        self,
+        concept_id: str,
+        *,
+        quiz,
+        fallback_topic_id: UUID | None,
+    ) -> UUID | None:
         def _parse_uuid(value: str) -> UUID | None:
             try:
                 return UUID(value)
@@ -92,6 +102,15 @@ class QuizResultsService:
                 parsed = _parse_uuid(parts[1])
                 if parsed is not None:
                     candidates.append(parsed)
+
+        mapped_topic = self.repo.find_topic_id_for_concept(
+            concept_id=concept_id,
+            subject=str(getattr(quiz, "subject", "")).strip().lower(),
+            sss_level=str(getattr(quiz, "sss_level", "")).strip(),
+            term=int(getattr(quiz, "term", 0) or 0),
+        )
+        if mapped_topic is not None:
+            candidates.append(mapped_topic)
 
         if fallback_topic_id is not None:
             candidates.append(fallback_topic_id)

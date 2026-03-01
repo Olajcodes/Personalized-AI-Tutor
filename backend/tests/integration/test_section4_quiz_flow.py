@@ -1,11 +1,13 @@
 import os
 from uuid import uuid4
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from backend.core.auth import get_current_user
 from backend.core.database import Base, get_db
 from backend.main import app
 from backend.models.subject import Subject
@@ -83,6 +85,8 @@ def setup_database():
     db.commit()
     db.close()
 
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=student_id)
+
     yield {"student_id": student_id, "topic_id": topic_id, "subject_id": subject_id, "created_subject": created_subject}
 
     cleanup = TestingSessionLocal()
@@ -92,6 +96,7 @@ def setup_database():
     cleanup.query(User).filter(User.id == student_id).delete(synchronize_session=False)
     cleanup.commit()
     cleanup.close()
+    app.dependency_overrides.pop(get_current_user, None)
 
 
 def test_full_quiz_flow(setup_database):
