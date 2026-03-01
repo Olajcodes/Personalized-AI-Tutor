@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -87,7 +87,7 @@ def run() -> None:
                         concept_id=concept_id,
                         score=0.2,
                         source="seed",
-                        evaluated_at=datetime.utcnow(),
+                        evaluated_at=datetime.now(timezone.utc),
                     )
 
         print(f"Neo4j seed complete. scopes={seeded_scopes}, concepts={seeded_concepts}")

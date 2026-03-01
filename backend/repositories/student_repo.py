@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from uuid import UUID
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from backend.models.student import StudentProfile, StudentSubject, LearningPreference
 from backend.models.subject import Subject
@@ -96,7 +96,7 @@ class StudentRepository:
                 )
                 self.db.add(new_subject)
 
-        student.updated_at = datetime.utcnow()
+        student.updated_at = datetime.now(timezone.utc)
         self.db.commit()
         self.db.refresh(student)
         return student
@@ -121,7 +121,7 @@ class StudentRepository:
         if updates.pace:
             pref.pace = updates.pace.value
 
-        pref.updated_at = datetime.utcnow()
+        pref.updated_at = datetime.now(timezone.utc)
         self.db.commit()
         self.db.refresh(pref)
         return pref
