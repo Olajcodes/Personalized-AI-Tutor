@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from typing import List
-from core_engine.knowledge_graph.neo4j_client import Neo4jClient
+from ai_core.core_engine.knowledge_graph.neo4j_client import Neo4jClient
 
 
 class PrereqService:

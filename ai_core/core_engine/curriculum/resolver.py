@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional
 
-from core_engine.curriculum.policies import assert_sss_level_allowed, assert_term_allowed
-from core_engine.integrations.postgres_repo import PostgresRepo
+from ai_core.core_engine.curriculum.policies import assert_sss_level_allowed, assert_term_allowed
+from ai_core.core_engine.integrations.postgres_repo import PostgresRepo
 
 
 @dataclass(frozen=True)

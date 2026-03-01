@@ -7,8 +7,8 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from core_engine.integrations.postgres_repo import PostgresRepo
-from core_engine.integrations.redis_cache import RedisCache
+from ai_core.core_engine.integrations.postgres_repo import PostgresRepo
+from ai_core.core_engine.integrations.redis_cache import RedisCache
 
 
 @dataclass(frozen=True)

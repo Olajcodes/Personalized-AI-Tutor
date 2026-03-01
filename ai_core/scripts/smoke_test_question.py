@@ -1,15 +1,15 @@
-from core_engine.api_contracts.schemas import TutorRequest
-from core_engine.config.settings import get_settings
-from core_engine.curriculum.resolver import CurriculumResolver
-from core_engine.integrations.postgres_repo import PostgresRepo
-from core_engine.integrations.redis_cache import RedisCache
-from core_engine.knowledge_graph.neo4j_client import Neo4jClient
-from core_engine.knowledge_graph.prerequisites import PrereqService
-from core_engine.llm.client import LLMClient
-from core_engine.mastery.updater import MasteryUpdater
-from core_engine.observability.cost import CostTracker
-from core_engine.orchestration.tutor_engine import handle_question
-from core_engine.rag.retriever import RagRetriever
+from ai_core.core_engine.api_contracts.schemas import TutorRequest
+from ai_core.core_engine.config.settings import get_settings
+from ai_core.core_engine.curriculum.resolver import CurriculumResolver
+from ai_core.core_engine.integrations.postgres_repo import PostgresRepo
+from ai_core.core_engine.integrations.redis_cache import RedisCache
+from ai_core.core_engine.knowledge_graph.neo4j_client import Neo4jClient
+from ai_core.core_engine.knowledge_graph.prerequisites import PrereqService
+from ai_core.core_engine.llm.client import LLMClient
+from ai_core.core_engine.mastery.updater import MasteryUpdater
+from ai_core.core_engine.observability.cost import CostTracker
+from ai_core.core_engine.orchestration.tutor_engine import handle_question
+from ai_core.core_engine.rag.retriever import RagRetriever
 
 
 def main():

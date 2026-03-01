@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 import requests
 
-from core_engine.api_contracts.schemas import (
+from ai_core.core_engine.api_contracts.schemas import (
     Citation,
     TutorChatRequest,
     TutorChatResponse,
@@ -24,19 +24,19 @@ from core_engine.api_contracts.schemas import (
     TutorRequest,
     TutorResponse,
 )
-from core_engine.llm.client import LLMClient, LLMClientError
-from core_engine.observability.logging import get_logger
-from core_engine.safety.injection import sanitize_user_text
-from core_engine.safety.moderation import ModerationError, basic_moderate
+from ai_core.core_engine.llm.client import LLMClient, LLMClientError
+from ai_core.core_engine.observability.logging import get_logger
+from ai_core.core_engine.safety.injection import sanitize_user_text
+from ai_core.core_engine.safety.moderation import ModerationError, basic_moderate
 
 if TYPE_CHECKING:
-    from core_engine.config.settings import Settings
-    from core_engine.curriculum.resolver import CurriculumResolver
-    from core_engine.knowledge_graph.prerequisites import PrereqService
-    from core_engine.llm.client import LLMClient
-    from core_engine.mastery.updater import MasteryUpdater
-    from core_engine.observability.cost import CostTracker
-    from core_engine.rag.retriever import RagRetriever
+    from ai_core.core_engine.config.settings import Settings
+    from ai_core.core_engine.curriculum.resolver import CurriculumResolver
+    from ai_core.core_engine.knowledge_graph.prerequisites import PrereqService
+    from ai_core.core_engine.llm.client import LLMClient
+    from ai_core.core_engine.mastery.updater import MasteryUpdater
+    from ai_core.core_engine.observability.cost import CostTracker
+    from ai_core.core_engine.rag.retriever import RagRetriever
 
 logger = get_logger(__name__)
 
@@ -129,8 +129,8 @@ def handle_question(
     resolve scope -> retrieve chunks -> prereq hints -> LLM response -> mastery update -> logs/cost
     """
 
-    from core_engine.llm.prompts import build_tutor_prompt
-    from core_engine.rag.citations import format_citations
+    from ai_core.core_engine.llm.prompts import build_tutor_prompt
+    from ai_core.core_engine.rag.citations import format_citations
     # 1) Safety and hygiene
     user_text = request.message[: settings.max_input_chars]
     user_text = sanitize_user_text(user_text)

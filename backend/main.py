@@ -81,6 +81,11 @@ app.include_router(mastery_router, prefix=API_PREFIX)
 # Section 6 router wiring
 app.include_router(teachers_router, prefix=API_PREFIX)
 
+# Section 7 router wiring
+app.include_router(admin_curriculum_router, prefix=API_PREFIX)
+app.include_router(admin_governance_router, prefix=API_PREFIX)
+app.include_router(internal_rag_router, prefix=API_PREFIX)
+
 @app.get("/")
 async def root():
     """Health check endpoint."""

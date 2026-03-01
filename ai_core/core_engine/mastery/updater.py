@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from typing import Any, Dict, Optional
-from core_engine.integrations.postgres_repo import PostgresRepo
+from ai_core.core_engine.integrations.postgres_repo import PostgresRepo
 
 
 class MasteryUpdater:

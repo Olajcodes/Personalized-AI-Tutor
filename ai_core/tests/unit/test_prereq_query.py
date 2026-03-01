@@ -1,4 +1,4 @@
-from core_engine.knowledge_graph.prerequisites import PrereqService
+from ai_core.core_engine.knowledge_graph.prerequisites import PrereqService
 
 
 class _FakeNeo4jClient:
