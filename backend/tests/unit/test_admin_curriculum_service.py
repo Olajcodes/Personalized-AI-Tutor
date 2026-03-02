@@ -5,7 +5,11 @@ from uuid import uuid4
 
 import pytest
 
-from backend.schemas.admin_curriculum_schema import CurriculumUploadRequest
+from backend.schemas.admin_curriculum_schema import (
+    CurriculumBulkIngestRequest,
+    CurriculumUploadRequest,
+    CurriculumUploadResponse,
+)
 from backend.services.admin_curriculum_service import (
     AdminCurriculumService,
     AdminCurriculumValidationError,
@@ -88,3 +92,49 @@ def test_get_ingestion_status_maps_repository_rows(monkeypatch):
     assert len(out.jobs) == 1
     assert out.jobs[0].status == "completed"
     assert out.jobs[0].processed_chunks_count == 42
+
+
+@pytest.mark.parametrize(
+    ("path_text", "expected"),
+    [
+        ("SS1 FIRST TERM/FIRST TERM SS1 ENGLISH LANGUAGE.docx", ("english", "SSS1", 1)),
+        ("SS2 SECOND TERM/SECOND TERM SS2 MATHEMATICS.docx", ("math", "SSS2", 2)),
+        ("SS3 THIRD TERM/THIRD TERM SS3 CIVIC EDUCATION.docx", ("civic", "SSS3", 3)),
+        ("misc/unknown_file.docx", None),
+    ],
+)
+def test_infer_scope_from_file(path_text: str, expected):
+    service = AdminCurriculumService(db=object())
+    root = Path("docs")
+    inferred = service._infer_scope_from_file(root=root, file_path=root / path_text)
+    assert inferred == expected
+
+
+def test_ingest_all_from_source_root_returns_approve_ready_versions(tmp_path: Path, monkeypatch):
+    english_file = tmp_path / "SS1 FIRST TERM" / "FIRST TERM SS1 ENGLISH LANGUAGE.docx"
+    math_file = tmp_path / "SS1 FIRST TERM" / "FIRST TERM SS1 MATHEMATICS.docx"
+    english_file.parent.mkdir(parents=True, exist_ok=True)
+    english_file.write_bytes(b"fake")
+    math_file.write_bytes(b"fake")
+
+    service = AdminCurriculumService(db=object())
+
+    def _fake_upload(payload, actor_user_id):
+        return CurriculumUploadResponse(
+            version_id=uuid4(),
+            job_id=uuid4(),
+            status="pending_approval",
+            discovered_files=1,
+            skipped_files=0,
+            processed_chunks=10,
+        )
+
+    monkeypatch.setattr(service, "upload_curriculum", _fake_upload)
+
+    out = service.ingest_all_from_source_root(
+        payload=CurriculumBulkIngestRequest(source_root=str(tmp_path)),
+        actor_user_id=uuid4(),
+    )
+    assert out.discovered_scopes == 2
+    assert out.failed_scopes == 0
+    assert len(out.approve_ready_version_ids) == 2

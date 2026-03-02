@@ -11,6 +11,8 @@ from backend.core.auth import get_current_user
 from backend.core.database import get_db
 from backend.schemas.admin_curriculum_schema import (
     ConceptInspectResponse,
+    CurriculumBulkIngestRequest,
+    CurriculumBulkIngestResponse,
     CurriculumIngestionStatusResponse,
     CurriculumUploadRequest,
     CurriculumUploadResponse,
@@ -53,6 +55,28 @@ def upload_curriculum(
     _require_admin(current_user)
     try:
         return _service(db).upload_curriculum(payload=payload, actor_user_id=current_user.id)
+    except AdminCurriculumValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except AdminCurriculumServiceError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+
+
+@router.post("/ingest-all", response_model=CurriculumBulkIngestResponse, status_code=status.HTTP_201_CREATED)
+def ingest_all_curriculum(
+    payload: CurriculumBulkIngestRequest | None = Body(default=None),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Bulk-ingest all supported curriculum files under one root directory.
+
+    Files are auto-grouped by inferred scope (subject + sss_level + term) from path/name.
+    Each scope is ingested using the same pipeline as `/upload`.
+    """
+    _require_admin(current_user)
+    if payload is None:
+        payload = CurriculumBulkIngestRequest()
+    try:
+        return _service(db).ingest_all_from_source_root(payload=payload, actor_user_id=current_user.id)
     except AdminCurriculumValidationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except AdminCurriculumServiceError as exc:
