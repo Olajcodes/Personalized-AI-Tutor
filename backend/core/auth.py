@@ -1,5 +1,6 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from uuid import UUID
 
@@ -25,17 +26,23 @@ def get_current_user(
     repo = AuthRepository(db)
     user = None
 
-    user_id_claim = payload.get("user_id") or payload.get("student_id")
-    if user_id_claim:
-        try:
-            user = repo.get_user_by_id(UUID(str(user_id_claim)))
-        except (TypeError, ValueError):
-            user = None
+    try:
+        user_id_claim = payload.get("user_id") or payload.get("student_id")
+        if user_id_claim:
+            try:
+                user = repo.get_user_by_id(UUID(str(user_id_claim)))
+            except (TypeError, ValueError):
+                user = None
 
-    if user is None:
-        subject = payload.get("sub")
-        if subject:
-            user = repo.get_user_by_email(subject)
+        if user is None:
+            subject = payload.get("sub")
+            if subject:
+                user = repo.get_user_by_email(subject)
+    except SQLAlchemyError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable. Please retry.",
+        )
 
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not authorized.")
