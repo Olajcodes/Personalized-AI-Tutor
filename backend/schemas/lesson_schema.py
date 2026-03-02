@@ -20,4 +20,6 @@ class ContentBlockOut(BaseModel):
 class TopicLessonResponse(BaseModel):
     topic_id: str
     title: str
+    summary: str | None = None
+    estimated_duration_minutes: int | None = None
     content_blocks: list[ContentBlockOut]

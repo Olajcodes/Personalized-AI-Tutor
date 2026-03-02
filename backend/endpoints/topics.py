@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from backend.core.database import get_db
+from backend.models.lesson import Lesson
 from backend.models.topic import Topic
 from backend.models.subject import Subject
 from backend.models.student import StudentProfile, StudentSubject
@@ -36,21 +37,34 @@ def list_topics(
         ).all()
     ]
 
-    q = select(Topic).where(
+    q = (
+        select(Topic, Lesson)
+        .outerjoin(Lesson, Lesson.topic_id == Topic.id)
+        .where(
         Topic.is_approved.is_(True),
         Topic.sss_level == sp.sss_level,
         Topic.term == (term if term is not None else sp.active_term),
         Topic.subject_id.in_(enrolled_subject_ids),
+        )
     )
 
     if subject is not None:
         q = q.join(Subject, Subject.id == Topic.subject_id).where(Subject.slug == subject.lower())
 
-    topics = db.execute(q).scalars().all()
-    return [{
-        "topic_id": str(t.id),
-        "title": t.title,
-        "sss_level": t.sss_level,
-        "term": t.term,
-        "subject_id": str(t.subject_id),
-    } for t in topics]
+    q = q.order_by(Topic.created_at.asc(), Topic.title.asc())
+    rows = db.execute(q).all()
+    payload = []
+    for topic, lesson in rows:
+        payload.append(
+            {
+                "topic_id": str(topic.id),
+                "title": topic.title,
+                "description": topic.description,
+                "lesson_title": lesson.title if lesson else None,
+                "estimated_duration_minutes": lesson.estimated_duration_minutes if lesson else None,
+                "sss_level": topic.sss_level,
+                "term": topic.term,
+                "subject_id": str(topic.subject_id),
+            }
+        )
+    return payload
