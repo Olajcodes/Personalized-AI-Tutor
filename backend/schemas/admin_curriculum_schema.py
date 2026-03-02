@@ -50,6 +50,45 @@ class CurriculumUploadResponse(BaseModel):
     processed_chunks: int
 
 
+class CurriculumBulkIngestRequest(BaseModel):
+    """Bulk-ingest all curriculum files found under one root directory."""
+
+    source_root: str = Field(default="docs/SSS_NOTES_2026", min_length=1, max_length=500)
+
+    @field_validator("source_root")
+    @classmethod
+    def validate_source_root(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("source_root cannot be empty")
+        return normalized
+
+
+class CurriculumBulkScopeResult(BaseModel):
+    subject: SubjectLiteral
+    sss_level: SSSLevelLiteral
+    term: int
+    files_count: int
+    version_id: UUID | None = None
+    job_id: UUID | None = None
+    status: CurriculumVersionStatus | Literal["failed"]
+    message: str | None = None
+
+
+class CurriculumBulkIngestResponse(BaseModel):
+    source_root: str
+    total_supported_files: int
+    total_unsupported_files: int
+    total_undetected_scope_files: int
+    discovered_scopes: int
+    succeeded_scopes: int
+    failed_scopes: int
+    approve_ready_version_ids: list[UUID]
+    skipped_files: list[str]
+    undetected_scope_files: list[str]
+    results: list[CurriculumBulkScopeResult]
+
+
 class IngestionJobOut(BaseModel):
     id: UUID
     version_id: UUID

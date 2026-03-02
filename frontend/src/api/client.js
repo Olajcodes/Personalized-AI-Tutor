@@ -93,6 +93,7 @@ export const api = {
   getUserMe: (token) => request("/users/me", { token }),
   updateUserMe: (token, payload) => request("/users/me", { method: "PUT", token, body: payload }),
   setupProfile: (token, payload) => request("/students/profile/setup", { method: "POST", token, body: payload }),
+  getProfileStatus: (token) => request("/students/profile/status", { token }),
   getProfile: (token) => request("/students/profile", { token }),
   updateProfile: (token, payload) => request("/students/profile", { method: "PUT", token, body: payload }),
   updatePreferences: (token, userId, payload) =>

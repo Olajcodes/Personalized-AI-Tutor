@@ -31,18 +31,20 @@ const OnboardingGuard = () => {
       }
 
       try {
-        const response = await fetch(`${BACKEND_BASE}/api/v1/students/profile`, {
+        const response = await fetch(`${BACKEND_BASE}/api/v1/students/profile/status`, {
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
         if (!active) return;
 
         if (response.ok) {
-          setState({ loading: false, hasProfile: true, error: "", unauthorized: false });
-          return;
-        }
-        if (response.status === 404) {
-          setState({ loading: false, hasProfile: false, error: "", unauthorized: false });
+          const payload = await response.json().catch(() => null);
+          setState({
+            loading: false,
+            hasProfile: Boolean(payload?.has_profile),
+            error: "",
+            unauthorized: false,
+          });
           return;
         }
         if (response.status === 401 || response.status === 403) {

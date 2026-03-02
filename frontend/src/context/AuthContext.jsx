@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { decodeJwt, normalizeUserId } from "../api/client";
 
 const TOKEN_KEY = "mastery-ai_token";
@@ -17,7 +17,7 @@ export const AuthProvider = ({ children }) => {
     }
   });
 
-  const login = (authPayload) => {
+  const login = useCallback((authPayload) => {
     const accessToken = authPayload?.access_token || authPayload;
     if (!accessToken) return;
     const decoded = decodeJwt(accessToken);
@@ -35,25 +35,30 @@ export const AuthProvider = ({ children }) => {
     }
     setToken(accessToken);
     setUser(normalizedUser);
-  };
+  }, []);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     localStorage.removeItem("mastery_student_id");
     setToken(null);
     setUser(null);
-  };
+  }, []);
 
-  const refreshUser = (profile) => {
-    const merged = {
-      ...(user || {}),
-      ...profile,
-      user_id: profile?.user_id || user?.user_id || null,
-    };
-    localStorage.setItem(USER_KEY, JSON.stringify(merged));
-    setUser(merged);
-  };
+  const refreshUser = useCallback((profile) => {
+    setUser((prev) => {
+      const merged = {
+        ...(prev || {}),
+        ...(profile || {}),
+        user_id: profile?.user_id || prev?.user_id || null,
+      };
+      const prevJson = JSON.stringify(prev || {});
+      const mergedJson = JSON.stringify(merged);
+      if (prevJson === mergedJson) return prev;
+      localStorage.setItem(USER_KEY, mergedJson);
+      return merged;
+    });
+  }, []);
 
   const value = useMemo(
     () => ({
@@ -65,7 +70,7 @@ export const AuthProvider = ({ children }) => {
       logout,
       refreshUser,
     }),
-    [token, user],
+    [token, user, login, logout, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

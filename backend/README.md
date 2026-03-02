@@ -266,6 +266,7 @@ Base prefix: `/api/v1`
 - `POST /teachers/assignments`
 - `POST /teachers/interventions`
 - `POST /admin/curriculum/upload`
+- `POST /admin/curriculum/ingest-all`
 - `GET /admin/curriculum/ingestion-status`
 - `GET /admin/curriculum/pending-approvals`
 - `GET /admin/curriculum/topics/{topic_id}`
@@ -860,3 +861,27 @@ python -m pytest -q backend/tests/integration/test_e2e_student_flow.py
 python -m pytest -q backend/tests/integration/test_e2e_teacher_flow.py
 python -m pytest -q backend/tests/integration/test_e2e_admin_flow.py
 ```
+
+### Bulk Curriculum Ingestion (One Call for All SSS Notes)
+
+Use this when your notes directory contains mixed subjects/levels/terms and you want one ingestion run request.
+
+1. Ensure topics are already seeded for all target scopes.
+2. Authenticate as an `admin`.
+3. Call:
+
+`POST /api/v1/admin/curriculum/ingest-all`
+
+Sample payload:
+
+```json
+{
+  "source_root": "docs/SSS_NOTES_2026"
+}
+```
+
+Response includes:
+- `approve_ready_version_ids`: publish-ready curriculum versions (pending approval)
+- per-scope ingestion result rows with `subject`, `sss_level`, `term`, `version_id`, `job_id`
+- `skipped_files` for unsupported extensions
+- `undetected_scope_files` where scope inference failed

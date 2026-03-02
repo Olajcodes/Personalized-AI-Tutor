@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
@@ -19,6 +21,9 @@ from backend.schemas.admin_curriculum_schema import (
     ConceptInspectResponse,
     ConceptInspectTopicOut,
     CurriculumIngestionStatusResponse,
+    CurriculumBulkIngestRequest,
+    CurriculumBulkIngestResponse,
+    CurriculumBulkScopeResult,
     CurriculumUploadRequest,
     CurriculumUploadResponse,
     CurriculumVersionActionRequest,
@@ -352,6 +357,88 @@ class AdminCurriculumService:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
         return f"{subject}-{sss_level}-term{term}-{timestamp}"
 
+    @staticmethod
+    def _infer_subject(scope_text: str) -> str | None:
+        value = scope_text.upper()
+        if re.search(r"\b(MATHEMATICS|MATHS|MATH)\b", value):
+            return "math"
+        if re.search(r"\bENGLISH\b", value):
+            return "english"
+        if re.search(r"\bCIVIC\b", value):
+            return "civic"
+        return None
+
+    @staticmethod
+    def _infer_sss_level(scope_text: str) -> str | None:
+        value = scope_text.upper()
+        patterns = [
+            r"\bSSS?\s*([123])\b",  # SSS1, SS1, SS 1
+            r"\bS([123])\b",        # S1, S2, S3
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, value)
+            if match:
+                return f"SSS{match.group(1)}"
+        return None
+
+    @staticmethod
+    def _infer_term(scope_text: str) -> int | None:
+        value = scope_text.upper()
+        if (
+            "FIRST TERM" in value
+            or "1ST TERM" in value
+            or "TERM 1" in value
+            or "TERM ONE" in value
+        ):
+            return 1
+        if (
+            "SECOND TERM" in value
+            or "2ND TERM" in value
+            or "TERM 2" in value
+            or "TERM TWO" in value
+        ):
+            return 2
+        if (
+            "THIRD TERM" in value
+            or "3RD TERM" in value
+            or "TERM 3" in value
+            or "TERM THREE" in value
+        ):
+            return 3
+        return None
+
+    @classmethod
+    def _infer_scope_from_file(cls, *, root: Path, file_path: Path) -> tuple[str, str, int] | None:
+        try:
+            relative_text = str(file_path.relative_to(root))
+        except ValueError:
+            relative_text = str(file_path)
+        candidate = f"{relative_text} {file_path.stem}"
+        subject = cls._infer_subject(candidate)
+        sss_level = cls._infer_sss_level(candidate)
+        term = cls._infer_term(candidate)
+        if not subject or not sss_level or not term:
+            return None
+        return (subject, sss_level, term)
+
+    @classmethod
+    def _discover_scoped_file_groups(
+        cls,
+        *,
+        source_root: Path,
+    ) -> tuple[dict[tuple[str, str, int], list[Path]], list[str], list[str]]:
+        supported, skipped = cls._collect_supported_files(source_root)
+        grouped: dict[tuple[str, str, int], list[Path]] = {}
+        undetected: list[str] = []
+        for file_path in supported:
+            scope = cls._infer_scope_from_file(root=source_root, file_path=file_path)
+            if scope is None:
+                undetected.append(str(file_path.relative_to(source_root)))
+                continue
+            grouped.setdefault(scope, []).append(file_path)
+        skipped_rel = [str(path.relative_to(source_root)) for path in skipped]
+        return grouped, skipped_rel, undetected
+
     def _extract_document_chunks(
         self,
         *,
@@ -642,6 +729,95 @@ class AdminCurriculumService:
                 self.repo.update_curriculum_version(persisted_version, status="failed")
                 self.db.commit()
             raise AdminCurriculumServiceError(f"Curriculum ingestion failed: {exc}") from exc
+
+    def ingest_all_from_source_root(
+        self,
+        *,
+        payload: CurriculumBulkIngestRequest,
+        actor_user_id: UUID | None = None,
+    ) -> CurriculumBulkIngestResponse:
+        source_root = Path(payload.source_root).expanduser().resolve()
+        if not source_root.exists() or not source_root.is_dir():
+            raise AdminCurriculumValidationError(
+                f"source_root does not exist or is not a directory: {source_root}"
+            )
+
+        grouped, skipped_files, undetected_scope_files = self._discover_scoped_file_groups(
+            source_root=source_root
+        )
+
+        results: list[CurriculumBulkScopeResult] = []
+        approve_ready_version_ids: list[UUID] = []
+
+        for scope, files in sorted(grouped.items()):
+            subject, sss_level, term = scope
+            with tempfile.TemporaryDirectory(prefix="curriculum_scope_") as tmp_dir:
+                temp_root = Path(tmp_dir)
+                used_names: set[str] = set()
+                for file_path in files:
+                    candidate = file_path.name
+                    if candidate in used_names:
+                        base = file_path.stem
+                        suffix = file_path.suffix
+                        serial = 2
+                        while f"{base}__{serial}{suffix}" in used_names:
+                            serial += 1
+                        candidate = f"{base}__{serial}{suffix}"
+                    used_names.add(candidate)
+                    shutil.copy2(file_path, temp_root / candidate)
+
+                try:
+                    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+                    response = self.upload_curriculum(
+                        payload=CurriculumUploadRequest(
+                            subject=subject,
+                            sss_level=sss_level,
+                            term=term,
+                            source_root=str(temp_root),
+                            version_name=f"auto-{subject}-{sss_level}-term{term}-{timestamp}",
+                        ),
+                        actor_user_id=actor_user_id,
+                    )
+                    results.append(
+                        CurriculumBulkScopeResult(
+                            subject=subject,  # type: ignore[arg-type]
+                            sss_level=sss_level,  # type: ignore[arg-type]
+                            term=term,
+                            files_count=len(files),
+                            version_id=response.version_id,
+                            job_id=response.job_id,
+                            status=response.status,
+                        )
+                    )
+                    if response.status == "pending_approval":
+                        approve_ready_version_ids.append(response.version_id)
+                except Exception as exc:
+                    results.append(
+                        CurriculumBulkScopeResult(
+                            subject=subject,  # type: ignore[arg-type]
+                            sss_level=sss_level,  # type: ignore[arg-type]
+                            term=term,
+                            files_count=len(files),
+                            status="failed",
+                            message=str(exc),
+                        )
+                    )
+
+        failed_scopes = len([item for item in results if item.status == "failed"])
+        succeeded_scopes = len(results) - failed_scopes
+        return CurriculumBulkIngestResponse(
+            source_root=str(source_root),
+            total_supported_files=sum(len(files) for files in grouped.values()) + len(undetected_scope_files),
+            total_unsupported_files=len(skipped_files),
+            total_undetected_scope_files=len(undetected_scope_files),
+            discovered_scopes=len(grouped),
+            succeeded_scopes=succeeded_scopes,
+            failed_scopes=failed_scopes,
+            approve_ready_version_ids=approve_ready_version_ids,
+            skipped_files=sorted(skipped_files),
+            undetected_scope_files=sorted(undetected_scope_files),
+            results=results,
+        )
 
     def get_ingestion_status(self, *, job_id: UUID | None = None) -> CurriculumIngestionStatusResponse:
         jobs = self.repo.list_ingestion_jobs(job_id=job_id)

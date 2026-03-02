@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { api, LEVELS, TERMS } from "../api/client";
 
 const DEFAULT_GRADE_META = {
-  SSS1: { label: "Grade 10", icon: "📖" },
-  SSS2: { label: "Grade 11", icon: "📘" },
-  SSS3: { label: "Grade 12", icon: "🎓" },
+  SSS1: { label: "Grade 10", icon: "10" },
+  SSS2: { label: "Grade 11", icon: "11" },
+  SSS3: { label: "Grade 12", icon: "12" },
 };
 
 const ClassSelection = () => {
@@ -31,7 +31,7 @@ const ClassSelection = () => {
           levels.map((id) => ({
             id,
             label: DEFAULT_GRADE_META[id]?.label || id,
-            icon: DEFAULT_GRADE_META[id]?.icon || "📚",
+            icon: DEFAULT_GRADE_META[id]?.icon || "S",
           })),
         );
         setAvailableTerms(terms);
@@ -41,7 +41,7 @@ const ClassSelection = () => {
           LEVELS.map((id) => ({
             id,
             label: DEFAULT_GRADE_META[id]?.label || id,
-            icon: DEFAULT_GRADE_META[id]?.icon || "📚",
+            icon: DEFAULT_GRADE_META[id]?.icon || "S",
           })),
         );
         setAvailableTerms(TERMS);
@@ -69,7 +69,10 @@ const ClassSelection = () => {
   return (
     <div className="min-h-screen font-sans p-8" style={{ backgroundColor: "#F7FAFC" }}>
       <div className="flex items-center gap-2 mb-16">
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold shadow-md" style={{ backgroundColor: "#635BFF" }}>
+        <div
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold shadow-md"
+          style={{ backgroundColor: "#635BFF" }}
+        >
           M
         </div>
         <span className="text-xl font-bold tracking-tight" style={{ color: "#1A1F36" }}>
@@ -96,15 +99,23 @@ const ClassSelection = () => {
                   <div
                     key={grade.id}
                     onClick={() => setSelectedGrade(grade.id)}
-                    className={`relative p-8 rounded-[2.5rem] border-2 transition-all duration-300 cursor-pointer bg-white flex flex-col items-center ${isSelected ? "shadow-2xl scale-[1.02]" : "border-transparent shadow-sm hover:shadow-md"}`}
+                    className={`relative p-8 rounded-[2.5rem] border-2 transition-all duration-300 cursor-pointer bg-white flex flex-col items-center ${
+                      isSelected ? "shadow-2xl scale-[1.02]" : "border-transparent shadow-sm hover:shadow-md"
+                    }`}
                     style={{ borderColor: isSelected ? "#635BFF" : "transparent" }}
                   >
                     {isSelected && (
-                      <div className="absolute top-4 right-6 text-white rounded-full w-6 h-6 flex items-center justify-center text-[10px] shadow-lg border-2 border-white" style={{ backgroundColor: "#635BFF" }}>
-                        ✓
+                      <div
+                        className="absolute top-4 right-6 text-white rounded-full w-6 h-6 flex items-center justify-center text-[10px] shadow-lg border-2 border-white"
+                        style={{ backgroundColor: "#635BFF" }}
+                      >
+                        OK
                       </div>
                     )}
-                    <div className="w-20 h-20 rounded-full flex items-center justify-center text-3xl mb-6 transition-colors" style={{ backgroundColor: isSelected ? "#635BFF" : "#F7FAFC", color: isSelected ? "#FFFFFF" : "#635BFF" }}>
+                    <div
+                      className="w-20 h-20 rounded-full flex items-center justify-center text-3xl mb-6 transition-colors"
+                      style={{ backgroundColor: isSelected ? "#635BFF" : "#F7FAFC", color: isSelected ? "#FFFFFF" : "#635BFF" }}
+                    >
                       {grade.icon}
                     </div>
                     <h3 className="text-2xl font-bold" style={{ color: "#1A1F36" }}>
@@ -114,7 +125,10 @@ const ClassSelection = () => {
                       {grade.label}
                     </p>
                     {isSelected && (
-                      <span className="mt-2 px-4 py-1.5 text-white text-[10px] font-bold rounded-full uppercase tracking-wider shadow-sm" style={{ backgroundColor: "#635BFF" }}>
+                      <span
+                        className="mt-2 px-4 py-1.5 text-white text-[10px] font-bold rounded-full uppercase tracking-wider shadow-sm"
+                        style={{ backgroundColor: "#635BFF" }}
+                      >
                         Current Choice
                       </span>
                     )}
@@ -125,7 +139,7 @@ const ClassSelection = () => {
 
             <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border max-w-xl mx-auto mb-10" style={{ borderColor: "#E3E8EE" }}>
               <div className="flex items-center gap-3 font-semibold mb-5 justify-center" style={{ color: "#4F566B" }}>
-                <span className="text-xl">📅</span> Which term are you currently in?
+                <span className="text-xs font-bold">TERM</span> Which term are you currently in?
               </div>
               <div className="relative">
                 <select
@@ -154,7 +168,9 @@ const ClassSelection = () => {
         <button
           onClick={handleContinue}
           disabled={isLoading || !selectedGrade || !selectedTerm}
-          className={`w-full max-w-xl py-5 text-white text-lg font-bold rounded-2xl shadow-xl transition-all transform ${!isLoading && "active:scale-[0.97]"}`}
+          className={`w-full max-w-xl py-5 text-white text-lg font-bold rounded-2xl shadow-xl transition-all transform ${
+            !isLoading && "active:scale-[0.97]"
+          }`}
           style={{
             backgroundColor: isLoading || !selectedGrade || !selectedTerm ? "#A3ACBF" : "#635BFF",
             boxShadow: isLoading || !selectedGrade || !selectedTerm ? "none" : "0 10px 15px -3px rgba(99, 91, 255, 0.3)",
