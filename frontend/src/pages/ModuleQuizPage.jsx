@@ -4,11 +4,26 @@ import CourseSidebar from "../components/CourseSidebar";
 import { api } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 
+const mapMasteryPayload = (payload) => {
+  const result = {};
+  for (const item of payload?.mastery || []) {
+    const key = item?.topic_id || item?.concept_id;
+    if (!key) continue;
+    const score = Number(item?.score);
+    result[key] = Number.isFinite(score) ? Math.max(0, Math.min(1, score)) : 0;
+  }
+  return result;
+};
+
 const ModuleQuizPage = () => {
   const navigate = useNavigate();
   const { token, userId } = useAuth();
 
   const [quiz, setQuiz] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [sidebarTopics, setSidebarTopics] = useState([]);
+  const [masteryByTopic, setMasteryByTopic] = useState({});
+  const [selectedTopicId, setSelectedTopicId] = useState(null);
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -26,16 +41,33 @@ const ModuleQuizPage = () => {
       setLoading(true);
       setError("");
       try {
-        const profile = await api.getProfile(token);
-        const subject = profile?.subjects?.[0] || "math";
+        const profilePayload = await api.getProfile(token);
+        const subject = profilePayload?.subjects?.[0] || "math";
+        const term = Number(profilePayload?.current_term || 1);
+        setProfile(profilePayload);
+
+        const [topicsPayload, masteryPayload] = await Promise.all([
+          api.listTopics({ student_id: userId, subject, term }, token),
+          api.getMastery(token, {
+            student_id: userId,
+            subject,
+            term,
+            view: "topic",
+          }),
+        ]);
+        if (!active) return;
+        setSidebarTopics(topicsPayload || []);
+        setMasteryByTopic(mapMasteryPayload(masteryPayload));
+
         const topicId = localStorage.getItem("mastery_current_topic_id");
         if (!topicId) throw new Error("No active topic found. Open Learning Path first.");
+        setSelectedTopicId(topicId);
 
         const generated = await api.quizGenerate(token, {
           student_id: userId,
           subject,
-          sss_level: profile?.sss_level || "SSS1",
-          term: Number(profile?.current_term || 1),
+          sss_level: profilePayload?.sss_level || "SSS1",
+          term,
           topic_id: topicId,
           purpose: "practice",
           difficulty: "medium",
@@ -117,7 +149,18 @@ const ModuleQuizPage = () => {
 
   return (
     <div className="flex bg-slate-50 h-[calc(100vh-64px)] overflow-hidden">
-      <CourseSidebar activeStep="quiz" />
+      <CourseSidebar
+        activeStep="quiz"
+        topics={sidebarTopics}
+        selectedTopicId={selectedTopicId}
+        masteryByTopic={masteryByTopic}
+        onSelectTopic={(topicId) => {
+          if (!topicId) return;
+          localStorage.setItem("mastery_current_topic_id", topicId);
+          navigate("/learning-path");
+        }}
+        moduleTitle={`${profile?.subjects?.[0]?.toUpperCase() || "LEARNING"} - ${profile?.sss_level || "SSS"}`}
+      />
 
       <div className="flex-1 overflow-y-auto px-12 py-10 relative">
         <div className="max-w-3xl mx-auto">

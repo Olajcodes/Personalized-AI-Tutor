@@ -101,8 +101,10 @@ export const api = {
   getStudentStats: (token) => request("/students/stats", { token }),
   getLeaderboard: (token, limit = 10) => request("/students/leaderboard", { token, query: { limit } }),
   getMastery: (token, query) => request("/learning/mastery", { token, query }),
-  listTopics: (query) => request("/learning/topics", { query }),
-  getTopicLesson: (topicId, studentId) => request(`/learning/topics/${topicId}/lesson`, { query: { student_id: studentId } }),
+  listTopics: (query, token) => request("/learning/topics", { query, token }),
+  getTopicLesson: (topicId, studentId, token) =>
+    request(`/learning/topics/${topicId}/lesson`, { token, query: { student_id: studentId } }),
+  logActivity: (token, payload) => request("/learning/activity/log", { method: "POST", token, body: payload }),
   startSession: (token, payload) => request("/tutor/sessions/start", { method: "POST", token, body: payload }),
   getSessionHistory: (token, sessionId, studentId) =>
     request(`/tutor/sessions/${sessionId}/history`, { token, query: { student_id: studentId } }),
