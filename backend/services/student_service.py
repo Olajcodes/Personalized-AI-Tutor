@@ -17,7 +17,7 @@ class StudentService:
         self.repo = StudentRepository(db)
 
     def setup_profile(self, request: StudentProfileSetupRequest) -> StudentProfileResponse:
-        """Create initial student profile."""
+        """Create initial student profile and optional initial preferences."""
         # Check if profile already exists
         existing = self.repo.get_profile(request.student_id)
         if existing:
@@ -58,7 +58,7 @@ class StudentService:
         )
 
     def update_profile(self, student_id: UUID, updates: StudentProfileUpdateRequest) -> StudentProfileResponse:
-        """Update profile fields."""
+        """Update profile fields and optional preferences in one request."""
         # Validate subjects if they are being updated
         if updates.subjects is not None:
             subject_slugs = [s.value for s in updates.subjects]
