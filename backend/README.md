@@ -70,6 +70,7 @@ CURRICULUM_CONCEPT_LLM_MODEL=openai/gpt-oss-20b
 
 Notes:
 - `backend/core/config.py` loads `backend/.env` directly.
+- For Supabase pooler, use `DATABASE_URL` with `?sslmode=require` (the app also auto-adds this for `*.supabase.com` when missing).
 - Run API commands from repo root to avoid import path issues.
 - Curriculum ingestion concept mapping is deterministic by default; enable
   `CURRICULUM_CONCEPT_USE_LLM=true` to refine extracted concept labels with the configured LLM once per upload.
@@ -126,18 +127,14 @@ python -m backend.scripts.seed_lessons
 ```
 
 Behavior:
-- Idempotent for subjects/topics/lessons/blocks
-- Creates or reuses default seed student profile
-- Prints current topic IDs after each run
+- Idempotent for users/profiles/subjects/topics/lessons/mastery snapshots
+- Ingests curriculum content from `docs/SSS_NOTES_2026` (DOCX), then fills missing scopes with curated fallback topics
+- Populates all `subject x SSS level x term` scopes so learning path, quiz, leaderboard, and graph endpoints have non-empty data
+- Seeds multiple learners with realistic stats/mastery so class leaderboard endpoints are functional
+- Safe to rerun; use `SEED_RESET=1` to clear existing lesson/topic/mastery rows before reseeding
 
 Default seed student:
 - `00000000-0000-0000-0000-000000000001`
-
-Current shared DB seed snapshot (from latest run):
-- student_id: `00000000-0000-0000-0000-000000000001`
-- math topic: `36718528-3a69-4365-88ab-757ce2b48e2c` (`Linear Equations`)
-- english topic: `97abdcbd-bbf2-4d76-acc7-e9300f4786c1` (`Parts of Speech`)
-- civic topic: `560e1ae5-2606-401a-a61b-2a74096c3acb` (`Citizen and the Constitution`)
 
 Override if needed:
 
@@ -149,6 +146,13 @@ PowerShell:
 
 ```powershell
 $env:SEED_STUDENT_ID = "11111111-1111-1111-1111-111111111111"
+python -m backend.scripts.seed_lessons
+```
+
+PowerShell (force reset first):
+
+```powershell
+$env:SEED_RESET = "1"
 python -m backend.scripts.seed_lessons
 ```
 

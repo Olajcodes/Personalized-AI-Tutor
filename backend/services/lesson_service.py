@@ -70,6 +70,8 @@ def fetch_topic_lesson(db: Session, topic_id: uuid.UUID, student_id: uuid.UUID) 
     return {
         "topic_id": str(topic.id),
         "title": lesson.title or topic.title,
+        "summary": getattr(lesson, "summary", None),
+        "estimated_duration_minutes": getattr(lesson, "estimated_duration_minutes", None),
         "content_blocks": [
             _map_content_block(b.block_type, b.content or {})
             for b in lesson.blocks
