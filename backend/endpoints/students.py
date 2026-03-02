@@ -13,6 +13,7 @@ from backend.services.student_service import StudentService
 from backend.schemas.student_schema import (
     StudentProfileSetupRequest,
     StudentProfileResponse,
+    StudentProfileStatusResponse,
     StudentProfileUpdateRequest,
     LearningPreferenceUpdateRequest,
     LearningPreferenceResponse,
@@ -54,6 +55,19 @@ async def get_profile(
     """
     service = StudentService(db)
     return service.get_profile(current_user.id)
+
+
+@router.get("/profile/status", response_model=StudentProfileStatusResponse)
+async def get_profile_status(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return onboarding profile presence as a stable 200 response.
+
+    This avoids using 404 for normal onboarding flow checks on the frontend.
+    """
+    service = StudentService(db)
+    return service.get_profile_status(current_user.id)
 
 
 @router.put("/profile", response_model=StudentProfileResponse)

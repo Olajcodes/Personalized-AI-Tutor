@@ -64,3 +64,10 @@ class StudentProfileResponse(BaseModel):
     preferences: Optional[LearningPreferenceResponse] = None
     created_at: datetime
     updated_at: datetime
+
+
+class StudentProfileStatusResponse(BaseModel):
+    """Lightweight onboarding status for authenticated student users."""
+
+    has_profile: bool
+    user_id: UUID

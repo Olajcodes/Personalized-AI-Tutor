@@ -6,6 +6,7 @@ from backend.repositories.student_repo import StudentRepository
 from backend.schemas.student_schema import (
     StudentProfileSetupRequest,
     StudentProfileResponse,
+    StudentProfileStatusResponse,
     StudentProfileUpdateRequest,
     LearningPreferenceUpdateRequest,
     LearningPreferenceResponse,
@@ -47,6 +48,14 @@ class StudentService:
                 detail="Student profile not found"
             )
         return self._to_profile_response(student)
+
+    def get_profile_status(self, student_id: UUID) -> StudentProfileStatusResponse:
+        """Return simple onboarding status without raising 404 for missing profile."""
+        student = self.repo.get_profile(student_id)
+        return StudentProfileStatusResponse(
+            has_profile=student is not None,
+            user_id=student_id,
+        )
 
     def update_profile(self, student_id: UUID, updates: StudentProfileUpdateRequest) -> StudentProfileResponse:
         """Update profile fields."""
