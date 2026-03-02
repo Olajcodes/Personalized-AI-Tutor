@@ -18,8 +18,13 @@ def get_current_user(
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated.")
 
+    token = (credentials.credentials or "").strip().strip('"').strip("'")
+    if token.lower().startswith("bearer "):
+        # Be tolerant of clients that accidentally send "Bearer <token>" as credentials value.
+        token = token[7:].strip()
+
     try:
-        payload = decode_access_token(credentials.credentials)
+        payload = decode_access_token(token)
     except ValueError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token.")
 
