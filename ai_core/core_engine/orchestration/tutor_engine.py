@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 import requests
 
@@ -47,23 +48,48 @@ def _sanitize_and_moderate(text: str, *, max_chars: int = 6000) -> str:
     return cleaned
 
 
+def _normalize_rag_query(raw: str) -> str | None:
+    normalized = " ".join((raw or "").split())
+    if len(normalized) < 3:
+        return None
+    return normalized[:4000]
+
+
+def _normalize_topic_ids(topic_id: str | None) -> list[str]:
+    if not topic_id:
+        return []
+    try:
+        UUID(str(topic_id))
+    except (TypeError, ValueError):
+        logger.warning("tutor._internal_rag_retrieve skipping invalid topic_id: %s", topic_id)
+        return []
+    return [str(topic_id)]
+
+
 def _internal_rag_retrieve(request: TutorChatRequest) -> list[Citation]:
     base_url = os.getenv("BACKEND_INTERNAL_RAG_URL", "http://127.0.0.1:8000/api/v1/internal/rag/retrieve").strip()
     timeout = float(os.getenv("INTERNAL_RAG_TIMEOUT_SECONDS", "6"))
     top_k = int(os.getenv("INTERNAL_RAG_TOP_K", "6"))
+    query = _normalize_rag_query(request.message)
+    if query is None:
+        return []
 
     payload = {
-        "query": request.message,
+        "query": query,
         "subject": request.subject,
         "sss_level": request.sss_level,
         "term": int(request.term),
-        "topic_ids": [request.topic_id] if request.topic_id else [],
+        "topic_ids": _normalize_topic_ids(request.topic_id),
         "top_k": max(1, min(top_k, 20)),
         "approved_only": True,
     }
 
     response = requests.post(base_url, json=payload, timeout=timeout)
-    response.raise_for_status()
+    if not response.ok:
+        detail = (response.text or "").strip()
+        raise RuntimeError(
+            f"internal RAG request failed ({response.status_code}): {detail[:500] or 'no response body'}"
+        )
     data = response.json()
     chunks = data.get("chunks", [])
 

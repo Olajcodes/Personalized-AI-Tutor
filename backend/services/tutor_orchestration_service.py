@@ -77,6 +77,14 @@ class TutorOrchestrationService:
                 response = await client.post(f"{self.base_url}{path}", json=payload)
                 response.raise_for_status()
                 data = response.json()
+        except httpx.HTTPStatusError as exc:
+            detail = (exc.response.text or "").strip()
+            raise TutorProviderUnavailableError(
+                f"ai-core request failed ({exc.response.status_code}) on {path}: "
+                f"{detail[:400] or 'empty response body'}"
+            ) from exc
+        except httpx.RequestError as exc:
+            raise TutorProviderUnavailableError(f"ai-core request failed: {exc}") from exc
         except httpx.HTTPError as exc:
             raise TutorProviderUnavailableError(f"ai-core request failed: {exc}") from exc
 
