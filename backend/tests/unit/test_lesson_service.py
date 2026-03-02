@@ -1,0 +1,103 @@
+import types
+import uuid
+
+import pytest
+
+from backend.services import lesson_service as svc
+
+
+def _obj(**kwargs):
+    return types.SimpleNamespace(**kwargs)
+
+
+def test_fetch_topic_lesson_success(monkeypatch):
+    student_profile_id = uuid.uuid4()
+    student_id = uuid.uuid4()
+    topic_id = uuid.uuid4()
+    subject_id = uuid.uuid4()
+
+    monkeypatch.setattr(
+        svc,
+        "get_student_profile",
+        lambda db, sid: _obj(id=student_profile_id, student_id=sid, sss_level="SSS1", active_term=1),
+    )
+    monkeypatch.setattr(
+        svc,
+        "get_topic_with_subject",
+        lambda db, tid: (
+            _obj(id=tid, subject_id=subject_id, is_approved=True, sss_level="SSS1", term=1, title="Linear Equations"),
+            _obj(slug="math"),
+        ),
+    )
+    monkeypatch.setattr(svc, "student_enrolled_in_subject", lambda db, spid, sid: True)
+    monkeypatch.setattr(
+        svc,
+        "get_lesson_with_blocks",
+        lambda db, tid: _obj(
+            id=uuid.uuid4(),
+            title="Lesson: Linear Equations",
+            blocks=[
+                _obj(block_type="text", content={"text": "Intro"}, order_index=1),
+                _obj(block_type="video", content={"url": "https://example.com/v1"}, order_index=2),
+            ],
+        ),
+    )
+
+    response = svc.fetch_topic_lesson(db=None, topic_id=topic_id, student_id=student_id)
+
+    assert response["topic_id"] == str(topic_id)
+    assert response["title"] == "Lesson: Linear Equations"
+    assert response["content_blocks"][0] == {"type": "text", "value": "Intro"}
+    assert response["content_blocks"][1] == {"type": "video", "url": "https://example.com/v1"}
+
+
+def test_fetch_topic_lesson_forbidden_when_profile_missing(monkeypatch):
+    monkeypatch.setattr(svc, "get_student_profile", lambda db, sid: None)
+
+    with pytest.raises(svc.ForbiddenLessonAccess, match="Student profile not found"):
+        svc.fetch_topic_lesson(db=None, topic_id=uuid.uuid4(), student_id=uuid.uuid4())
+
+
+def test_fetch_topic_lesson_forbidden_when_out_of_scope(monkeypatch):
+    topic_id = uuid.uuid4()
+
+    monkeypatch.setattr(
+        svc,
+        "get_student_profile",
+        lambda db, sid: _obj(id=uuid.uuid4(), student_id=sid, sss_level="SSS2", active_term=1),
+    )
+    monkeypatch.setattr(
+        svc,
+        "get_topic_with_subject",
+        lambda db, tid: (
+            _obj(id=tid, subject_id=uuid.uuid4(), is_approved=True, sss_level="SSS1", term=1, title="t"),
+            _obj(slug="math"),
+        ),
+    )
+
+    with pytest.raises(svc.ForbiddenLessonAccess, match="Topic level out of scope"):
+        svc.fetch_topic_lesson(db=None, topic_id=topic_id, student_id=uuid.uuid4())
+
+
+def test_fetch_topic_lesson_not_found_when_lesson_missing(monkeypatch):
+    topic_id = uuid.uuid4()
+    subject_id = uuid.uuid4()
+
+    monkeypatch.setattr(
+        svc,
+        "get_student_profile",
+        lambda db, sid: _obj(id=uuid.uuid4(), student_id=sid, sss_level="SSS1", active_term=1),
+    )
+    monkeypatch.setattr(
+        svc,
+        "get_topic_with_subject",
+        lambda db, tid: (
+            _obj(id=tid, subject_id=subject_id, is_approved=True, sss_level="SSS1", term=1, title="t"),
+            _obj(slug="math"),
+        ),
+    )
+    monkeypatch.setattr(svc, "student_enrolled_in_subject", lambda db, spid, sid: True)
+    monkeypatch.setattr(svc, "get_lesson_with_blocks", lambda db, tid: None)
+
+    with pytest.raises(svc.LessonNotFound, match="Lesson not found"):
+        svc.fetch_topic_lesson(db=None, topic_id=topic_id, student_id=uuid.uuid4())

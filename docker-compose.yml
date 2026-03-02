@@ -1,0 +1,91 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mastery-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mastery_ai
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mastery_ai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  neo4j:
+    image: neo4j:5.26-community
+    container_name: mastery-neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/password}
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/data
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: mastery-backend
+    restart: unless-stopped
+    env_file:
+      - backend/.env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/mastery_ai}
+      ENV: ${ENV:-dev}
+      AI_CORE_BASE_URL: ${AI_CORE_BASE_URL:-http://ai-core:8100}
+      AI_CORE_TIMEOUT_SECONDS: ${AI_CORE_TIMEOUT_SECONDS:-8}
+      AI_CORE_ALLOW_FALLBACK: ${AI_CORE_ALLOW_FALLBACK:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173,http://localhost:4173}
+      REDIS_URL: ${REDIS_URL:-}
+      NEO4J_URI: ${NEO4J_URI:-bolt://neo4j:7687}
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-password}
+      USE_NEO4J_GRAPH: ${USE_NEO4J_GRAPH:-false}
+      VECTOR_DB_URL: ${VECTOR_DB_URL:-}
+      LLM_API_BASE: ${LLM_API_BASE:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_started
+    command: >
+      sh -c "python -m alembic -c backend/alembic.ini upgrade head &&
+      python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+
+  ai-core:
+    build:
+      context: .
+      dockerfile: ai_core/Dockerfile
+    container_name: mastery-ai-core
+    restart: unless-stopped
+    env_file:
+      - ai_core/.env
+    environment:
+      POSTGRES_DSN: ${POSTGRES_DSN:-postgresql://postgres:postgres@postgres:5432/mastery_ai}
+      NEO4J_URI: ${NEO4J_URI:-bolt://neo4j:7687}
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-password}
+      REDIS_URL: ${REDIS_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      PORT: ${AI_CORE_PORT:-8100}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_started
+    ports:
+      - "8100:${AI_CORE_PORT:-8100}"
+
+volumes:
+  postgres_data:
+  neo4j_data:
