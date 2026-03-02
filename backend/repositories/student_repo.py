@@ -53,8 +53,15 @@ class StudentRepository:
             )
             self.db.add(student_subject)
 
-        # Create default preferences
+        # Create preferences from setup payload or defaults.
         preferences = LearningPreference(student_profile_id=student.id)
+        if request.preferences:
+            if request.preferences.explanation_depth is not None:
+                preferences.explanation_depth = request.preferences.explanation_depth.value
+            if request.preferences.examples_first is not None:
+                preferences.examples_first = request.preferences.examples_first
+            if request.preferences.pace is not None:
+                preferences.pace = request.preferences.pace.value
         self.db.add(preferences)
 
         self.db.commit()
@@ -95,6 +102,23 @@ class StudentRepository:
                     subject_id=subject_id,
                 )
                 self.db.add(new_subject)
+
+        # Apply preferences in the same update flow when provided.
+        if updates.preferences is not None:
+            pref = self.db.query(LearningPreference).filter(
+                LearningPreference.student_profile_id == student.id
+            ).first()
+            if not pref:
+                pref = LearningPreference(student_profile_id=student.id)
+                self.db.add(pref)
+
+            if updates.preferences.explanation_depth is not None:
+                pref.explanation_depth = updates.preferences.explanation_depth.value
+            if updates.preferences.examples_first is not None:
+                pref.examples_first = updates.preferences.examples_first
+            if updates.preferences.pace is not None:
+                pref.pace = updates.preferences.pace.value
+            pref.updated_at = datetime.now(timezone.utc)
 
         student.updated_at = datetime.now(timezone.utc)
         self.db.commit()
