@@ -73,6 +73,8 @@ class ChunkedDocument:
     topic_title: str
     concept_sections: list[ConceptSection]
     prereq_evidence: list[dict] = field(default_factory=list)
+    concept_extraction_mode: str = "heuristic"
+    prereq_inference_mode: str = "sequential_fallback"
 
 
 class AdminCurriculumService:
@@ -828,6 +830,7 @@ Important rules:
 
         # Keep ingestion bounded for very long notes.
         section_payloads = section_payloads[: self.MAX_CONCEPTS_PER_DOC]
+        concept_extraction_mode = "heuristic"
         llm_labels = self._extract_concept_labels_with_llm(
             topic_title=topic_title,
             subject=subject,
@@ -836,6 +839,7 @@ Important rules:
             raw_text=text,
         )
         if llm_labels:
+            concept_extraction_mode = "llm_extract"
             target_count = min(len(section_payloads), len(llm_labels), self.MAX_CONCEPTS_PER_DOC)
             section_payloads = [
                 (heading, llm_labels[idx], chunks, confidence)
@@ -850,6 +854,8 @@ Important rules:
                 term=term,
                 labels=labels,
             )
+            if self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_USE_LLM")):
+                concept_extraction_mode = "llm_refine_or_fallback"
             section_payloads = [
                 (heading, labels[idx], chunks, confidence)
                 for idx, (heading, _, chunks, confidence) in enumerate(section_payloads)
@@ -891,6 +897,7 @@ Important rules:
             concept_objects=concept_objects,
             topic_excerpt=topic_excerpt,
         )
+        prereq_inference_mode = "llm" if inferred_prereq_map is not None else "sequential_fallback"
 
         concept_sections: list[ConceptSection] = []
         for index, (_, label, chunks, confidence) in enumerate(section_payloads):
@@ -916,6 +923,8 @@ Important rules:
             topic_title=topic_title,
             concept_sections=concept_sections,
             prereq_evidence=prereq_evidence,
+            concept_extraction_mode=concept_extraction_mode,
+            prereq_inference_mode=prereq_inference_mode,
         )
 
     def upload_curriculum(
@@ -973,7 +982,14 @@ Important rules:
             job,
             stage="parsing",
             message="Started ingestion",
-            extra={"source_root": str(source_root), "supported_files": len(supported_files)},
+            extra={
+                "source_root": str(source_root),
+                "supported_files": len(supported_files),
+                "concept_extract_use_llm": self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_EXTRACT_USE_LLM"))
+                or self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_USE_LLM")),
+                "concept_refine_use_llm": self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_USE_LLM")),
+                "prereq_use_llm": self._is_truthy_env(os.getenv("CURRICULUM_PREREQ_USE_LLM")),
+            },
         )
         self.db.commit()
 
@@ -1007,6 +1023,20 @@ Important rules:
 
                 processed_file_count += 1
                 mapped_topic_ids.add(parsed.topic_id)
+                self.repo.append_ingestion_log(
+                    job,
+                    stage="extraction_mode",
+                    message="Processed extraction/inference mode for file",
+                    extra={
+                        "file": parsed.source_id,
+                        "topic_id": str(parsed.topic_id),
+                        "topic_title": parsed.topic_title,
+                        "concept_extraction_mode": parsed.concept_extraction_mode,
+                        "prereq_inference_mode": parsed.prereq_inference_mode,
+                        "concept_sections_count": len(parsed.concept_sections),
+                        "prereq_evidence_edges": len(parsed.prereq_evidence),
+                    },
+                )
                 if parsed.prereq_evidence:
                     max_edges = 20
                     edges_for_log = parsed.prereq_evidence[:max_edges]
