@@ -14,11 +14,11 @@ class PrereqService:
 
 Graph assumption:
 (:Topic {id})-[:COVERS]->(:Concept)
-(:Concept)-[:PREREQUISITE_OF]->(:Concept)
+(:Concept)-[:PREREQ_OF]->(:Concept)
         """
         cypher = """
         MATCH (t:Topic {id: $topic_id})-[:COVERS]->(c:Concept)
-        MATCH (p:Concept)-[:PREREQUISITE_OF*1..5]->(c)
+        MATCH (p:Concept)-[:PREREQ_OF|PREREQUISITE_OF*1..5]->(c)
         RETURN DISTINCT p.id AS prereq_id
         """
         recs = self.client.run(cypher, {"topic_id": topic_id})
