@@ -107,12 +107,18 @@ class Neo4jGraphRepository:
         topic_id: str,
         topic_title: str,
         concept_ids: list[str],
+        concept_labels: dict[str, str] | None = None,
     ) -> None:
         if not concept_ids:
             return
         cleaned_concept_ids = [str(concept_id) for concept_id in concept_ids if str(concept_id).strip()]
         if not cleaned_concept_ids:
             return
+        normalized_labels = {
+            str(concept_id).strip(): str(label).strip()
+            for concept_id, label in (concept_labels or {}).items()
+            if str(concept_id).strip()
+        }
         self._run(
             """
             MERGE (s:Subject {slug: $subject})
@@ -122,7 +128,10 @@ class Neo4jGraphRepository:
             WITH t
             UNWIND $concept_ids AS concept_id
             MERGE (c:Concept {id: concept_id})
-            SET c.subject = $subject, c.sss_level = $sss_level, c.term = $term
+            SET c.subject = $subject,
+                c.sss_level = $sss_level,
+                c.term = $term,
+                c.name = coalesce($concept_labels[concept_id], c.name)
             MERGE (t)-[:COVERS]->(c)
             WITH t, c
             OPTIONAL MATCH (t)-[legacy:MAPS_TO]->(c)
@@ -132,6 +141,45 @@ class Neo4jGraphRepository:
                 "topic_id": str(topic_id),
                 "topic_title": topic_title,
                 "concept_ids": cleaned_concept_ids,
+                "subject": subject,
+                "sss_level": sss_level,
+                "term": term,
+                "concept_labels": normalized_labels,
+            },
+        )
+
+    def ensure_concepts_with_labels(
+        self,
+        *,
+        subject: str,
+        sss_level: str,
+        term: int,
+        concepts: list[dict[str, Any]],
+    ) -> None:
+        if not concepts:
+            return
+        normalized_concepts = []
+        for concept in concepts:
+            concept_id = str(concept.get("id") or "").strip()
+            if not concept_id:
+                continue
+            concept_name = str(concept.get("name") or "").strip()
+            normalized_concepts.append({"id": concept_id, "name": concept_name})
+
+        if not normalized_concepts:
+            return
+
+        self._run(
+            """
+            UNWIND $concepts AS row
+            MERGE (c:Concept {id: row.id})
+            SET c.subject = $subject,
+                c.sss_level = $sss_level,
+                c.term = $term,
+                c.name = row.name
+            """,
+            {
+                "concepts": normalized_concepts,
                 "subject": subject,
                 "sss_level": sss_level,
                 "term": term,

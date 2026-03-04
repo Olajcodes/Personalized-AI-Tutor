@@ -17,6 +17,11 @@ from sqlalchemy.orm import Session
 
 from backend.core.config import settings
 from backend.repositories.admin_curriculum_repo import AdminCurriculumRepository
+from backend.repositories.neo4j_graph_repo import (
+    Neo4jGraphConfig,
+    Neo4jGraphRepository,
+    Neo4jGraphRepositoryError,
+)
 from backend.schemas.admin_curriculum_schema import (
     ConceptInspectResponse,
     ConceptInspectTopicOut,
@@ -275,6 +280,93 @@ class AdminCurriculumService:
         except Exception:
             return labels
 
+    def _extract_concept_labels_with_llm(
+        self,
+        *,
+        topic_title: str,
+        subject: str,
+        sss_level: str,
+        term: int,
+        raw_text: str,
+    ) -> list[str] | None:
+        should_use_llm = self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_EXTRACT_USE_LLM")) or self._is_truthy_env(
+            os.getenv("CURRICULUM_CONCEPT_USE_LLM")
+        )
+        if not should_use_llm:
+            return None
+
+        provider = os.getenv("LLM_PROVIDER", "groq").strip().lower()
+        model = os.getenv(
+            "CURRICULUM_CONCEPT_EXTRACT_MODEL",
+            os.getenv("CURRICULUM_CONCEPT_LLM_MODEL", os.getenv("LLM_MODEL", "openai/gpt-oss-20b")),
+        ).strip()
+
+        api_key = (
+            os.getenv("GROQ_API_KEY")
+            if provider == "groq"
+            else (os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY"))
+        )
+        if not api_key:
+            return None
+
+        try:
+            from openai import OpenAI
+        except ModuleNotFoundError:
+            return None
+
+        base_url = ""
+        if provider == "groq":
+            base_url = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1").strip()
+        elif provider not in {"openai", ""} and os.getenv("LLM_API_BASE"):
+            base_url = os.getenv("LLM_API_BASE", "").strip()
+
+        text_sample = re.sub(r"\s+", " ", raw_text).strip()[:12000]
+        if not text_sample:
+            return None
+
+        try:
+            client = OpenAI(api_key=api_key, base_url=base_url or None)
+            prompt = (
+                "You are extracting curriculum concepts from study notes.\n"
+                f"Scope: subject={subject}, level={sss_level}, term={term}, topic={topic_title}.\n"
+                "Return JSON only in this exact format: {\"concepts\": [\"...\"]}.\n"
+                "Extract 3 to 10 concise concept names relevant to this topic.\n"
+                "Do not include explanations, numbering, or markdown.\n\n"
+                f"Notes:\n{text_sample}"
+            )
+            response = client.chat.completions.create(
+                model=model,
+                temperature=0,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            content = ""
+            if response.choices:
+                content = str(response.choices[0].message.content or "")
+            parsed = self._extract_json_object(content)
+            if not parsed:
+                return None
+            concepts = parsed.get("concepts")
+            if not isinstance(concepts, list):
+                return None
+
+            cleaned: list[str] = []
+            seen: set[str] = set()
+            for item in concepts:
+                normalized = re.sub(r"\s+", " ", str(item)).strip()
+                if not normalized:
+                    continue
+                key = normalized.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                cleaned.append(normalized)
+
+            if not (3 <= len(cleaned) <= 10):
+                return None
+            return cleaned[: self.MAX_CONCEPTS_PER_DOC]
+        except Exception:
+            return None
+
     @staticmethod
     def _read_docx(path: Path) -> str:
         try:
@@ -488,14 +580,37 @@ class AdminCurriculumService:
 
         # Keep ingestion bounded for very long notes.
         section_payloads = section_payloads[: self.MAX_CONCEPTS_PER_DOC]
-        labels = [item[1] for item in section_payloads]
-        labels = self._maybe_refine_concept_labels_with_llm(
+        llm_labels = self._extract_concept_labels_with_llm(
             topic_title=topic_title,
             subject=subject,
             sss_level=sss_level,
             term=term,
-            labels=labels,
+            raw_text=text,
         )
+        if llm_labels:
+            target_count = min(len(section_payloads), len(llm_labels), self.MAX_CONCEPTS_PER_DOC)
+            section_payloads = [
+                (heading, llm_labels[idx], chunks, confidence)
+                for idx, (heading, _, chunks, confidence) in enumerate(section_payloads[:target_count])
+            ]
+        else:
+            labels = [item[1] for item in section_payloads]
+            labels = self._maybe_refine_concept_labels_with_llm(
+                topic_title=topic_title,
+                subject=subject,
+                sss_level=sss_level,
+                term=term,
+                labels=labels,
+            )
+            section_payloads = [
+                (heading, labels[idx], chunks, confidence)
+                for idx, (heading, _, chunks, confidence) in enumerate(section_payloads)
+            ]
+
+        if not section_payloads:
+            return None
+
+        labels = [item[1] for item in section_payloads]
         concept_ids = self._scoped_concept_ids(
             labels=labels,
             subject=subject,
@@ -587,6 +702,10 @@ class AdminCurriculumService:
             chunk_rows: list[dict] = []
             mapped_topic_ids: set[UUID] = set()
             mapped_concept_ids: set[str] = set()
+            topics_for_neo4j: dict[str, dict] = {}
+            topic_to_concepts: dict[str, dict] = {}
+            all_concepts_for_neo4j: dict[str, str] = {}
+            prereq_edges: set[tuple[str, str]] = set()
             processed_file_count = 0
             processed_chunks = 0
 
@@ -609,8 +728,30 @@ class AdminCurriculumService:
 
                 processed_file_count += 1
                 mapped_topic_ids.add(parsed.topic_id)
+                topic_id_str = str(parsed.topic_id)
+                topics_for_neo4j.setdefault(
+                    topic_id_str,
+                    {
+                        "topic_id": topic_id_str,
+                        "title": parsed.topic_title,
+                        "sss_level": payload.sss_level,
+                        "term": payload.term,
+                    },
+                )
+                topic_bundle = topic_to_concepts.setdefault(
+                    topic_id_str,
+                    {"title": parsed.topic_title, "concept_ids": [], "concept_labels": {}},
+                )
                 for concept in parsed.concept_sections:
                     mapped_concept_ids.add(concept.concept_id)
+                    if concept.concept_id not in topic_bundle["concept_ids"]:
+                        topic_bundle["concept_ids"].append(concept.concept_id)
+                    topic_bundle["concept_labels"][concept.concept_id] = concept.concept_label
+                    all_concepts_for_neo4j[concept.concept_id] = concept.concept_label
+                    for prereq in concept.prereq_concept_ids:
+                        prereq_id = str(prereq).strip()
+                        if prereq_id and prereq_id != concept.concept_id:
+                            prereq_edges.add((prereq_id, concept.concept_id))
                     self.repo.upsert_topic_map(
                         version_id=version.id,
                         topic_id=parsed.topic_id,
@@ -640,6 +781,10 @@ class AdminCurriculumService:
                             "curriculum_version_id": str(version.id),
                             "approved": False,
                             "chunk_index": chunk_index,
+                            "citation_topic_title": parsed.topic_title,
+                            "citation_source_id": parsed.source_id,
+                            "citation_chunk_index": chunk_index,
+                            "citation_concept_label": concept.concept_label,
                         }
                         chunk_rows.append({"id": deterministic_id, "text": chunk_text, "payload": chunk_payload})
 
@@ -669,6 +814,50 @@ class AdminCurriculumService:
 
             if chunk_rows:
                 self.vector_store.upsert_chunks(chunk_rows)
+
+            should_sync_neo4j = settings.use_neo4j_graph and bool(
+                settings.neo4j_uri and settings.neo4j_user and settings.neo4j_password
+            )
+            if should_sync_neo4j and topic_to_concepts:
+                neo_repo = Neo4jGraphRepository(
+                    Neo4jGraphConfig(
+                        uri=settings.neo4j_uri,
+                        user=settings.neo4j_user,
+                        password=settings.neo4j_password,
+                    )
+                )
+                try:
+                    neo_repo.ensure_subject_topics(subject=payload.subject, topics=list(topics_for_neo4j.values()))
+                    flat_concept_ids: list[str] = []
+                    for topic_id, bundle in topic_to_concepts.items():
+                        concept_ids = [str(concept_id) for concept_id in bundle["concept_ids"]]
+                        flat_concept_ids.extend(concept_ids)
+                        neo_repo.ensure_topic_concept_links(
+                            subject=payload.subject,
+                            sss_level=payload.sss_level,
+                            term=payload.term,
+                            topic_id=topic_id,
+                            topic_title=str(bundle["title"]),
+                            concept_ids=concept_ids,
+                            concept_labels=dict(bundle["concept_labels"]),
+                        )
+                    neo_repo.ensure_concepts_with_labels(
+                        subject=payload.subject,
+                        sss_level=payload.sss_level,
+                        term=payload.term,
+                        concepts=[
+                            {"id": concept_id, "name": concept_label}
+                            for concept_id, concept_label in all_concepts_for_neo4j.items()
+                        ],
+                    )
+                    if prereq_edges:
+                        neo_repo.ensure_prerequisite_edges(edges=sorted(prereq_edges))
+                    else:
+                        neo_repo.ensure_prerequisite_chain(concept_ids=flat_concept_ids)
+                except Neo4jGraphRepositoryError as exc:
+                    raise AdminCurriculumServiceError(f"Neo4j ingestion sync failed: {exc}") from exc
+                finally:
+                    neo_repo.close()
 
             topic_ids_list = list(mapped_topic_ids)
             affected_topics = self.repo.set_topics_version(
