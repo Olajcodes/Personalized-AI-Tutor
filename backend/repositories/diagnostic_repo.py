@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from backend.models.curriculum_topic_map import CurriculumTopicMap
 from backend.models.diagnostic import Diagnostic
 from backend.models.diagnostic_attempt import DiagnosticAttempt
 from backend.models.student import StudentProfile, StudentSubject
@@ -53,6 +54,59 @@ class DiagnosticRepository:
             .order_by(Topic.created_at.asc(), Topic.title.asc())
             .all()
         )
+
+    def get_scope_topic_concept_rows(
+        self,
+        *,
+        subject: str,
+        sss_level: str,
+        term: int,
+    ) -> list[dict]:
+        """Return scoped topic->concept rows with explicit prereq IDs when available.
+
+        Each row includes:
+        - topic_id
+        - topic_title
+        - concept_id
+        - prereq_concept_ids (possibly empty)
+        """
+        topics = self.get_scope_topics(subject=subject, sss_level=sss_level, term=term)
+        rows: list[dict] = []
+
+        for topic in topics:
+            map_query = self.db.query(CurriculumTopicMap).filter(CurriculumTopicMap.topic_id == topic.id)
+            if topic.curriculum_version_id is not None:
+                map_query = map_query.filter(CurriculumTopicMap.version_id == topic.curriculum_version_id)
+            mappings = map_query.order_by(CurriculumTopicMap.updated_at.desc(), CurriculumTopicMap.created_at.desc()).all()
+
+            seen_concepts: set[str] = set()
+            for mapping in mappings:
+                concept_id = str(mapping.concept_id or "").strip()
+                if not concept_id or concept_id in seen_concepts:
+                    continue
+                seen_concepts.add(concept_id)
+                prereq_ids = [str(value).strip() for value in (mapping.prereq_concept_ids or []) if str(value).strip()]
+                rows.append(
+                    {
+                        "topic_id": str(topic.id),
+                        "topic_title": str(topic.title),
+                        "concept_id": concept_id,
+                        "prereq_concept_ids": prereq_ids,
+                    }
+                )
+
+            if not seen_concepts:
+                # Fallback topic-as-concept when curriculum map is not available yet.
+                rows.append(
+                    {
+                        "topic_id": str(topic.id),
+                        "topic_title": str(topic.title),
+                        "concept_id": str(topic.id),
+                        "prereq_concept_ids": [],
+                    }
+                )
+
+        return rows
 
     def create_diagnostic(
         self,

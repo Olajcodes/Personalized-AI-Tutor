@@ -22,6 +22,9 @@ class Neo4jGraphConfig:
 
 class Neo4jGraphRepository:
     """Small Neo4j adapter for section-3/5 graph context and mastery updates."""
+    PREREQ_REL = "PREREQ_OF"
+    LEGACY_PREREQ_REL = "PREREQUISITE_OF"
+    LEGACY_TOPIC_CONCEPT_REL = "MAPS_TO"
 
     def __init__(self, config: Neo4jGraphConfig):
         self.config = config
@@ -62,22 +65,63 @@ class Neo4jGraphRepository:
         except Exception as exc:
             raise Neo4jGraphRepositoryError(f"Neo4j query failed: {exc}") from exc
 
-    def ensure_topic_concepts(
+    def ensure_subject_topics(
+        self,
+        *,
+        subject: str,
+        topics: list[dict[str, Any]],
+    ) -> None:
+        if not topics:
+            return
+        normalized = [
+            {
+                "id": str(item["topic_id"]),
+                "title": str(item.get("title") or ""),
+                "sss_level": str(item.get("sss_level") or ""),
+                "term": int(item.get("term") or 1),
+            }
+            for item in topics
+        ]
+        self._run(
+            """
+            MERGE (s:Subject {slug: $subject})
+            SET s.slug = $subject
+            WITH s
+            UNWIND $topics AS topic_row
+            MERGE (t:Topic {id: topic_row.id})
+            SET t.subject = $subject,
+                t.sss_level = topic_row.sss_level,
+                t.term = topic_row.term,
+                t.title = topic_row.title
+            MERGE (s)-[:HAS_TOPIC]->(t)
+            """,
+            {"subject": subject, "topics": normalized},
+        )
+
+    def ensure_topic_concept_links(
         self,
         *,
         subject: str,
         sss_level: str,
         term: int,
-        topic_ids: list[str],
+        topic_id: str,
+        topic_title: str,
+        concept_ids: list[str],
     ) -> None:
-        if not topic_ids:
+        if not concept_ids:
+            return
+        cleaned_concept_ids = [str(concept_id) for concept_id in concept_ids if str(concept_id).strip()]
+        if not cleaned_concept_ids:
             return
         self._run(
             """
-            UNWIND $topic_ids AS topic_id
-            MERGE (t:Topic {id: topic_id})
-            SET t.subject = $subject, t.sss_level = $sss_level, t.term = $term
-            MERGE (c:Concept {id: topic_id})
+            MERGE (s:Subject {slug: $subject})
+            MERGE (t:Topic {id: $topic_id})
+            SET t.subject = $subject, t.sss_level = $sss_level, t.term = $term, t.title = $topic_title
+            MERGE (s)-[:HAS_TOPIC]->(t)
+            WITH t
+            UNWIND $concept_ids AS concept_id
+            MERGE (c:Concept {id: concept_id})
             SET c.subject = $subject, c.sss_level = $sss_level, c.term = $term
             MERGE (t)-[:COVERS]->(c)
             WITH t, c
@@ -85,7 +129,9 @@ class Neo4jGraphRepository:
             DELETE legacy
             """,
             {
-                "topic_ids": topic_ids,
+                "topic_id": str(topic_id),
+                "topic_title": topic_title,
+                "concept_ids": cleaned_concept_ids,
                 "subject": subject,
                 "sss_level": sss_level,
                 "term": term,
@@ -98,6 +144,29 @@ class Neo4jGraphRepository:
             """
             MATCH (:Topic)-[r:MAPS_TO]->(:Concept)
             DELETE r
+            """
+        )
+
+    def remove_legacy_prerequisite_edges(self) -> None:
+        """Cleanup helper to remove old :PREREQUISITE_OF edges."""
+        self._run(
+            """
+            MATCH (:Concept)-[r:PREREQUISITE_OF]->(:Concept)
+            DELETE r
+            """
+        )
+
+    def remove_legacy_relationships(self) -> None:
+        self.remove_legacy_maps_to_edges()
+        self.remove_legacy_prerequisite_edges()
+
+    def reset_curriculum_subgraph(self) -> None:
+        """Remove curriculum graph nodes to allow a clean reseed."""
+        self._run(
+            """
+            MATCH (n)
+            WHERE n:Subject OR n:Topic OR n:Concept OR n:MasteryUpdateEvent OR n:Student
+            DETACH DELETE n
             """
         )
 
@@ -132,9 +201,28 @@ class Neo4jGraphRepository:
             """
             UNWIND range(0, size($concept_ids) - 2) AS idx
             MATCH (a:Concept {id: $concept_ids[idx]}), (b:Concept {id: $concept_ids[idx + 1]})
-            MERGE (a)-[:PREREQUISITE_OF]->(b)
+            MERGE (a)-[:PREREQ_OF]->(b)
             """,
             {"concept_ids": concept_ids},
+        )
+
+    def ensure_prerequisite_edges(self, *, edges: list[tuple[str, str]]) -> None:
+        if not edges:
+            return
+        records = [
+            {"from": str(source), "to": str(target)}
+            for source, target in edges
+            if str(source).strip() and str(target).strip() and str(source) != str(target)
+        ]
+        if not records:
+            return
+        self._run(
+            """
+            UNWIND $edges AS edge
+            MATCH (a:Concept {id: edge.from}), (b:Concept {id: edge.to})
+            MERGE (a)-[:PREREQ_OF]->(b)
+            """,
+            {"edges": records},
         )
 
     def get_prerequisite_edges(self, *, concept_ids: list[str]) -> list[tuple[str, str]]:
@@ -142,7 +230,7 @@ class Neo4jGraphRepository:
             return []
         rows = self._run(
             """
-            MATCH (p:Concept)-[:PREREQUISITE_OF]->(c:Concept)
+            MATCH (p:Concept)-[r:PREREQ_OF|PREREQUISITE_OF]->(c:Concept)
             WHERE p.id IN $concept_ids AND c.id IN $concept_ids
             RETURN p.id AS prerequisite_concept_id, c.id AS concept_id
             """,
