@@ -32,6 +32,7 @@ async def setup_profile(
     """Create the initial student learning profile.
 
     This endpoint is usually called once after registration/login.
+    It accepts initial curriculum scope and optional learning preferences.
     Security rule: `request.student_id` must match authenticated user id.
     """
     if request.student_id != current_user.id:
@@ -78,7 +79,8 @@ async def update_profile(
 ):
     """Update the authenticated student's profile scope fields.
 
-    Supports changing SSS level, active term, and enrolled subjects.
+    Supports changing SSS level, active term, enrolled subjects,
+    and optional learning preferences in one payload.
     """
     service = StudentService(db)
     return service.update_profile(current_user.id, updates)

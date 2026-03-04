@@ -35,8 +35,8 @@ class ConceptUpdateIn(BaseModel):
 
 class InternalGraphUpdateIn(BaseModel):
     student_id: UUID
-    quiz_id: UUID
-    attempt_id: UUID
+    quiz_id: UUID | None = None
+    attempt_id: UUID | None = None
     subject: Literal["math", "english", "civic"]
     sss_level: Literal["SSS1", "SSS2", "SSS3"]
     term: int = Field(ge=1, le=3)

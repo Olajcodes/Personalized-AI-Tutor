@@ -7,7 +7,7 @@ import os
 import re
 import shutil
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -17,6 +17,11 @@ from sqlalchemy.orm import Session
 
 from backend.core.config import settings
 from backend.repositories.admin_curriculum_repo import AdminCurriculumRepository
+from backend.repositories.neo4j_graph_repo import (
+    Neo4jGraphConfig,
+    Neo4jGraphRepository,
+    Neo4jGraphRepositoryError,
+)
 from backend.schemas.admin_curriculum_schema import (
     ConceptInspectResponse,
     ConceptInspectTopicOut,
@@ -67,6 +72,7 @@ class ChunkedDocument:
     topic_id: UUID
     topic_title: str
     concept_sections: list[ConceptSection]
+    prereq_evidence: list[dict] = field(default_factory=list)
 
 
 class AdminCurriculumService:
@@ -74,6 +80,55 @@ class AdminCurriculumService:
     CHUNK_OVERLAP_WORDS = 40
     MAX_CONCEPTS_PER_DOC = 12
     _CHUNK_NAMESPACE = UUID("f5cfde7f-0b62-46bf-bf17-838311a90be4")
+    _PREREQ_SYSTEM_PROMPT = """You are a curriculum knowledge graph assistant for Mastery AI.
+
+Your task is to infer prerequisite relationships between concepts within a single curriculum topic.
+
+Rules:
+- Only use the provided concept_ids.
+- Never invent new concepts.
+- Do not create relationships outside this topic.
+- A concept may have at most 2 prerequisites.
+- The resulting graph must be acyclic (no loops).
+- If a dependency is uncertain, omit it.
+- Prefer foundational → advanced ordering.
+- Provide a short evidence snippet from the provided topic excerpt for each edge.
+
+Return JSON only."""
+    _PREREQ_USER_PROMPT_TEMPLATE = """Infer prerequisite relationships for this curriculum topic.
+
+Subject: {subject}
+Level: {sss_level}
+Term: {term}
+Topic: {topic_title}
+
+Concepts (IDs and labels):
+{concept_objects_json}
+
+Topic text excerpt:
+\"\"\"
+{topic_excerpt}
+\"\"\"
+
+Return JSON in this exact format:
+
+{
+  "edges": [
+    {
+      "concept_id": "<target concept_id>",
+      "prereq_concept_ids": ["<concept_id>", "..."],
+      "confidence": 0.0,
+      "evidence": "<short phrase from the excerpt (max 18 words)>"
+    }
+  ]
+}
+
+Important rules:
+- concept_id must come from the provided concept list.
+- prereq_concept_ids must also come from the list.
+- maximum 2 prerequisites per concept.
+- do not invent new concepts.
+- evidence MUST be copied/paraphrased from the excerpt and must be <= 18 words."""
 
     def __init__(self, db: Session):
         self.db = db
@@ -274,6 +329,287 @@ class AdminCurriculumService:
             return cleaned
         except Exception:
             return labels
+
+    @staticmethod
+    def _has_prereq_cycle(edges: list[tuple[str, str]]) -> bool:
+        graph: dict[str, list[str]] = {}
+        nodes: set[str] = set()
+        for prereq_id, concept_id in edges:
+            graph.setdefault(prereq_id, []).append(concept_id)
+            nodes.add(prereq_id)
+            nodes.add(concept_id)
+
+        visiting: set[str] = set()
+        visited: set[str] = set()
+
+        def dfs(node: str) -> bool:
+            if node in visiting:
+                return True
+            if node in visited:
+                return False
+            visiting.add(node)
+            for neighbor in graph.get(node, []):
+                if dfs(neighbor):
+                    return True
+            visiting.remove(node)
+            visited.add(node)
+            return False
+
+        return any(dfs(node) for node in nodes if node not in visited)
+
+    def _infer_topic_prereqs_with_llm(
+        self,
+        *,
+        subject: str,
+        sss_level: str,
+        term: int,
+        topic_title: str,
+        concept_objects: list[dict],
+        topic_excerpt: str,
+    ) -> tuple[dict[str, list[str]] | None, list[dict]]:
+        if not self._is_truthy_env(os.getenv("CURRICULUM_PREREQ_USE_LLM")):
+            return None, []
+        if not concept_objects:
+            return None, []
+
+        valid_ids: set[str] = {
+            str(item.get("concept_id") or "").strip()
+            for item in concept_objects
+            if str(item.get("concept_id") or "").strip()
+        }
+        if not valid_ids:
+            return None, []
+
+        provider = os.getenv("LLM_PROVIDER", "groq").strip().lower()
+        model = os.getenv(
+            "CURRICULUM_PREREQ_LLM_MODEL",
+            os.getenv("CURRICULUM_CONCEPT_LLM_MODEL", os.getenv("LLM_MODEL", "openai/gpt-oss-20b")),
+        ).strip()
+        api_key = (
+            os.getenv("GROQ_API_KEY")
+            if provider == "groq"
+            else (os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY"))
+        )
+        if not api_key:
+            return None, []
+
+        try:
+            from openai import OpenAI
+        except ModuleNotFoundError:
+            return None, []
+
+        base_url = ""
+        if provider == "groq":
+            base_url = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1").strip()
+        elif provider not in {"openai", ""} and os.getenv("LLM_API_BASE"):
+            base_url = os.getenv("LLM_API_BASE", "").strip()
+
+        user_prompt = self._PREREQ_USER_PROMPT_TEMPLATE
+        user_prompt = user_prompt.replace("{subject}", subject)
+        user_prompt = user_prompt.replace("{sss_level}", sss_level)
+        user_prompt = user_prompt.replace("{term}", str(term))
+        user_prompt = user_prompt.replace("{topic_title}", topic_title)
+        user_prompt = user_prompt.replace("{concept_objects_json}", json.dumps(concept_objects, ensure_ascii=True))
+        user_prompt = user_prompt.replace("{topic_excerpt}", topic_excerpt)
+
+        try:
+            client = OpenAI(api_key=api_key, base_url=base_url or None)
+            response = client.chat.completions.create(
+                model=model,
+                temperature=0,
+                messages=[
+                    {"role": "system", "content": self._PREREQ_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
+            content = ""
+            if response.choices:
+                content = str(response.choices[0].message.content or "")
+            parsed = self._extract_json_object(content)
+            if not parsed:
+                return None, []
+            raw_edges = parsed.get("edges")
+            if not isinstance(raw_edges, list):
+                return None, []
+
+            validated_edges: list[dict] = []
+            validation_failed = False
+            for edge in raw_edges:
+                if not isinstance(edge, dict):
+                    validation_failed = True
+                    break
+                concept_id = str(edge.get("concept_id") or "").strip()
+                if concept_id not in valid_ids:
+                    validation_failed = True
+                    break
+
+                raw_prereqs = edge.get("prereq_concept_ids")
+                if not isinstance(raw_prereqs, list):
+                    validation_failed = True
+                    break
+                deduped_prereqs: list[str] = []
+                seen_prereq: set[str] = set()
+                for prereq in raw_prereqs:
+                    prereq_id = str(prereq).strip()
+                    if not prereq_id or prereq_id == concept_id:
+                        continue
+                    if prereq_id not in valid_ids:
+                        validation_failed = True
+                        break
+                    if prereq_id in seen_prereq:
+                        continue
+                    seen_prereq.add(prereq_id)
+                    deduped_prereqs.append(prereq_id)
+                    if len(deduped_prereqs) >= 2:
+                        break
+                if validation_failed:
+                    break
+
+                evidence = re.sub(r"\s+", " ", str(edge.get("evidence") or "")).strip()
+                if not evidence:
+                    validation_failed = True
+                    break
+                evidence_words = evidence.split()
+                if len(evidence_words) > 18:
+                    validation_failed = True
+                    break
+
+                try:
+                    confidence = float(edge.get("confidence", 0.0))
+                except (TypeError, ValueError):
+                    validation_failed = True
+                    break
+                confidence = max(0.0, min(1.0, confidence))
+
+                validated_edges.append(
+                    {
+                        "concept_id": concept_id,
+                        "prereq_concept_ids": deduped_prereqs,
+                        "confidence": confidence,
+                        "evidence": evidence,
+                    }
+                )
+
+            # Strict contract: any invalid edge means we discard LLM output and use sequential fallback.
+            if validation_failed:
+                return None, []
+            if not validated_edges:
+                return None, []
+
+            by_concept: dict[str, dict] = {}
+            for edge in validated_edges:
+                existing = by_concept.get(edge["concept_id"])
+                if existing is None or edge["confidence"] > existing["confidence"]:
+                    by_concept[edge["concept_id"]] = edge
+            normalized_edges = list(by_concept.values())
+
+            edge_cap = 2 * max(len(valid_ids), 1)
+            if len(normalized_edges) > edge_cap:
+                normalized_edges.sort(key=lambda item: float(item.get("confidence", 0.0)), reverse=True)
+                normalized_edges = normalized_edges[:edge_cap]
+
+            graph_edges = [
+                (prereq_id, edge["concept_id"])
+                for edge in normalized_edges
+                for prereq_id in edge["prereq_concept_ids"]
+            ]
+            if self._has_prereq_cycle(graph_edges):
+                return None, []
+
+            prereq_map = {
+                edge["concept_id"]: list(edge["prereq_concept_ids"])
+                for edge in normalized_edges
+            }
+            return prereq_map, normalized_edges
+        except Exception:
+            return None, []
+
+    def _extract_concept_labels_with_llm(
+        self,
+        *,
+        topic_title: str,
+        subject: str,
+        sss_level: str,
+        term: int,
+        raw_text: str,
+    ) -> list[str] | None:
+        should_use_llm = self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_EXTRACT_USE_LLM")) or self._is_truthy_env(
+            os.getenv("CURRICULUM_CONCEPT_USE_LLM")
+        )
+        if not should_use_llm:
+            return None
+
+        provider = os.getenv("LLM_PROVIDER", "groq").strip().lower()
+        model = os.getenv(
+            "CURRICULUM_CONCEPT_EXTRACT_MODEL",
+            os.getenv("CURRICULUM_CONCEPT_LLM_MODEL", os.getenv("LLM_MODEL", "openai/gpt-oss-20b")),
+        ).strip()
+
+        api_key = (
+            os.getenv("GROQ_API_KEY")
+            if provider == "groq"
+            else (os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY"))
+        )
+        if not api_key:
+            return None
+
+        try:
+            from openai import OpenAI
+        except ModuleNotFoundError:
+            return None
+
+        base_url = ""
+        if provider == "groq":
+            base_url = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1").strip()
+        elif provider not in {"openai", ""} and os.getenv("LLM_API_BASE"):
+            base_url = os.getenv("LLM_API_BASE", "").strip()
+
+        text_sample = re.sub(r"\s+", " ", raw_text).strip()[:12000]
+        if not text_sample:
+            return None
+
+        try:
+            client = OpenAI(api_key=api_key, base_url=base_url or None)
+            prompt = (
+                "You are extracting curriculum concepts from study notes.\n"
+                f"Scope: subject={subject}, level={sss_level}, term={term}, topic={topic_title}.\n"
+                "Return JSON only in this exact format: {\"concepts\": [\"...\"]}.\n"
+                "Extract 3 to 10 concise concept names relevant to this topic.\n"
+                "Do not include explanations, numbering, or markdown.\n\n"
+                f"Notes:\n{text_sample}"
+            )
+            response = client.chat.completions.create(
+                model=model,
+                temperature=0,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            content = ""
+            if response.choices:
+                content = str(response.choices[0].message.content or "")
+            parsed = self._extract_json_object(content)
+            if not parsed:
+                return None
+            concepts = parsed.get("concepts")
+            if not isinstance(concepts, list):
+                return None
+
+            cleaned: list[str] = []
+            seen: set[str] = set()
+            for item in concepts:
+                normalized = re.sub(r"\s+", " ", str(item)).strip()
+                if not normalized:
+                    continue
+                key = normalized.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                cleaned.append(normalized)
+
+            if not (3 <= len(cleaned) <= 10):
+                return None
+            return cleaned[: self.MAX_CONCEPTS_PER_DOC]
+        except Exception:
+            return None
 
     @staticmethod
     def _read_docx(path: Path) -> str:
@@ -488,25 +824,78 @@ class AdminCurriculumService:
 
         # Keep ingestion bounded for very long notes.
         section_payloads = section_payloads[: self.MAX_CONCEPTS_PER_DOC]
-        labels = [item[1] for item in section_payloads]
-        labels = self._maybe_refine_concept_labels_with_llm(
+        llm_labels = self._extract_concept_labels_with_llm(
             topic_title=topic_title,
             subject=subject,
             sss_level=sss_level,
             term=term,
-            labels=labels,
+            raw_text=text,
         )
+        if llm_labels:
+            target_count = min(len(section_payloads), len(llm_labels), self.MAX_CONCEPTS_PER_DOC)
+            section_payloads = [
+                (heading, llm_labels[idx], chunks, confidence)
+                for idx, (heading, _, chunks, confidence) in enumerate(section_payloads[:target_count])
+            ]
+        else:
+            labels = [item[1] for item in section_payloads]
+            labels = self._maybe_refine_concept_labels_with_llm(
+                topic_title=topic_title,
+                subject=subject,
+                sss_level=sss_level,
+                term=term,
+                labels=labels,
+            )
+            section_payloads = [
+                (heading, labels[idx], chunks, confidence)
+                for idx, (heading, _, chunks, confidence) in enumerate(section_payloads)
+            ]
+
+        if not section_payloads:
+            return None
+
+        labels = [item[1] for item in section_payloads]
         concept_ids = self._scoped_concept_ids(
             labels=labels,
             subject=subject,
             sss_level=sss_level,
             term=term,
         )
+        concept_objects = [
+            {"concept_id": concept_ids[idx], "label": labels[idx]}
+            for idx in range(min(len(concept_ids), len(labels)))
+        ]
+        excerpt_chunks: list[str] = []
+        for _, _, chunks, _ in section_payloads:
+            excerpt_chunks.extend(chunks[:2])
+            if len(excerpt_chunks) >= 8:
+                break
+        topic_excerpt = " ".join(excerpt_chunks)
+        try:
+            excerpt_max_chars = int(os.getenv("CURRICULUM_PREREQ_TEXT_MAX_CHARS", "3000"))
+        except ValueError:
+            excerpt_max_chars = 3000
+        if excerpt_max_chars <= 0:
+            excerpt_max_chars = 3000
+        topic_excerpt = topic_excerpt[:excerpt_max_chars]
+
+        inferred_prereq_map, prereq_evidence = self._infer_topic_prereqs_with_llm(
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+            topic_title=topic_title,
+            concept_objects=concept_objects,
+            topic_excerpt=topic_excerpt,
+        )
 
         concept_sections: list[ConceptSection] = []
         for index, (_, label, chunks, confidence) in enumerate(section_payloads):
             concept_id = concept_ids[index]
-            prereqs = [concept_ids[index - 1]] if index > 0 else []
+            # Keep legacy deterministic ordering whenever inference is disabled/invalid.
+            if inferred_prereq_map is not None:
+                prereqs = list(inferred_prereq_map.get(concept_id, []))
+            else:
+                prereqs = [concept_ids[index - 1]] if index > 0 else []
             concept_sections.append(
                 ConceptSection(
                     concept_id=concept_id,
@@ -522,6 +911,7 @@ class AdminCurriculumService:
             topic_id=topic_id,
             topic_title=topic_title,
             concept_sections=concept_sections,
+            prereq_evidence=prereq_evidence,
         )
 
     def upload_curriculum(
@@ -587,6 +977,10 @@ class AdminCurriculumService:
             chunk_rows: list[dict] = []
             mapped_topic_ids: set[UUID] = set()
             mapped_concept_ids: set[str] = set()
+            topics_for_neo4j: dict[str, dict] = {}
+            topic_to_concepts: dict[str, dict] = {}
+            all_concepts_for_neo4j: dict[str, str] = {}
+            prereq_edges: set[tuple[str, str]] = set()
             processed_file_count = 0
             processed_chunks = 0
 
@@ -609,8 +1003,46 @@ class AdminCurriculumService:
 
                 processed_file_count += 1
                 mapped_topic_ids.add(parsed.topic_id)
+                if parsed.prereq_evidence:
+                    max_edges = 20
+                    edges_for_log = parsed.prereq_evidence[:max_edges]
+                    self.repo.append_ingestion_log(
+                        job,
+                        stage="prereq_inference",
+                        message="Applied LLM prerequisite inference for topic",
+                        extra={
+                            "file": parsed.source_id,
+                            "topic_id": str(parsed.topic_id),
+                            "topic_title": parsed.topic_title,
+                            "edges_count": len(parsed.prereq_evidence),
+                            "edges_truncated": len(parsed.prereq_evidence) > max_edges,
+                            "edges": edges_for_log,
+                        },
+                    )
+                topic_id_str = str(parsed.topic_id)
+                topics_for_neo4j.setdefault(
+                    topic_id_str,
+                    {
+                        "topic_id": topic_id_str,
+                        "title": parsed.topic_title,
+                        "sss_level": payload.sss_level,
+                        "term": payload.term,
+                    },
+                )
+                topic_bundle = topic_to_concepts.setdefault(
+                    topic_id_str,
+                    {"title": parsed.topic_title, "concept_ids": [], "concept_labels": {}},
+                )
                 for concept in parsed.concept_sections:
                     mapped_concept_ids.add(concept.concept_id)
+                    if concept.concept_id not in topic_bundle["concept_ids"]:
+                        topic_bundle["concept_ids"].append(concept.concept_id)
+                    topic_bundle["concept_labels"][concept.concept_id] = concept.concept_label
+                    all_concepts_for_neo4j[concept.concept_id] = concept.concept_label
+                    for prereq in concept.prereq_concept_ids:
+                        prereq_id = str(prereq).strip()
+                        if prereq_id and prereq_id != concept.concept_id:
+                            prereq_edges.add((prereq_id, concept.concept_id))
                     self.repo.upsert_topic_map(
                         version_id=version.id,
                         topic_id=parsed.topic_id,
@@ -640,6 +1072,10 @@ class AdminCurriculumService:
                             "curriculum_version_id": str(version.id),
                             "approved": False,
                             "chunk_index": chunk_index,
+                            "citation_topic_title": parsed.topic_title,
+                            "citation_source_id": parsed.source_id,
+                            "citation_chunk_index": chunk_index,
+                            "citation_concept_label": concept.concept_label,
                         }
                         chunk_rows.append({"id": deterministic_id, "text": chunk_text, "payload": chunk_payload})
 
@@ -669,6 +1105,50 @@ class AdminCurriculumService:
 
             if chunk_rows:
                 self.vector_store.upsert_chunks(chunk_rows)
+
+            should_sync_neo4j = settings.use_neo4j_graph and bool(
+                settings.neo4j_uri and settings.neo4j_user and settings.neo4j_password
+            )
+            if should_sync_neo4j and topic_to_concepts:
+                neo_repo = Neo4jGraphRepository(
+                    Neo4jGraphConfig(
+                        uri=settings.neo4j_uri,
+                        user=settings.neo4j_user,
+                        password=settings.neo4j_password,
+                    )
+                )
+                try:
+                    neo_repo.ensure_subject_topics(subject=payload.subject, topics=list(topics_for_neo4j.values()))
+                    flat_concept_ids: list[str] = []
+                    for topic_id, bundle in topic_to_concepts.items():
+                        concept_ids = [str(concept_id) for concept_id in bundle["concept_ids"]]
+                        flat_concept_ids.extend(concept_ids)
+                        neo_repo.ensure_topic_concept_links(
+                            subject=payload.subject,
+                            sss_level=payload.sss_level,
+                            term=payload.term,
+                            topic_id=topic_id,
+                            topic_title=str(bundle["title"]),
+                            concept_ids=concept_ids,
+                            concept_labels=dict(bundle["concept_labels"]),
+                        )
+                    neo_repo.ensure_concepts_with_labels(
+                        subject=payload.subject,
+                        sss_level=payload.sss_level,
+                        term=payload.term,
+                        concepts=[
+                            {"id": concept_id, "name": concept_label}
+                            for concept_id, concept_label in all_concepts_for_neo4j.items()
+                        ],
+                    )
+                    if prereq_edges:
+                        neo_repo.ensure_prerequisite_edges(edges=sorted(prereq_edges))
+                    else:
+                        neo_repo.ensure_prerequisite_chain(concept_ids=flat_concept_ids)
+                except Neo4jGraphRepositoryError as exc:
+                    raise AdminCurriculumServiceError(f"Neo4j ingestion sync failed: {exc}") from exc
+                finally:
+                    neo_repo.close()
 
             topic_ids_list = list(mapped_topic_ids)
             affected_topics = self.repo.set_topics_version(

@@ -33,10 +33,6 @@ class GraphClientValidationError(ValueError):
 
 class GraphClientService:
     @staticmethod
-    def _topic_concept_id(topic_id) -> str:
-        return str(topic_id)
-
-    @staticmethod
     def _build_context_response(
         *,
         student_id: UUID,
@@ -86,6 +82,44 @@ class GraphClientService:
         )
 
     @staticmethod
+    def _build_scope_graph_from_rows(rows: list[dict]) -> tuple[list[str], list[tuple[str, str]], list[dict]]:
+        """Build ordered concept IDs, prerequisite edges, and topic bundles from mapping rows."""
+        topic_bundles: dict[str, dict] = {}
+        concept_ids: list[str] = []
+        concept_seen: set[str] = set()
+        explicit_prereqs: set[tuple[str, str]] = set()
+
+        for row in rows:
+            topic_id = str(row["topic_id"])
+            topic_title = str(row.get("topic_title") or "")
+            concept_id = str(row["concept_id"])
+            prereq_ids = [str(value) for value in (row.get("prereq_concept_ids") or [])]
+
+            bundle = topic_bundles.setdefault(
+                topic_id,
+                {
+                    "topic_id": topic_id,
+                    "title": topic_title,
+                    "concept_ids": [],
+                },
+            )
+            if concept_id not in bundle["concept_ids"]:
+                bundle["concept_ids"].append(concept_id)
+
+            if concept_id not in concept_seen:
+                concept_seen.add(concept_id)
+                concept_ids.append(concept_id)
+
+            for prereq_id in prereq_ids:
+                normalized = prereq_id.strip()
+                if normalized and normalized != concept_id:
+                    explicit_prereqs.add((normalized, concept_id))
+
+        prereq_edges = sorted(explicit_prereqs) if explicit_prereqs else GraphClientService._sequential_prereq_edges(concept_ids)
+        topics = list(topic_bundles.values())
+        return concept_ids, prereq_edges, topics
+
+    @staticmethod
     def _sequential_prereq_edges(concept_ids: list[str]) -> list[tuple[str, str]]:
         if len(concept_ids) <= 1:
             return []
@@ -125,19 +159,30 @@ class GraphClientService:
                 "Student scope is invalid. Ensure profile, level, term, and subject enrollment are correct."
             )
 
-        topics = diagnostic_repo.get_scope_topics(subject=subject, sss_level=sss_level, term=term)
-        concept_ids = [self._topic_concept_id(topic.id) for topic in topics]
+        scoped_rows = diagnostic_repo.get_scope_topic_concept_rows(
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+        )
+        concept_ids, prereq_edges, topics = self._build_scope_graph_from_rows(scoped_rows)
 
         neo_repo = self._neo4j_repo_or_none()
         if neo_repo is not None:
             try:
-                neo_repo.ensure_topic_concepts(
-                    subject=subject,
-                    sss_level=sss_level,
-                    term=term,
-                    topic_ids=concept_ids,
-                )
-                neo_repo.ensure_prerequisite_chain(concept_ids=concept_ids)
+                neo_repo.ensure_subject_topics(subject=subject, topics=topics)
+                for topic in topics:
+                    neo_repo.ensure_topic_concept_links(
+                        subject=subject,
+                        sss_level=sss_level,
+                        term=term,
+                        topic_id=topic["topic_id"],
+                        topic_title=topic["title"],
+                        concept_ids=topic["concept_ids"],
+                    )
+                if prereq_edges:
+                    neo_repo.ensure_prerequisite_edges(edges=prereq_edges)
+                else:
+                    neo_repo.ensure_prerequisite_chain(concept_ids=concept_ids)
                 mastery_map = neo_repo.get_mastery_map(
                     student_id=str(student_id),
                     subject=subject,
@@ -145,9 +190,9 @@ class GraphClientService:
                     term=term,
                     concept_ids=concept_ids,
                 )
-                prereq_edges = neo_repo.get_prerequisite_edges(concept_ids=concept_ids)
-                if not prereq_edges:
-                    prereq_edges = self._sequential_prereq_edges(concept_ids)
+                persisted_edges = neo_repo.get_prerequisite_edges(concept_ids=concept_ids)
+                if persisted_edges:
+                    prereq_edges = persisted_edges
 
                 return self._build_context_response(
                     student_id=student_id,
@@ -171,7 +216,6 @@ class GraphClientService:
             sss_level=sss_level,
             term=term,
         )
-        prereq_edges = self._sequential_prereq_edges(concept_ids)
         return self._build_context_response(
             student_id=student_id,
             subject=subject,
