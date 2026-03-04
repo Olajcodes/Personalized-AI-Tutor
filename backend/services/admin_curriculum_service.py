@@ -620,7 +620,11 @@ Important rules:
                 "python-docx is not installed. Add `python-docx` to backend dependencies."
             ) from exc
 
-        doc = Document(str(path))
+        try:
+            doc = Document(str(path))
+        except Exception:
+            # Some upstream files are malformed .docx archives; skip them instead of failing whole ingestion scope.
+            return ""
         paragraphs = [paragraph.text.strip() for paragraph in doc.paragraphs if paragraph.text and paragraph.text.strip()]
         return "\n".join(paragraphs)
 

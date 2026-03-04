@@ -156,6 +156,58 @@ $env:SEED_RESET = "1"
 python -m backend.scripts.seed_lessons
 ```
 
+## First Run (Recommended Clean Validation Flow)
+
+If your goal is to validate ingestion/chunking behavior from a known baseline, use the reset workflow below.
+
+### One-command reset + reseed
+
+From repo root:
+
+```bash
+python -m backend.scripts.reset_and_reseed_curriculum \
+  --disable-llm \
+  --disable-neo4j-sync \
+  --seed-reset \
+  --qdrant-batch-size 24 \
+  --qdrant-timeout-seconds 240
+```
+
+PowerShell:
+
+```powershell
+python -m backend.scripts.reset_and_reseed_curriculum --disable-llm --disable-neo4j-sync --seed-reset --qdrant-batch-size 24 --qdrant-timeout-seconds 240
+```
+
+What this does:
+- optionally reseeds lesson/topic/mastery demo data (`seed_lessons`)
+- clears curriculum ingestion/versioning tables
+- clears Qdrant collection and re-ingests curriculum from `docs/SSS_NOTES_2026`
+- auto-approves ingested versions
+- removes failed/duplicate version artifacts so retrieval remains clean
+
+When Neo4j is available, add:
+
+```bash
+python -m backend.scripts.reset_and_reseed_curriculum --seed-neo4j
+```
+
+## Do I Need to Seed Data First?
+
+Short answer: **yes, for reliable first run and QA**.
+
+- Without seeding, many endpoints may return empty/404 because required scope/topic/profile data does not exist yet.
+- Pure UI interaction is good for realism after baseline setup, but it is slow/incomplete for full-surface validation.
+- Recommended production-like process:
+1. Apply migrations.
+2. Seed baseline relational data (`seed_lessons` or `reset_and_reseed_curriculum`).
+3. Ingest and approve curriculum versions.
+4. (Optional) Seed Neo4j graph if graph mode is enabled.
+5. Then use UI flows to generate organic activity/tutor/quiz data.
+
+Compulsory baseline data:
+- subjects/topics/lessons and at least one student profile must exist before learning-path/tutor flows are meaningful.
+
 ## Neo4j Graph Setup (Optional, Can Be Used Now)
 
 You do not need to wait for a later section to seed graph data.
@@ -192,6 +244,60 @@ python -m backend.scripts.seed_neo4j_graph
 - `POST /api/v1/internal/graph/update-mastery` with valid payload
 
 If Neo4j is reachable and enabled, updates are mirrored there; if not, requests still work via Postgres fallback.
+
+## Common Errors and Fixes
+
+### `Neo4j query failed ... connection refused`
+
+Cause:
+- `USE_NEO4J_GRAPH=true` while Neo4j is not running/reachable.
+
+Fix:
+- Start Neo4j, or set `USE_NEO4J_GRAPH=false` during ingestion.
+
+### `fastembed is not installed`
+
+Cause:
+- Qdrant embedding dependency missing.
+
+Fix:
+- `python -m pip install fastembed`
+
+### `Failed to upsert chunks into Qdrant: The write operation timed out`
+
+Cause:
+- write batch too large and/or client timeout too low.
+
+Fix:
+- set `QDRANT_UPSERT_BATCH_SIZE=24` (or lower)
+- set `QDRANT_TIMEOUT_SECONDS=240` (or higher)
+- rerun reset/reseed script.
+
+### `Index required but not found for "curriculum_version_id"`
+
+Cause:
+- payload index missing in Qdrant for approval flag updates.
+
+Fix:
+- use current backend code (auto-creates payload indexes during collection setup), then re-ingest.
+
+### `.docx` error: `There is no item named 'word/NULL' in the archive`
+
+Cause:
+- malformed source document.
+
+Fix:
+- current ingestion now skips malformed `.docx` files; replace or remove bad files if coverage is incomplete.
+
+### Postgres DNS errors (`could not translate host name ...`)
+
+Cause:
+- wrong host/network/DNS, often with remote DB from local machine.
+
+Fix:
+- verify `DATABASE_URL` host and connectivity
+- confirm internet/DNS/VPN/firewall settings
+- for Supabase pooler, ensure SSL (`?sslmode=require`) is present.
 
 ## Run API
 

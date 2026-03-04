@@ -217,6 +217,20 @@ python -m alembic -c backend/alembic.ini upgrade head
 python -m backend.scripts.seed_lessons
 ```
 
+For a clean, reproducible ingestion/chunking validation run:
+
+```bash
+python -m backend.scripts.reset_and_reseed_curriculum \
+  --disable-llm \
+  --disable-neo4j-sync \
+  --seed-reset \
+  --qdrant-batch-size 24 \
+  --qdrant-timeout-seconds 240
+```
+
+Detailed troubleshooting and first-run sequence:
+- see [backend/README.md](./backend/README.md)
+
 ### 5) Run Backend API
 
 Run from repository root:
