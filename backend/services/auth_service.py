@@ -96,3 +96,32 @@ class AuthService:
             raise AuthValidationError("New password must be different from current password.")
 
         self.repo.update_password(user.id, hash_password(payload.new_password))
+
+    def google_login(self, email: str, first_name: str, last_name: str, display_name: str) -> AuthOut:
+        # 1. Check if the user already exists in the database
+        user = self.repo.get_user_by_email(email)
+        
+        # 2. If user does not exist, perform Just-In-Time (JIT) Registration
+        if not user:
+            user = self.repo.create_user(
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+                display_name=display_name,
+                role="student",
+                # FIX: Use password_hash to match your AuthRepository
+                password_hash="SSO_USER_NO_PASSWORD" 
+            )
+
+        # 3. Generate your platform's JWT token
+        access_token = create_access_token(subject=user.email, role=user.role, user_id=str(user.id))
+
+        # 4. Return the exact same schema as traditional login
+        return AuthOut(
+            access_token=access_token,
+            user_id=str(user.id),
+            role=user.role,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            display_name=user.display_name
+        )

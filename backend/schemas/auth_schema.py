@@ -19,6 +19,11 @@ class LoginIn(BaseModel):
     password: str = Field(min_length=8, max_length=128)
 
 
+
+# Add this alongside LoginIn and RegisterIn
+class GoogleLoginIn(BaseModel):
+    token: str
+    
 class AuthOut(BaseModel):
     access_token: str
     user_id: str

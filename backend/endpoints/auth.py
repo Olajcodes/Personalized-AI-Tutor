@@ -3,6 +3,12 @@
 Public API for register/login/password update.
 """
 
+
+import os
+
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -14,6 +20,7 @@ from backend.schemas.auth_schema import (
     AuthOut,
     ChangePasswordIn,
     LoginIn,
+    GoogleLoginIn,
     MessageOut,
     RegisterIn,
     RegisterOut,
@@ -86,6 +93,52 @@ def change_password(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
     except AuthValidationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except SQLAlchemyError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable. Please retry.",
+        )
+        
+        
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+
+@router.post("/google", response_model=AuthOut, status_code=status.HTTP_200_OK)
+def google_login(payload: GoogleLoginIn, db: Session = Depends(get_db)):
+    """Authenticate a user via Google OAuth and issue a JWT access token.
+    
+    Performs just-in-time registration if the Google email is not found.
+    The response perfectly matches standard traditional login.
+    """
+    try:
+        # 1. Verify the token with Google's servers
+        id_info = id_token.verify_oauth2_token(
+            id_token=payload.token,
+            request=google_requests.Request(),
+            audience=GOOGLE_CLIENT_ID
+        )
+
+        # 2. Extract user info
+        email = id_info.get("email")
+        first_name = id_info.get("given_name")
+        last_name = id_info.get("family_name")
+        display_name = id_info.get("name")
+
+        # 3. Pass extracted data to the auth service
+        # The service will handle checking the DB, creating the user if needed, 
+        # and generating your platform's JWT access token.
+        return _service(db).google_login(
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            display_name=display_name
+        )
+
+    except ValueError:
+        # If the token is fake, expired, or tampered with
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="Invalid Google Token"
+        )
     except SQLAlchemyError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
