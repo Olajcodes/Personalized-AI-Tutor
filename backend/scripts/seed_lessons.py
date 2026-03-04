@@ -6,6 +6,7 @@ Usage:
 Optional env:
   SEED_STUDENT_ID=<uuid>      # primary learner id used by frontend
   SEED_RESET=1                # clear existing topics/lessons/mastery before reseeding
+  SEED_INCLUDE_DEMO_LEARNERS=1  # also seed demo users/profiles/stats/mastery (default: off)
 """
 
 from __future__ import annotations
@@ -588,61 +589,65 @@ def run() -> None:
             "civic": _upsert_subject(db, "civic", "Civic Education"),
         }
 
-        seed_student_id = uuid.UUID(os.getenv("SEED_STUDENT_ID", "00000000-0000-0000-0000-000000000001"))
-        learners = [
-            SeedLearner(
-                user_id=seed_student_id,
-                email="olasquare.student@masteryai.local",
-                first_name="Olasquare",
-                last_name="Adeniyi",
-                display_name="Olasquare",
-                sss_level="SSS1",
-                term=1,
-                streak=9,
-                best_streak=16,
-                points=1260,
-                study_seconds=41200,
-            ),
-            SeedLearner(
-                user_id=uuid.UUID("00000000-0000-0000-0000-000000000002"),
-                email="amaka.student@masteryai.local",
-                first_name="Amaka",
-                last_name="Okonkwo",
-                display_name="Amaka",
-                sss_level="SSS2",
-                term=2,
-                streak=7,
-                best_streak=13,
-                points=1180,
-                study_seconds=37500,
-            ),
-            SeedLearner(
-                user_id=uuid.UUID("00000000-0000-0000-0000-000000000003"),
-                email="tunde.student@masteryai.local",
-                first_name="Tunde",
-                last_name="Afolabi",
-                display_name="Tunde",
-                sss_level="SSS3",
-                term=1,
-                streak=11,
-                best_streak=19,
-                points=1510,
-                study_seconds=46900,
-            ),
-            SeedLearner(
-                user_id=uuid.UUID("00000000-0000-0000-0000-000000000004"),
-                email="zainab.student@masteryai.local",
-                first_name="Zainab",
-                last_name="Usman",
-                display_name="Zainab",
-                sss_level="SSS1",
-                term=3,
-                streak=5,
-                best_streak=10,
-                points=980,
-                study_seconds=30400,
-            ),
-        ]
+        include_demo_learners = _is_truthy(os.getenv("SEED_INCLUDE_DEMO_LEARNERS"))
+        seed_student_id: uuid.UUID | None = None
+        learners: list[SeedLearner] = []
+        if include_demo_learners:
+            seed_student_id = uuid.UUID(os.getenv("SEED_STUDENT_ID", "00000000-0000-0000-0000-000000000001"))
+            learners = [
+                SeedLearner(
+                    user_id=seed_student_id,
+                    email="olasquare.student@masteryai.local",
+                    first_name="Olasquare",
+                    last_name="Adeniyi",
+                    display_name="Olasquare",
+                    sss_level="SSS1",
+                    term=1,
+                    streak=9,
+                    best_streak=16,
+                    points=1260,
+                    study_seconds=41200,
+                ),
+                SeedLearner(
+                    user_id=uuid.UUID("00000000-0000-0000-0000-000000000002"),
+                    email="amaka.student@masteryai.local",
+                    first_name="Amaka",
+                    last_name="Okonkwo",
+                    display_name="Amaka",
+                    sss_level="SSS2",
+                    term=2,
+                    streak=7,
+                    best_streak=13,
+                    points=1180,
+                    study_seconds=37500,
+                ),
+                SeedLearner(
+                    user_id=uuid.UUID("00000000-0000-0000-0000-000000000003"),
+                    email="tunde.student@masteryai.local",
+                    first_name="Tunde",
+                    last_name="Afolabi",
+                    display_name="Tunde",
+                    sss_level="SSS3",
+                    term=1,
+                    streak=11,
+                    best_streak=19,
+                    points=1510,
+                    study_seconds=46900,
+                ),
+                SeedLearner(
+                    user_id=uuid.UUID("00000000-0000-0000-0000-000000000004"),
+                    email="zainab.student@masteryai.local",
+                    first_name="Zainab",
+                    last_name="Usman",
+                    display_name="Zainab",
+                    sss_level="SSS1",
+                    term=3,
+                    streak=5,
+                    best_streak=10,
+                    points=980,
+                    study_seconds=30400,
+                ),
+            ]
 
         for learner in learners:
             user = _upsert_user(db, learner)
@@ -701,7 +706,10 @@ def run() -> None:
         db.commit()
 
         print("Seed complete.")
-        print(f"Primary student_id: {seed_student_id}")
+        if include_demo_learners and seed_student_id is not None:
+            print(f"Primary student_id: {seed_student_id}")
+        else:
+            print("Demo learners seeded: no (interface should create users/profiles).")
         print(f"Topics created: {created_topics}")
         print(f"Topics updated: {updated_topics}")
         print(f"Scopes populated: {len(scope_counter)}")

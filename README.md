@@ -221,12 +221,14 @@ For a clean, reproducible ingestion/chunking validation run:
 
 ```bash
 python -m backend.scripts.reset_and_reseed_curriculum \
-  --disable-llm \
-  --disable-neo4j-sync \
   --seed-reset \
   --qdrant-batch-size 24 \
   --qdrant-timeout-seconds 240
 ```
+
+Default behavior keeps interface-owned learner data out of seed.
+Add `--seed-demo-learners` only when you explicitly want demo student profiles/stats.
+Add `--disable-llm` only when you explicitly want deterministic fallback-only ingestion.
 
 Detailed troubleshooting and first-run sequence:
 - see [backend/README.md](./backend/README.md)

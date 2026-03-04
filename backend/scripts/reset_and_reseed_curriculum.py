@@ -11,6 +11,9 @@ Recommended first-run deterministic mode:
     --qdrant-batch-size 24 \
     --qdrant-timeout-seconds 240
 
+Include demo learners only when needed:
+  python -m backend.scripts.reset_and_reseed_curriculum --seed-demo-learners
+
 Notes:
 - This script is destructive for curriculum ingestion/version tables and vector chunks.
 - It keeps core auth/profile tables intact.
@@ -31,7 +34,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--source-root", default="docs/SSS_NOTES_2026")
     parser.add_argument("--seed-lessons", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--seed-reset", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--disable-llm", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--seed-demo-learners", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--disable-llm", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--disable-neo4j-sync", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--seed-neo4j", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--qdrant-batch-size", type=int, default=24)
@@ -48,6 +52,13 @@ def _configure_runtime(args: argparse.Namespace) -> None:
         os.environ["CURRICULUM_CONCEPT_USE_LLM"] = "false"
         os.environ["CURRICULUM_CONCEPT_EXTRACT_USE_LLM"] = "false"
         os.environ["CURRICULUM_PREREQ_USE_LLM"] = "false"
+        print("  - LLM extraction/inference: disabled by flag")
+    else:
+        # LLM-first default for ingestion, while still allowing explicit env overrides.
+        os.environ.setdefault("CURRICULUM_CONCEPT_USE_LLM", "true")
+        os.environ.setdefault("CURRICULUM_CONCEPT_EXTRACT_USE_LLM", "true")
+        os.environ.setdefault("CURRICULUM_PREREQ_USE_LLM", "true")
+        print("  - LLM extraction/inference: enabled by default")
 
     if args.disable_neo4j_sync:
         os.environ["USE_NEO4J_GRAPH"] = "false"
@@ -57,6 +68,7 @@ def _run_seed_lessons(args: argparse.Namespace) -> None:
     if not args.seed_lessons:
         return
     os.environ["SEED_RESET"] = "1" if args.seed_reset else "0"
+    os.environ["SEED_INCLUDE_DEMO_LEARNERS"] = "1" if args.seed_demo_learners else "0"
     print("[1/7] Running lesson seed script...")
     from backend.scripts.seed_lessons import run as seed_lessons_run
 

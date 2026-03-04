@@ -64,16 +64,18 @@ USE_NEO4J_GRAPH=false
 LLM_PROVIDER=groq
 LLM_MODEL=openai/gpt-oss-20b
 GROQ_API_KEY=<optional-for-concept-mapping>
-CURRICULUM_CONCEPT_USE_LLM=false
+CURRICULUM_CONCEPT_USE_LLM=true
+CURRICULUM_CONCEPT_EXTRACT_USE_LLM=true
 CURRICULUM_CONCEPT_LLM_MODEL=openai/gpt-oss-20b
+CURRICULUM_PREREQ_USE_LLM=true
 ```
 
 Notes:
 - `backend/core/config.py` loads `backend/.env` directly.
 - For Supabase pooler, use `DATABASE_URL` with `?sslmode=require` (the app also auto-adds this for `*.supabase.com` when missing).
 - Run API commands from repo root to avoid import path issues.
-- Curriculum ingestion concept mapping is deterministic by default; enable
-  `CURRICULUM_CONCEPT_USE_LLM=true` to refine extracted concept labels with the configured LLM once per upload.
+- Curriculum ingestion is LLM-first by default for concept extraction and prerequisite inference.
+- If keys are missing or model output is invalid, ingestion falls back to deterministic heuristics and logs the fallback.
 
 ## Install Dependencies
 
@@ -166,8 +168,6 @@ From repo root:
 
 ```bash
 python -m backend.scripts.reset_and_reseed_curriculum \
-  --disable-llm \
-  --disable-neo4j-sync \
   --seed-reset \
   --qdrant-batch-size 24 \
   --qdrant-timeout-seconds 240
@@ -176,20 +176,33 @@ python -m backend.scripts.reset_and_reseed_curriculum \
 PowerShell:
 
 ```powershell
-python -m backend.scripts.reset_and_reseed_curriculum --disable-llm --disable-neo4j-sync --seed-reset --qdrant-batch-size 24 --qdrant-timeout-seconds 240
+python -m backend.scripts.reset_and_reseed_curriculum --seed-reset --qdrant-batch-size 24 --qdrant-timeout-seconds 240
 ```
 
 What this does:
-- optionally reseeds lesson/topic/mastery demo data (`seed_lessons`)
+- reseeds required baseline curriculum entities (subjects/topics/lessons)
+- leaves interface-owned learner data out of default seed
 - clears curriculum ingestion/versioning tables
 - clears Qdrant collection and re-ingests curriculum from `docs/SSS_NOTES_2026`
 - auto-approves ingested versions
 - removes failed/duplicate version artifacts so retrieval remains clean
 
-When Neo4j is available, add:
+If Neo4j is up and you want graph sync + graph reseed in the same run:
 
 ```bash
-python -m backend.scripts.reset_and_reseed_curriculum --seed-neo4j
+python -m backend.scripts.reset_and_reseed_curriculum --no-disable-neo4j-sync --seed-neo4j --seed-reset --qdrant-batch-size 24 --qdrant-timeout-seconds 240
+```
+
+If you need deterministic-only ingestion for debugging, force-disable LLM:
+
+```bash
+python -m backend.scripts.reset_and_reseed_curriculum --disable-llm --seed-reset --qdrant-batch-size 24 --qdrant-timeout-seconds 240
+```
+
+If you intentionally want demo learners/stats too, add:
+
+```bash
+python -m backend.scripts.reset_and_reseed_curriculum --seed-demo-learners
 ```
 
 ## Do I Need to Seed Data First?
@@ -200,13 +213,14 @@ Short answer: **yes, for reliable first run and QA**.
 - Pure UI interaction is good for realism after baseline setup, but it is slow/incomplete for full-surface validation.
 - Recommended production-like process:
 1. Apply migrations.
-2. Seed baseline relational data (`seed_lessons` or `reset_and_reseed_curriculum`).
-3. Ingest and approve curriculum versions.
-4. (Optional) Seed Neo4j graph if graph mode is enabled.
-5. Then use UI flows to generate organic activity/tutor/quiz data.
+2. Seed baseline curriculum data (`reset_and_reseed_curriculum`).
+3. Register/login and complete student onboarding from interface.
+4. Then use UI flows to generate organic activity/tutor/quiz data.
+5. (Optional) Keep demo learners off in production-like runs.
 
 Compulsory baseline data:
-- subjects/topics/lessons and at least one student profile must exist before learning-path/tutor flows are meaningful.
+- subjects/topics/lessons + approved curriculum versions must exist.
+- student profiles should be created by interface onboarding (default seed does not create them).
 
 ## Neo4j Graph Setup (Optional, Can Be Used Now)
 

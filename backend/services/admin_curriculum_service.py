@@ -74,7 +74,7 @@ class ChunkedDocument:
     concept_sections: list[ConceptSection]
     prereq_evidence: list[dict] = field(default_factory=list)
     concept_extraction_mode: str = "heuristic"
-    prereq_inference_mode: str = "sequential_fallback"
+    prereq_inference_mode: str = "sequential_no_llm"
 
 
 class AdminCurriculumService:
@@ -276,7 +276,7 @@ Important rules:
     ) -> list[str]:
         if not labels:
             return labels
-        if not self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_USE_LLM")):
+        if not self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_USE_LLM", "true")):
             return labels
 
         provider = os.getenv("LLM_PROVIDER", "groq").strip().lower()
@@ -369,7 +369,7 @@ Important rules:
         concept_objects: list[dict],
         topic_excerpt: str,
     ) -> tuple[dict[str, list[str]] | None, list[dict]]:
-        if not self._is_truthy_env(os.getenv("CURRICULUM_PREREQ_USE_LLM")):
+        if not self._is_truthy_env(os.getenv("CURRICULUM_PREREQ_USE_LLM", "true")):
             return None, []
         if not concept_objects:
             return None, []
@@ -535,8 +535,10 @@ Important rules:
         term: int,
         raw_text: str,
     ) -> list[str] | None:
-        should_use_llm = self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_EXTRACT_USE_LLM")) or self._is_truthy_env(
-            os.getenv("CURRICULUM_CONCEPT_USE_LLM")
+        should_use_llm = self._is_truthy_env(
+            os.getenv("CURRICULUM_CONCEPT_EXTRACT_USE_LLM", "true")
+        ) or self._is_truthy_env(
+            os.getenv("CURRICULUM_CONCEPT_USE_LLM", "true")
         )
         if not should_use_llm:
             return None
@@ -830,7 +832,9 @@ Important rules:
 
         # Keep ingestion bounded for very long notes.
         section_payloads = section_payloads[: self.MAX_CONCEPTS_PER_DOC]
-        concept_extraction_mode = "heuristic"
+        concept_extract_use_llm = self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_EXTRACT_USE_LLM", "true"))
+        concept_refine_use_llm = self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_USE_LLM", "true"))
+        concept_extraction_mode = "heuristic_no_llm"
         llm_labels = self._extract_concept_labels_with_llm(
             topic_title=topic_title,
             subject=subject,
@@ -847,6 +851,7 @@ Important rules:
             ]
         else:
             labels = [item[1] for item in section_payloads]
+            original_labels = list(labels)
             labels = self._maybe_refine_concept_labels_with_llm(
                 topic_title=topic_title,
                 subject=subject,
@@ -854,8 +859,13 @@ Important rules:
                 term=term,
                 labels=labels,
             )
-            if self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_USE_LLM")):
-                concept_extraction_mode = "llm_refine_or_fallback"
+            if concept_extract_use_llm or concept_refine_use_llm:
+                if labels != original_labels:
+                    concept_extraction_mode = "llm_refine"
+                elif concept_refine_use_llm:
+                    concept_extraction_mode = "llm_refine_fallback_heuristic"
+                else:
+                    concept_extraction_mode = "llm_extract_fallback_heuristic"
             section_payloads = [
                 (heading, labels[idx], chunks, confidence)
                 for idx, (heading, _, chunks, confidence) in enumerate(section_payloads)
@@ -889,6 +899,7 @@ Important rules:
             excerpt_max_chars = 3000
         topic_excerpt = topic_excerpt[:excerpt_max_chars]
 
+        prereq_use_llm = self._is_truthy_env(os.getenv("CURRICULUM_PREREQ_USE_LLM", "true"))
         inferred_prereq_map, prereq_evidence = self._infer_topic_prereqs_with_llm(
             subject=subject,
             sss_level=sss_level,
@@ -897,7 +908,12 @@ Important rules:
             concept_objects=concept_objects,
             topic_excerpt=topic_excerpt,
         )
-        prereq_inference_mode = "llm" if inferred_prereq_map is not None else "sequential_fallback"
+        if inferred_prereq_map is not None:
+            prereq_inference_mode = "llm"
+        elif prereq_use_llm:
+            prereq_inference_mode = "llm_fallback_sequential"
+        else:
+            prereq_inference_mode = "sequential_no_llm"
 
         concept_sections: list[ConceptSection] = []
         for index, (_, label, chunks, confidence) in enumerate(section_payloads):
@@ -985,10 +1001,12 @@ Important rules:
             extra={
                 "source_root": str(source_root),
                 "supported_files": len(supported_files),
-                "concept_extract_use_llm": self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_EXTRACT_USE_LLM"))
-                or self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_USE_LLM")),
-                "concept_refine_use_llm": self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_USE_LLM")),
-                "prereq_use_llm": self._is_truthy_env(os.getenv("CURRICULUM_PREREQ_USE_LLM")),
+                "concept_extract_use_llm": self._is_truthy_env(
+                    os.getenv("CURRICULUM_CONCEPT_EXTRACT_USE_LLM", "true")
+                )
+                or self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_USE_LLM", "true")),
+                "concept_refine_use_llm": self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_USE_LLM", "true")),
+                "prereq_use_llm": self._is_truthy_env(os.getenv("CURRICULUM_PREREQ_USE_LLM", "true")),
             },
         )
         self.db.commit()
@@ -1033,10 +1051,27 @@ Important rules:
                         "topic_title": parsed.topic_title,
                         "concept_extraction_mode": parsed.concept_extraction_mode,
                         "prereq_inference_mode": parsed.prereq_inference_mode,
+                        "concept_fallback_used": "fallback" in parsed.concept_extraction_mode,
+                        "prereq_fallback_used": parsed.prereq_inference_mode == "llm_fallback_sequential",
                         "concept_sections_count": len(parsed.concept_sections),
                         "prereq_evidence_edges": len(parsed.prereq_evidence),
                     },
                 )
+                if ("fallback" in parsed.concept_extraction_mode) or (
+                    parsed.prereq_inference_mode == "llm_fallback_sequential"
+                ):
+                    self.repo.append_ingestion_log(
+                        job,
+                        stage="llm_fallback",
+                        message="LLM fallback applied for file",
+                        extra={
+                            "file": parsed.source_id,
+                            "topic_id": str(parsed.topic_id),
+                            "topic_title": parsed.topic_title,
+                            "concept_extraction_mode": parsed.concept_extraction_mode,
+                            "prereq_inference_mode": parsed.prereq_inference_mode,
+                        },
+                    )
                 if parsed.prereq_evidence:
                     max_edges = 20
                     edges_for_log = parsed.prereq_evidence[:max_edges]
