@@ -83,15 +83,37 @@ def _internal_rag_retrieve(request: TutorChatRequest) -> list[Citation]:
         "top_k": max(1, min(top_k, 20)),
         "approved_only": True,
     }
+    allow_scope_fallback = os.getenv("TUTOR_CHAT_ALLOW_SCOPE_FALLBACK", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
-    response = requests.post(base_url, json=payload, timeout=timeout)
-    if not response.ok:
-        detail = (response.text or "").strip()
-        raise RuntimeError(
-            f"internal RAG request failed ({response.status_code}): {detail[:500] or 'no response body'}"
+    def _request_chunks(request_payload: dict) -> list[dict]:
+        response = requests.post(base_url, json=request_payload, timeout=timeout)
+        if not response.ok:
+            detail = (response.text or "").strip()
+            raise RuntimeError(
+                f"internal RAG request failed ({response.status_code}): {detail[:500] or 'no response body'}"
+            )
+        data = response.json()
+        return list(data.get("chunks", []))
+
+    chunks = _request_chunks(payload)
+    if allow_scope_fallback and not chunks and payload["topic_ids"]:
+        fallback_payload = dict(payload)
+        fallback_payload["topic_ids"] = []
+        logger.info(
+            "tutor._internal_rag_retrieve empty topic-scoped result; retrying scope-only retrieval",
+            extra={
+                "subject": request.subject,
+                "sss_level": request.sss_level,
+                "term": int(request.term),
+                "topic_id": request.topic_id,
+            },
         )
-    data = response.json()
-    chunks = data.get("chunks", [])
+        chunks = _request_chunks(fallback_payload)
 
     citations: list[Citation] = []
     for chunk in chunks:
@@ -257,21 +279,42 @@ def run_tutor_chat(request: TutorChatRequest) -> TutorChatResponse:
     try:
         citations = _internal_rag_retrieve(request)
     except Exception as exc:
-        logger.warning("tutor.run_tutor_chat retrieval failed: %s", exc)
-        actions.append("RAG_RETRIEVAL_FAILED")
+        detail = str(exc) or "unknown retrieval error"
+        logger.warning("tutor.run_tutor_chat retrieval failed: %s", detail)
+        return TutorChatResponse(
+            assistant_message=f"Tutor unavailable: curriculum retrieval failed: {detail}",
+            citations=[],
+            actions=actions + ["RAG_RETRIEVAL_FAILED"],
+            recommendations=[],
+        )
     else:
         actions.append("USED_RAG_CONTEXT" if citations else "NO_RAG_CONTEXT")
+
+    if not citations:
+        topic_part = f", topic_id={request.topic_id}" if request.topic_id else ""
+        return TutorChatResponse(
+            assistant_message=(
+                "Tutor unavailable: no approved curriculum context found for "
+                f"subject={request.subject}, level={request.sss_level}, term={request.term}{topic_part}. "
+                "Ingest and approve curriculum for this scope/topic."
+            ),
+            citations=[],
+            actions=actions + ["NO_CONTEXT_ABORTED"],
+            recommendations=[],
+        )
 
     prompt = _chat_prompt(request, citations)
     try:
         assistant_message = _llm_generate(prompt)
     except (LLMClientError, Exception) as exc:
-        logger.warning("tutor.run_tutor_chat llm generation failed: %s", exc)
-        assistant_message = (
-            "I could not reach the model right now. "
-            "Please retry in a moment, or ask for a short hint while we reconnect."
+        detail = str(exc) or "unknown model error"
+        logger.warning("tutor.run_tutor_chat llm generation failed: %s", detail)
+        return TutorChatResponse(
+            assistant_message=f"Tutor unavailable: model generation failed: {detail}",
+            citations=citations,
+            actions=actions + ["LLM_UNAVAILABLE"],
+            recommendations=[],
         )
-        actions.append("LLM_UNAVAILABLE")
 
     recommendation = TutorRecommendation(
         type="next_topic",

@@ -9,6 +9,7 @@ from backend.models.user import User  # noqa: F401
 from backend.models.subject import Subject  # noqa: F401
 from backend.models.topic import Topic  # noqa: F401
 from backend.models.lesson import Lesson, LessonBlock  # noqa: F401
+from backend.models.personalized_lesson import PersonalizedLesson  # noqa: F401
 from backend.models.student import StudentProfile, StudentSubject, LearningPreference  # noqa: F401
 
 # Auth/session/chat

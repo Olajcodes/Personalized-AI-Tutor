@@ -7,6 +7,8 @@ import os
 import re
 import shutil
 import tempfile
+import zipfile
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
@@ -616,6 +618,33 @@ Important rules:
             return None
 
     @staticmethod
+    def _read_docx_xml_fallback(path: Path) -> str:
+        try:
+            with zipfile.ZipFile(path, "r") as archive:
+                if "word/document.xml" not in archive.namelist():
+                    return ""
+                document_xml = archive.read("word/document.xml")
+        except Exception:
+            return ""
+
+        try:
+            root = ET.fromstring(document_xml)
+        except ET.ParseError:
+            return ""
+
+        namespace = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+        paragraphs: list[str] = []
+        for paragraph in root.findall(".//w:p", namespace):
+            tokens: list[str] = []
+            for node in paragraph.findall(".//w:t", namespace):
+                token = str(node.text or "").strip()
+                if token:
+                    tokens.append(token)
+            if tokens:
+                paragraphs.append(" ".join(tokens))
+        return "\n".join(paragraphs)
+
+    @staticmethod
     def _read_docx(path: Path) -> str:
         try:
             from docx import Document
@@ -626,11 +655,15 @@ Important rules:
 
         try:
             doc = Document(str(path))
+            paragraphs = [paragraph.text.strip() for paragraph in doc.paragraphs if paragraph.text and paragraph.text.strip()]
+            text = "\n".join(paragraphs)
+            if text.strip():
+                return text
         except Exception:
-            # Some upstream files are malformed .docx archives; skip them instead of failing whole ingestion scope.
-            return ""
-        paragraphs = [paragraph.text.strip() for paragraph in doc.paragraphs if paragraph.text and paragraph.text.strip()]
-        return "\n".join(paragraphs)
+            # Some upstream files are malformed for python-docx; try raw XML fallback first.
+            pass
+
+        return AdminCurriculumService._read_docx_xml_fallback(path)
 
     @staticmethod
     def _read_text_file(path: Path) -> str:
@@ -673,24 +706,55 @@ Important rules:
         return " ".join(filtered)
 
     @classmethod
-    def _best_topic_match(cls, *, topic_hint: str, topics: list) -> tuple[UUID, str] | None:
+    def _best_topic_match(
+        cls,
+        *,
+        topic_hint: str,
+        topics: list,
+        document_text: str | None = None,
+    ) -> tuple[UUID, str] | None:
         if not topics:
             return None
         normalized_hint = cls._normalize_text(topic_hint)
-        if not normalized_hint:
-            return None
 
         best_topic = None
         best_score = -1.0
-        for topic in topics:
-            title = str(topic.title)
-            normalized_title = cls._normalize_text(title)
-            score = SequenceMatcher(a=normalized_hint, b=normalized_title).ratio()
-            if normalized_hint in normalized_title or normalized_title in normalized_hint:
-                score = max(score, 0.92)
-            if score > best_score:
-                best_score = score
-                best_topic = topic
+        if normalized_hint:
+            for topic in topics:
+                title = str(topic.title)
+                normalized_title = cls._normalize_text(title)
+                score = SequenceMatcher(a=normalized_hint, b=normalized_title).ratio()
+                if normalized_hint in normalized_title or normalized_title in normalized_hint:
+                    score = max(score, 0.92)
+                if score > best_score:
+                    best_score = score
+                    best_topic = topic
+
+        # Fallback for broad files like "SECOND TERM SS2 MATHEMATICS":
+        # infer likely topic by lexical overlap with extracted document text.
+        if (best_topic is None or best_score < 0.35) and document_text:
+            normalized_doc = cls._normalize_text(document_text)
+            stopwords = {"and", "of", "the", "to", "in", "for", "with", "by"}
+            for topic in topics:
+                title = str(topic.title)
+                normalized_title = cls._normalize_text(title)
+                if not normalized_title:
+                    continue
+                if normalized_title in normalized_doc:
+                    score = 0.95
+                else:
+                    tokens = [
+                        token
+                        for token in re.split(r"[^a-z0-9]+", normalized_title)
+                        if token and token not in stopwords and len(token) > 2
+                    ]
+                    if not tokens:
+                        continue
+                    hit_count = sum(1 for token in tokens if token in normalized_doc)
+                    score = hit_count / max(len(tokens), 1)
+                if score > best_score:
+                    best_score = score
+                    best_topic = topic
 
         if best_topic is None or best_score < 0.35:
             return None
@@ -801,7 +865,11 @@ Important rules:
             return None
 
         topic_hint = self._topic_hint_from_file_name(file_path)
-        match = self._best_topic_match(topic_hint=topic_hint, topics=scope_topics)
+        match = self._best_topic_match(
+            topic_hint=topic_hint,
+            topics=scope_topics,
+            document_text=text,
+        )
         if match is None:
             return None
         topic_id, topic_title = match
@@ -1324,6 +1392,13 @@ Important rules:
                         ),
                         actor_user_id=actor_user_id,
                     )
+                    scope_status = response.status
+                    scope_message = None
+                    if scope_status == "failed":
+                        scope_message = (
+                            "No indexable chunks produced for this scope. "
+                            "Check topic matching/extraction logs for source files."
+                        )
                     results.append(
                         CurriculumBulkScopeResult(
                             subject=subject,  # type: ignore[arg-type]
@@ -1332,7 +1407,8 @@ Important rules:
                             files_count=len(files),
                             version_id=response.version_id,
                             job_id=response.job_id,
-                            status=response.status,
+                            status=scope_status,
+                            message=scope_message,
                         )
                     )
                     if response.status == "pending_approval":
