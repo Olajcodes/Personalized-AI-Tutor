@@ -37,6 +37,31 @@ SSS_LEVELS = ("SSS1", "SSS2", "SSS3")
 TERMS = (1, 2, 3)
 MIN_TOPICS_PER_SCOPE = 6
 TRUTHY = {"1", "true", "yes", "on"}
+NOISY_TITLE_EXACT = {
+    "DATE",
+    "CONTENT",
+    "EVALUATION",
+    "EXAMINATION",
+    "REVISION",
+    "REFERENCES",
+    "REFERENCE",
+    "ASSIGNMENT",
+    "END ASSIGNMENT",
+    "MID TERM",
+    "MID-TERM",
+    "GENERAL EVALUATION",
+}
+NOISY_TITLE_PATTERNS = [
+    r"^(FIRST|SECOND|THIRD)\s+TERM(\s+E-?\s*LEARNING\s+NOTES?)?$",
+    r"^(FIRST|SECOND|THIRD)\s+TERM\s+SS[123].*$",
+    r"^WEEK\s*\d+$",
+    r"^TOPIC\s*\d+$",
+    r"^CLASS\s*WORK$",
+    r"^HOME\s*WORK$",
+    r"^P\s*=\s*\d+$",
+    r"^[A-Z]{1,2}\s*/\s*[A-Z]{1,2}\]?$",
+    r"^\d+$",
+]
 
 BASE_SCOPE_TOPICS = {
     "math": {
@@ -183,10 +208,11 @@ def _extract_sections(text: str) -> list[tuple[str, str]]:
         if _looks_like_heading(line) and buffer:
             sections.append((current_heading, " ".join(buffer)))
             current_heading = line
-            buffer = [line]
+            buffer = []
             continue
         if _looks_like_heading(line):
             current_heading = line
+            continue
         buffer.append(line)
     if buffer:
         sections.append((current_heading, " ".join(buffer)))
@@ -202,6 +228,33 @@ def _clean_title(raw: str, fallback: str) -> str:
     return candidate[:240]
 
 
+def _is_noisy_title(value: str) -> bool:
+    normalized = _normalize_space(value).upper().strip(" -:\t.")
+    if not normalized:
+        return True
+    if normalized in NOISY_TITLE_EXACT:
+        return True
+    for pattern in NOISY_TITLE_PATTERNS:
+        if re.match(pattern, normalized, flags=re.IGNORECASE):
+            return True
+    return False
+
+
+def _title_from_section_text(section_text: str, fallback: str) -> str:
+    source = _normalize_space(section_text)
+    if not source:
+        return fallback
+    # Prefer sentence-level signal over file-level noise.
+    first_sentence = re.split(r"[.!?]", source)[0]
+    cleaned = re.sub(r"[\[\]{}()|]+", " ", first_sentence)
+    cleaned = _normalize_space(cleaned)
+    words = cleaned.split()
+    if not words:
+        return fallback
+    candidate = " ".join(words[:10])
+    return _clean_title(candidate, fallback)
+
+
 def _read_docx(path: Path) -> str:
     from docx import Document
 
@@ -215,45 +268,62 @@ def _read_docx(path: Path) -> str:
 
 def _infer_subject(text: str) -> str | None:
     value = text.upper()
-    if re.search(r"\b(MATHEMATICS|MATHS|MATH)\b", value):
-        return "math"
-    if re.search(r"\bENGLISH\b", value):
-        return "english"
-    if re.search(r"\bCIVIC\b", value):
-        return "civic"
+    matches: list[str] = []
+    for match in re.finditer(r"\b(MATHEMATICS|MATHS|MATH|ENGLISH|CIVIC)\b", value):
+        token = match.group(1)
+        if token in {"MATHEMATICS", "MATHS", "MATH"}:
+            matches.append("math")
+        elif token == "ENGLISH":
+            matches.append("english")
+        elif token == "CIVIC":
+            matches.append("civic")
+    if matches:
+        # Prefer the closest (most specific) scope marker in the path.
+        return matches[-1]
     return None
 
 
 def _infer_sss_level(text: str) -> str | None:
     value = text.upper()
-    patterns = [r"\bSSS?\s*([123])\b", r"\bS([123])\b"]
-    for pattern in patterns:
-        match = re.search(pattern, value)
-        if match:
-            return f"SSS{match.group(1)}"
+    matches: list[str] = []
+    pattern = re.compile(r"\bSSS?\s*([123])\b|\bS([123])\b")
+    for match in pattern.finditer(value):
+        digit = match.group(1) or match.group(2)
+        if digit:
+            matches.append(str(digit))
+    if matches:
+        return f"SSS{matches[-1]}"
     return None
 
 
 def _infer_term(text: str) -> int | None:
     value = text.upper()
-    if "FIRST TERM" in value or "1ST TERM" in value or "TERM 1" in value:
-        return 1
-    if "SECOND TERM" in value or "2ND TERM" in value or "TERM 2" in value:
-        return 2
-    if "THIRD TERM" in value or "3RD TERM" in value or "TERM 3" in value:
-        return 3
+    term_matches: list[int] = []
+    term_patterns = [
+        (re.compile(r"FIRST\s+TERM|1ST\s+TERM|TERM\s*1|TERM\s+ONE"), 1),
+        (re.compile(r"SECOND\s+TERM|2ND\s+TERM|TERM\s*2|TERM\s+TWO"), 2),
+        (re.compile(r"THIRD\s+TERM|3RD\s+TERM|TERM\s*3|TERM\s+THREE"), 3),
+    ]
+    for pattern, term_value in term_patterns:
+        term_matches.extend([term_value] * len(pattern.findall(value)))
+    if term_matches:
+        return term_matches[-1]
     return None
 
 
 def _infer_scope(root: Path, file_path: Path) -> tuple[str, str, int] | None:
     try:
-        relative = str(file_path.relative_to(root))
+        rel_path = file_path.relative_to(root)
+        parts = list(rel_path.parts)
     except ValueError:
-        relative = str(file_path)
-    scope_hint = f"{relative} {file_path.stem}"
-    subject = _infer_subject(scope_hint)
-    sss_level = _infer_sss_level(scope_hint)
-    term = _infer_term(scope_hint)
+        parts = [str(file_path)]
+    # Infer from nearest-to-file segments first to avoid broad folder noise (e.g. SS1-To-SS3).
+    local_hint = " ".join(reversed(parts[-3:])) + f" {file_path.stem}"
+    global_hint = " ".join(parts) + f" {file_path.stem}"
+
+    subject = _infer_subject(local_hint) or _infer_subject(global_hint)
+    sss_level = _infer_sss_level(local_hint) or _infer_sss_level(global_hint)
+    term = _infer_term(local_hint) or _infer_term(global_hint)
     if not subject or not sss_level or not term:
         return None
     return subject, sss_level, term
@@ -303,6 +373,10 @@ def _build_doc_candidates(root: Path) -> list[ScopeTopicCandidate]:
         for idx, (heading, section_text) in enumerate(sections):
             fallback_title = f"{fallback_prefix} Part {idx + 1}"
             title = _clean_title(heading, fallback_title)
+            if _is_noisy_title(title):
+                title = _title_from_section_text(section_text, fallback_title)
+            if _is_noisy_title(title):
+                continue
             if not title:
                 continue
 

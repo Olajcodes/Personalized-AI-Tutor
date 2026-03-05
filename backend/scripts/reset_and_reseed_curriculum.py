@@ -17,6 +17,7 @@ Include demo learners only when needed:
 Notes:
 - This script is destructive for curriculum ingestion/version tables and vector chunks.
 - It keeps core auth/profile tables intact.
+- Use --full-db-reset to truncate all public application tables (except alembic_version).
 - If Neo4j is offline, keep --disable-neo4j-sync enabled.
 """
 
@@ -32,6 +33,7 @@ from sqlalchemy import text
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Reset curriculum KB data and reseed end-to-end")
     parser.add_argument("--source-root", default="docs/SSS_NOTES_2026")
+    parser.add_argument("--full-db-reset", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--seed-lessons", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--seed-reset", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--seed-demo-learners", action=argparse.BooleanOptionalAction, default=False)
@@ -75,17 +77,66 @@ def _run_seed_lessons(args: argparse.Namespace) -> None:
     seed_lessons_run()
 
 
+def _list_public_tables(db) -> list[str]:
+    rows = db.execute(
+        text(
+            """
+            SELECT tablename
+            FROM pg_tables
+            WHERE schemaname = 'public'
+            ORDER BY tablename
+            """
+        )
+    ).fetchall()
+    return [str(row[0]) for row in rows]
+
+
+def _quote_ident(identifier: str) -> str:
+    return '"' + identifier.replace('"', '""') + '"'
+
+
+def _full_postgres_reset() -> None:
+    print("[0/full] Truncating all application tables in Postgres...")
+    from backend.core.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        public_tables = _list_public_tables(db)
+        truncate_tables = [name for name in public_tables if name != "alembic_version"]
+        if not truncate_tables:
+            print("  - no application tables found to truncate")
+            return
+
+        truncate_sql = (
+            "TRUNCATE TABLE "
+            + ", ".join(_quote_ident(name) for name in truncate_tables)
+            + " RESTART IDENTITY CASCADE"
+        )
+        db.execute(text(truncate_sql))
+        db.commit()
+        print(f"  - truncated tables={len(truncate_tables)}")
+    finally:
+        db.close()
+
+
 def _clear_curriculum_tables() -> None:
     print("[2/7] Clearing curriculum ingestion tables...")
     from backend.core.database import SessionLocal
 
     db = SessionLocal()
     try:
-        db.execute(text("DELETE FROM curriculum_topic_maps"))
-        db.execute(text("DELETE FROM curriculum_ingestion_jobs"))
-        db.execute(text("DELETE FROM curriculum_versions"))
-        db.execute(text("UPDATE topics SET curriculum_version_id = NULL, is_approved = TRUE"))
+        deleted_maps = db.execute(text("DELETE FROM curriculum_topic_maps")).rowcount
+        deleted_jobs = db.execute(text("DELETE FROM curriculum_ingestion_jobs")).rowcount
+        deleted_versions = db.execute(text("DELETE FROM curriculum_versions")).rowcount
+        reset_topics = db.execute(text("UPDATE topics SET curriculum_version_id = NULL, is_approved = TRUE")).rowcount
         db.commit()
+        print(
+            "  - postgres rows: "
+            f"topic_maps={max(deleted_maps or 0, 0)}, "
+            f"ingestion_jobs={max(deleted_jobs or 0, 0)}, "
+            f"versions={max(deleted_versions or 0, 0)}, "
+            f"topics_reset={max(reset_topics or 0, 0)}"
+        )
     finally:
         db.close()
 
@@ -252,6 +303,38 @@ def _print_final_summary() -> None:
         print("Final version status by scope:")
         for row in rows:
             print(f"  - {row[0]} {row[1]} term {row[2]} [{row[3]}] x{row[4]}")
+
+        public_tables = set(_list_public_tables(db))
+
+        def _count(name: str) -> int | None:
+            if name not in public_tables:
+                return None
+            result = db.execute(text(f"SELECT count(*) FROM {_quote_ident(name)}")).scalar()
+            return int(result or 0)
+
+        tracked_tables = [
+            "subjects",
+            "topics",
+            "lessons",
+            "lesson_blocks",
+            "curriculum_versions",
+            "curriculum_topic_maps",
+            "curriculum_ingestion_jobs",
+            "users",
+            "student_profiles",
+            "learning_preferences",
+            "activity_logs",
+            "tutor_sessions",
+            "tutor_messages",
+            "quizzes",
+            "quiz_questions",
+            "quiz_attempts",
+        ]
+        print("Postgres table counts:")
+        for table_name in tracked_tables:
+            value = _count(table_name)
+            if value is not None:
+                print(f"  - {table_name}={value}")
     finally:
         db.close()
 
@@ -274,6 +357,8 @@ def main() -> int:
     _configure_runtime(args)
 
     try:
+        if args.full_db_reset:
+            _full_postgres_reset()
         _run_seed_lessons(args)
         _clear_curriculum_tables()
         _clear_qdrant_collection()

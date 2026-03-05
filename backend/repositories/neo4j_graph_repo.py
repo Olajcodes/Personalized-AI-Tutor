@@ -76,7 +76,7 @@ class Neo4jGraphRepository:
         normalized = [
             {
                 "id": str(item["topic_id"]),
-                "title": str(item.get("title") or ""),
+                "title": str(item.get("title") or "").strip().lower(),
                 "sss_level": str(item.get("sss_level") or ""),
                 "term": int(item.get("term") or 1),
             }
@@ -139,7 +139,7 @@ class Neo4jGraphRepository:
             """,
             {
                 "topic_id": str(topic_id),
-                "topic_title": topic_title,
+                "topic_title": str(topic_title or "").strip().lower(),
                 "concept_ids": cleaned_concept_ids,
                 "subject": subject,
                 "sss_level": sss_level,
@@ -207,6 +207,16 @@ class Neo4jGraphRepository:
     def remove_legacy_relationships(self) -> None:
         self.remove_legacy_maps_to_edges()
         self.remove_legacy_prerequisite_edges()
+
+    def normalize_topic_titles_to_lowercase(self) -> None:
+        """Normalize existing Topic node titles to lowercase."""
+        self._run(
+            """
+            MATCH (t:Topic)
+            WHERE t.title IS NOT NULL
+            SET t.title = toLower(t.title)
+            """
+        )
 
     def reset_curriculum_subgraph(self) -> None:
         """Remove curriculum graph nodes to allow a clean reseed."""

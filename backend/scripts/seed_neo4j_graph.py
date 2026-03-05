@@ -134,6 +134,7 @@ def run() -> None:
             neo.reset_curriculum_subgraph()
 
         neo.remove_legacy_relationships()
+        neo.normalize_topic_titles_to_lowercase()
 
         grouped = _build_scope_graph_payload(db)
         for (subject, sss_level, term), scope_payload in grouped.items():

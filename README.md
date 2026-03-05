@@ -153,6 +153,7 @@ Notes:
 - LLM extraction/inference is enabled by default in this flow.
 - If LLM is unavailable or output is invalid, ingestion falls back safely and logs fallback mode.
 - Use `--disable-llm` only for deterministic fallback-only runs.
+- Add `--full-db-reset` if you want to truncate all public application tables before reseeding.
 
 ### 7) Run services
 

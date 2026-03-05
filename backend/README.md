@@ -107,6 +107,7 @@ Important:
 - If LLM fails or returns invalid output, ingestion falls back automatically and logs fallback mode.
 - Add `--disable-llm` for deterministic fallback-only ingestion.
 - Add `--seed-demo-learners` only if you explicitly want demo learner rows.
+- Add `--full-db-reset` to wipe all public application tables (except `alembic_version`) before reseeding.
 
 ## Run Backend
 
