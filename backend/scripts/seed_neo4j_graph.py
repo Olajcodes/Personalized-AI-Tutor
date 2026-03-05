@@ -11,6 +11,7 @@ Optional env:
 from __future__ import annotations
 
 import os
+import re
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import TypedDict
@@ -37,6 +38,7 @@ class TopicSeedEntry(TypedDict):
     sss_level: str
     term: int
     concept_ids: list[str]
+    concept_labels: dict[str, str]
 
 
 class ScopeSeedPayload(TypedDict):
@@ -67,6 +69,23 @@ def _topic_maps_for_topic(db: Session, topic: Topic) -> list[CurriculumTopicMap]
     return deduped
 
 
+def _readable_concept_label(*, concept_id: str, topic_title: str) -> str:
+    value = str(concept_id or "").strip()
+    if not value:
+        return str(topic_title or "").strip().lower()
+
+    try:
+        UUID(value)
+        return str(topic_title or "").strip().lower()
+    except ValueError:
+        pass
+
+    token = value.rsplit(":", 1)[-1].strip().lower()
+    token = re.sub(r"-(\d+)$", "", token)
+    token = re.sub(r"[^a-z0-9]+", " ", token).strip()
+    return token or str(topic_title or "").strip().lower()
+
+
 def _build_scope_graph_payload(db: Session) -> dict[tuple[str, str, int], ScopeSeedPayload]:
     rows = (
         db.query(Topic, Subject.slug)
@@ -93,6 +112,7 @@ def _build_scope_graph_payload(db: Session) -> dict[tuple[str, str, int], ScopeS
                 "sss_level": str(topic.sss_level),
                 "term": int(topic.term),
                 "concept_ids": [],
+                "concept_labels": {},
             },
         )
 
@@ -102,6 +122,10 @@ def _build_scope_graph_payload(db: Session) -> dict[tuple[str, str, int], ScopeS
                 concept_id = str(mapping.concept_id).strip()
                 if concept_id not in topic_entry["concept_ids"]:
                     topic_entry["concept_ids"].append(concept_id)
+                topic_entry["concept_labels"][concept_id] = _readable_concept_label(
+                    concept_id=concept_id,
+                    topic_title=str(topic.title),
+                )
                 for prereq in mapping.prereq_concept_ids or []:
                     prereq_id = str(prereq).strip()
                     if prereq_id and prereq_id != concept_id:
@@ -110,6 +134,7 @@ def _build_scope_graph_payload(db: Session) -> dict[tuple[str, str, int], ScopeS
             # Fallback: treat topic as a single concept when no explicit mappings exist.
             if topic_id not in topic_entry["concept_ids"]:
                 topic_entry["concept_ids"].append(topic_id)
+            topic_entry["concept_labels"][topic_id] = str(topic.title).strip().lower()
 
     return grouped
 
@@ -145,9 +170,16 @@ def run() -> None:
             neo.ensure_subject_topics(subject=subject, topics=topics)
 
             flat_concepts: list[str] = []
+            all_concepts_with_labels: dict[str, str] = {}
             for topic in topics:
                 concept_ids = [str(concept_id) for concept_id in topic["concept_ids"]]
                 flat_concepts.extend(concept_ids)
+                concept_labels = {
+                    str(concept_id): str(label).strip()
+                    for concept_id, label in (topic.get("concept_labels") or {}).items()
+                    if str(concept_id).strip()
+                }
+                all_concepts_with_labels.update(concept_labels)
                 neo.ensure_topic_concept_links(
                     subject=subject,
                     sss_level=sss_level,
@@ -155,6 +187,18 @@ def run() -> None:
                     topic_id=str(topic["topic_id"]),
                     topic_title=str(topic["title"]),
                     concept_ids=concept_ids,
+                    concept_labels=concept_labels,
+                )
+
+            if all_concepts_with_labels:
+                neo.ensure_concepts_with_labels(
+                    subject=subject,
+                    sss_level=sss_level,
+                    term=term,
+                    concepts=[
+                        {"id": concept_id, "name": concept_name}
+                        for concept_id, concept_name in all_concepts_with_labels.items()
+                    ],
                 )
 
             if prereq_edges:

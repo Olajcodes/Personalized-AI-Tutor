@@ -199,6 +199,69 @@ class QdrantVectorStore:
         except Exception as exc:
             return {"status": "error", "detail": str(exc)}
 
+    @staticmethod
+    def _scroll_points(result: Any) -> list[Any]:
+        if isinstance(result, tuple):
+            return list(result[0] or [])
+        if hasattr(result, "points"):
+            return list(getattr(result, "points") or [])
+        return list(result or [])
+
+    def topic_has_chunks(
+        self,
+        *,
+        subject: str,
+        sss_level: str,
+        term: int,
+        topic_id: UUID | str,
+        approved_only: bool = True,
+        curriculum_version_id: UUID | None = None,
+    ) -> bool:
+        if not self.config.is_configured:
+            raise RagRetrieveServiceError("Qdrant configuration is missing (url/collection/embedding model)")
+
+        client = self._ensure_client()
+        try:
+            from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+            must_conditions = [
+                FieldCondition(key="subject", match=MatchValue(value=subject)),
+                FieldCondition(key="sss_level", match=MatchValue(value=sss_level)),
+                FieldCondition(key="term", match=MatchValue(value=term)),
+                FieldCondition(key="topic_id", match=MatchValue(value=str(topic_id))),
+            ]
+            if approved_only:
+                must_conditions.append(FieldCondition(key="approved", match=MatchValue(value=True)))
+            if curriculum_version_id is not None:
+                must_conditions.append(
+                    FieldCondition(
+                        key="curriculum_version_id",
+                        match=MatchValue(value=str(curriculum_version_id)),
+                    )
+                )
+            query_filter = Filter(must=must_conditions)
+
+            try:
+                result = client.scroll(
+                    collection_name=self.config.collection,
+                    scroll_filter=query_filter,
+                    limit=1,
+                    with_payload=False,
+                    with_vectors=False,
+                )
+            except TypeError:
+                result = client.scroll(
+                    collection_name=self.config.collection,
+                    filter=query_filter,
+                    limit=1,
+                    with_payload=False,
+                    with_vectors=False,
+                )
+        except Exception as exc:
+            raise RagRetrieveServiceError(f"Qdrant readiness check failed: {exc}") from exc
+
+        return bool(self._scroll_points(result))
+
     def retrieve(self, payload: InternalRagRetrieveRequest) -> InternalRagRetrieveResponse:
         if not self.config.is_configured:
             raise RagRetrieveServiceError("Qdrant configuration is missing (url/collection/embedding model)")
@@ -280,3 +343,22 @@ class RagRetrieveService:
 
     def retrieve(self, payload: InternalRagRetrieveRequest) -> InternalRagRetrieveResponse:
         return self.store.retrieve(payload)
+
+    def topic_has_chunks(
+        self,
+        *,
+        subject: str,
+        sss_level: str,
+        term: int,
+        topic_id: UUID | str,
+        approved_only: bool = True,
+        curriculum_version_id: UUID | None = None,
+    ) -> bool:
+        return self.store.topic_has_chunks(
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+            topic_id=topic_id,
+            approved_only=approved_only,
+            curriculum_version_id=curriculum_version_id,
+        )

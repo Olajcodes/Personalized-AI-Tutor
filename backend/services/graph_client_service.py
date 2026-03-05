@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from statistics import mean
 from uuid import UUID
 
@@ -32,6 +33,23 @@ class GraphClientValidationError(ValueError):
 
 
 class GraphClientService:
+    @staticmethod
+    def _readable_concept_label(*, concept_id: str, topic_title: str) -> str:
+        value = str(concept_id or "").strip()
+        if not value:
+            return str(topic_title or "").strip().lower()
+
+        try:
+            UUID(value)
+            return str(topic_title or "").strip().lower()
+        except ValueError:
+            pass
+
+        token = value.rsplit(":", 1)[-1].strip().lower()
+        token = re.sub(r"-(\d+)$", "", token)
+        token = re.sub(r"[^a-z0-9]+", " ", token).strip()
+        return token or str(topic_title or "").strip().lower()
+
     @staticmethod
     def _build_context_response(
         *,
@@ -101,10 +119,15 @@ class GraphClientService:
                     "topic_id": topic_id,
                     "title": topic_title,
                     "concept_ids": [],
+                    "concept_labels": {},
                 },
             )
             if concept_id not in bundle["concept_ids"]:
                 bundle["concept_ids"].append(concept_id)
+            bundle["concept_labels"][concept_id] = GraphClientService._readable_concept_label(
+                concept_id=concept_id,
+                topic_title=topic_title,
+            )
 
             if concept_id not in concept_seen:
                 concept_seen.add(concept_id)
@@ -178,6 +201,7 @@ class GraphClientService:
                         topic_id=topic["topic_id"],
                         topic_title=topic["title"],
                         concept_ids=topic["concept_ids"],
+                        concept_labels=topic.get("concept_labels", {}),
                     )
                 if prereq_edges:
                     neo_repo.ensure_prerequisite_edges(edges=prereq_edges)

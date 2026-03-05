@@ -11,6 +11,7 @@ from backend.models.topic import Topic
 from backend.models.subject import Subject
 from backend.models.student import StudentProfile, StudentSubject
 from backend.models.personalized_lesson import PersonalizedLesson
+from backend.services.rag_retrieve_service import RagRetrieveService, RagRetrieveServiceError
 
 router = APIRouter(prefix="/learning", tags=["Topics"])
 
@@ -32,11 +33,19 @@ def _clean_topic_description(raw: str | None, topic_title: str) -> str | None:
         return f"{text[:217].rstrip()}..."
     return text
 
+
+def _has_cached_personalized_lesson(lesson: PersonalizedLesson | None) -> bool:
+    return bool(lesson and isinstance(lesson.content_blocks, list) and lesson.content_blocks)
+
 @router.get("/topics")
 def list_topics(
     student_id: uuid.UUID = Query(...),
     subject: str | None = Query(None, description="math|english|civic"),
     term: int | None = Query(None),
+    include_unready: bool = Query(
+        False,
+        description="Include topics even when no approved lesson chunks are available for generation.",
+    ),
     db: Session = Depends(get_db),
 ):
     """Return approved topics available to the student in current scope.
@@ -57,7 +66,8 @@ def list_topics(
     ]
 
     q = (
-        select(Topic, PersonalizedLesson)
+        select(Topic, PersonalizedLesson, Subject.slug)
+        .join(Subject, Subject.id == Topic.subject_id)
         .outerjoin(
             PersonalizedLesson,
             (PersonalizedLesson.topic_id == Topic.id)
@@ -72,12 +82,40 @@ def list_topics(
     )
 
     if subject is not None:
-        q = q.join(Subject, Subject.id == Topic.subject_id).where(Subject.slug == subject.lower())
+        q = q.where(Subject.slug == subject.lower())
 
     q = q.order_by(Topic.created_at.asc(), Topic.title.asc())
     rows = db.execute(q).all()
+    rag_service = RagRetrieveService()
     payload = []
-    for topic, personalized_lesson in rows:
+    readiness_check_failed = False
+    readiness_error_detail = ""
+    for topic, personalized_lesson, subject_slug in rows:
+        lesson_ready = _has_cached_personalized_lesson(personalized_lesson)
+        unavailable_reason = None
+
+        if not lesson_ready:
+            try:
+                lesson_ready = rag_service.topic_has_chunks(
+                    subject=str(subject_slug),
+                    sss_level=str(topic.sss_level),
+                    term=int(topic.term),
+                    topic_id=topic.id,
+                    approved_only=True,
+                    curriculum_version_id=topic.curriculum_version_id,
+                )
+            except RagRetrieveServiceError as exc:
+                lesson_ready = False
+                readiness_check_failed = True
+                readiness_error_detail = str(exc)
+                unavailable_reason = str(exc)
+
+        if not lesson_ready and unavailable_reason is None:
+            unavailable_reason = "No approved curriculum chunks found for this topic/scope."
+
+        if not include_unready and not lesson_ready:
+            continue
+
         description = (
             personalized_lesson.summary
             if personalized_lesson and personalized_lesson.summary
@@ -92,9 +130,15 @@ def list_topics(
                 "estimated_duration_minutes": (
                     personalized_lesson.estimated_duration_minutes if personalized_lesson else None
                 ),
+                "lesson_ready": lesson_ready,
+                "lesson_unavailable_reason": unavailable_reason,
                 "sss_level": topic.sss_level,
                 "term": topic.term,
                 "subject_id": str(topic.subject_id),
             }
         )
+
+    if readiness_check_failed and not include_unready and not payload:
+        raise HTTPException(status_code=503, detail=f"Lesson readiness check failed: {readiness_error_detail}")
+
     return payload
