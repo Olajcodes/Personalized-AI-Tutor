@@ -12,3 +12,6 @@ qdrant-client
 fastembed
 redis
 psycopg[binary]
+
+google-auth
+requests
