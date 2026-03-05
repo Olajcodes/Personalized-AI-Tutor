@@ -1,4 +1,4 @@
-"""Seed realistic curriculum topics/lessons + demo learner data.
+"""Seed curriculum topics + mastery baseline (no lesson boilerplate).
 
 Usage:
   python -m backend.scripts.seed_lessons
@@ -467,10 +467,7 @@ def _fallback_candidates(existing: Iterable[ScopeTopicCandidate]) -> list[ScopeT
                             sss_level=sss_level,
                             term=term,
                             title=title,
-                            text=(
-                                f"{title} for {sss_level} term {term} in {subject.upper()} introduces the core ideas, "
-                                "worked examples, and checkpoints needed for mastery progression."
-                            ),
+                            text="",
                             source_file="fallback",
                         )
                     )
@@ -591,10 +588,7 @@ def _build_seed_candidates(root: Path) -> list[ScopeTopicCandidate]:
                             )
                             source_file = "scope_window"
                         else:
-                            text = (
-                                f"{canonical_title} for {sss_level} term {term} in {subject.upper()} introduces the core ideas, "
-                                "worked examples, and checkpoints needed for mastery progression."
-                            )
+                            text = ""
                             source_file = "fallback"
 
                     output.append(
@@ -683,44 +677,6 @@ def _upsert_stats(db: Session, learner: SeedLearner) -> None:
     row.total_study_time_seconds = learner.study_seconds
 
 
-def _generate_blocks(topic_title: str, topic_text: str) -> list[dict]:
-    intro = _slice_words(topic_text, 160)
-    if not intro:
-        intro = f"This lesson introduces {topic_title} with definitions and practical examples."
-
-    key_idea = _slice_words(topic_text, 40)
-    if not key_idea:
-        key_idea = f"The key idea in {topic_title} is to apply the governing rule consistently."
-
-    return [
-        {
-            "block_type": "text",
-            "order_index": 1,
-            "content": {"text": intro},
-        },
-        {
-            "block_type": "example",
-            "order_index": 2,
-            "content": {
-                "prompt": f"Worked example on {topic_title}",
-                "solution": (
-                    f"Start with the core rule for {topic_title}, identify known values, "
-                    "and show each step clearly before concluding."
-                ),
-                "note": key_idea,
-            },
-        },
-        {
-            "block_type": "exercise",
-            "order_index": 3,
-            "content": {
-                "question": f"Practice task: apply {topic_title} to a new question and justify each step.",
-                "expected_answer": "A clear step-by-step response that states the rule, applies it, and verifies the result.",
-            },
-        },
-    ]
-
-
 def _upsert_topic_and_lesson(
     db: Session,
     *,
@@ -741,43 +697,15 @@ def _upsert_topic_and_lesson(
             sss_level=candidate.sss_level,
             term=candidate.term,
             title=candidate.title,
-            description=_slice_words(candidate.text, 40),
+            description=_slice_words(candidate.text, 40) or None,
             is_approved=True,
         )
         db.add(topic)
         db.flush()
         created = True
     else:
-        topic.description = _slice_words(candidate.text, 40)
+        topic.description = _slice_words(candidate.text, 40) or None
         topic.is_approved = True
-
-    lesson = db.query(Lesson).filter(Lesson.topic_id == topic.id).first()
-    if lesson is None:
-        lesson = Lesson(
-            id=uuid.uuid4(),
-            topic_id=topic.id,
-            title=f"Lesson: {candidate.title}",
-            summary=_slice_words(candidate.text, 55),
-            estimated_duration_minutes=15 + (len(candidate.text.split()) % 12),
-        )
-        db.add(lesson)
-        db.flush()
-    else:
-        lesson.title = f"Lesson: {candidate.title}"
-        lesson.summary = _slice_words(candidate.text, 55)
-        lesson.estimated_duration_minutes = 15 + (len(candidate.text.split()) % 12)
-        db.query(LessonBlock).filter(LessonBlock.lesson_id == lesson.id).delete(synchronize_session=False)
-
-    for block in _generate_blocks(candidate.title, candidate.text):
-        db.add(
-            LessonBlock(
-                id=uuid.uuid4(),
-                lesson_id=lesson.id,
-                block_type=block["block_type"],
-                order_index=block["order_index"],
-                content=block["content"],
-            )
-        )
     return topic, created
 
 

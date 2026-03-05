@@ -22,12 +22,12 @@ _NOISY_DESCRIPTION_MARKERS = (
 )
 
 
-def _clean_topic_description(raw: str | None, topic_title: str) -> str:
+def _clean_topic_description(raw: str | None, topic_title: str) -> str | None:
     text = re.sub(r"\s+", " ", str(raw or "")).strip()
     if not text:
-        return f"{topic_title} is available for personalized lesson generation."
+        return None
     if any(marker in text.upper() for marker in _NOISY_DESCRIPTION_MARKERS):
-        return f"{topic_title} is available for personalized lesson generation."
+        return None
     if len(text) > 220:
         return f"{text[:217].rstrip()}..."
     return text
