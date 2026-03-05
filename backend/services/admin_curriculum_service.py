@@ -73,6 +73,8 @@ class ChunkedDocument:
     topic_title: str
     concept_sections: list[ConceptSection]
     prereq_evidence: list[dict] = field(default_factory=list)
+    concept_extraction_mode: str = "heuristic"
+    prereq_inference_mode: str = "sequential_no_llm"
 
 
 class AdminCurriculumService:
@@ -274,7 +276,7 @@ Important rules:
     ) -> list[str]:
         if not labels:
             return labels
-        if not self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_USE_LLM")):
+        if not self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_USE_LLM", "true")):
             return labels
 
         provider = os.getenv("LLM_PROVIDER", "groq").strip().lower()
@@ -367,7 +369,7 @@ Important rules:
         concept_objects: list[dict],
         topic_excerpt: str,
     ) -> tuple[dict[str, list[str]] | None, list[dict]]:
-        if not self._is_truthy_env(os.getenv("CURRICULUM_PREREQ_USE_LLM")):
+        if not self._is_truthy_env(os.getenv("CURRICULUM_PREREQ_USE_LLM", "true")):
             return None, []
         if not concept_objects:
             return None, []
@@ -533,8 +535,10 @@ Important rules:
         term: int,
         raw_text: str,
     ) -> list[str] | None:
-        should_use_llm = self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_EXTRACT_USE_LLM")) or self._is_truthy_env(
-            os.getenv("CURRICULUM_CONCEPT_USE_LLM")
+        should_use_llm = self._is_truthy_env(
+            os.getenv("CURRICULUM_CONCEPT_EXTRACT_USE_LLM", "true")
+        ) or self._is_truthy_env(
+            os.getenv("CURRICULUM_CONCEPT_USE_LLM", "true")
         )
         if not should_use_llm:
             return None
@@ -620,7 +624,11 @@ Important rules:
                 "python-docx is not installed. Add `python-docx` to backend dependencies."
             ) from exc
 
-        doc = Document(str(path))
+        try:
+            doc = Document(str(path))
+        except Exception:
+            # Some upstream files are malformed .docx archives; skip them instead of failing whole ingestion scope.
+            return ""
         paragraphs = [paragraph.text.strip() for paragraph in doc.paragraphs if paragraph.text and paragraph.text.strip()]
         return "\n".join(paragraphs)
 
@@ -696,63 +704,60 @@ Important rules:
     @staticmethod
     def _infer_subject(scope_text: str) -> str | None:
         value = scope_text.upper()
-        if re.search(r"\b(MATHEMATICS|MATHS|MATH)\b", value):
-            return "math"
-        if re.search(r"\bENGLISH\b", value):
-            return "english"
-        if re.search(r"\bCIVIC\b", value):
-            return "civic"
+        matches: list[str] = []
+        for match in re.finditer(r"\b(MATHEMATICS|MATHS|MATH|ENGLISH|CIVIC)\b", value):
+            token = match.group(1)
+            if token in {"MATHEMATICS", "MATHS", "MATH"}:
+                matches.append("math")
+            elif token == "ENGLISH":
+                matches.append("english")
+            elif token == "CIVIC":
+                matches.append("civic")
+        if matches:
+            return matches[-1]
         return None
 
     @staticmethod
     def _infer_sss_level(scope_text: str) -> str | None:
         value = scope_text.upper()
-        patterns = [
-            r"\bSSS?\s*([123])\b",  # SSS1, SS1, SS 1
-            r"\bS([123])\b",        # S1, S2, S3
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, value)
-            if match:
-                return f"SSS{match.group(1)}"
+        matches: list[str] = []
+        pattern = re.compile(r"\bSSS?\s*([123])\b|\bS([123])\b")
+        for match in pattern.finditer(value):
+            digit = match.group(1) or match.group(2)
+            if digit:
+                matches.append(str(digit))
+        if matches:
+            return f"SSS{matches[-1]}"
         return None
 
     @staticmethod
     def _infer_term(scope_text: str) -> int | None:
         value = scope_text.upper()
-        if (
-            "FIRST TERM" in value
-            or "1ST TERM" in value
-            or "TERM 1" in value
-            or "TERM ONE" in value
-        ):
-            return 1
-        if (
-            "SECOND TERM" in value
-            or "2ND TERM" in value
-            or "TERM 2" in value
-            or "TERM TWO" in value
-        ):
-            return 2
-        if (
-            "THIRD TERM" in value
-            or "3RD TERM" in value
-            or "TERM 3" in value
-            or "TERM THREE" in value
-        ):
-            return 3
+        term_matches: list[int] = []
+        term_patterns = [
+            (re.compile(r"FIRST\s+TERM|1ST\s+TERM|TERM\s*1|TERM\s+ONE"), 1),
+            (re.compile(r"SECOND\s+TERM|2ND\s+TERM|TERM\s*2|TERM\s+TWO"), 2),
+            (re.compile(r"THIRD\s+TERM|3RD\s+TERM|TERM\s*3|TERM\s+THREE"), 3),
+        ]
+        for pattern, term_value in term_patterns:
+            term_matches.extend([term_value] * len(pattern.findall(value)))
+        if term_matches:
+            return term_matches[-1]
         return None
 
     @classmethod
     def _infer_scope_from_file(cls, *, root: Path, file_path: Path) -> tuple[str, str, int] | None:
         try:
-            relative_text = str(file_path.relative_to(root))
+            rel_path = file_path.relative_to(root)
+            parts = list(rel_path.parts)
         except ValueError:
-            relative_text = str(file_path)
-        candidate = f"{relative_text} {file_path.stem}"
-        subject = cls._infer_subject(candidate)
-        sss_level = cls._infer_sss_level(candidate)
-        term = cls._infer_term(candidate)
+            parts = [str(file_path)]
+        # Prefer closest path segments to avoid broad range folder noise.
+        local_hint = " ".join(reversed(parts[-3:])) + f" {file_path.stem}"
+        global_hint = " ".join(parts) + f" {file_path.stem}"
+        subject = cls._infer_subject(local_hint) or cls._infer_subject(global_hint)
+        sss_level = cls._infer_sss_level(local_hint) or cls._infer_sss_level(global_hint)
+        term = cls._infer_term(local_hint) or cls._infer_term(global_hint)
         if not subject or not sss_level or not term:
             return None
         return (subject, sss_level, term)
@@ -824,6 +829,9 @@ Important rules:
 
         # Keep ingestion bounded for very long notes.
         section_payloads = section_payloads[: self.MAX_CONCEPTS_PER_DOC]
+        concept_extract_use_llm = self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_EXTRACT_USE_LLM", "true"))
+        concept_refine_use_llm = self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_USE_LLM", "true"))
+        concept_extraction_mode = "heuristic_no_llm"
         llm_labels = self._extract_concept_labels_with_llm(
             topic_title=topic_title,
             subject=subject,
@@ -832,6 +840,7 @@ Important rules:
             raw_text=text,
         )
         if llm_labels:
+            concept_extraction_mode = "llm_extract"
             target_count = min(len(section_payloads), len(llm_labels), self.MAX_CONCEPTS_PER_DOC)
             section_payloads = [
                 (heading, llm_labels[idx], chunks, confidence)
@@ -839,6 +848,7 @@ Important rules:
             ]
         else:
             labels = [item[1] for item in section_payloads]
+            original_labels = list(labels)
             labels = self._maybe_refine_concept_labels_with_llm(
                 topic_title=topic_title,
                 subject=subject,
@@ -846,6 +856,13 @@ Important rules:
                 term=term,
                 labels=labels,
             )
+            if concept_extract_use_llm or concept_refine_use_llm:
+                if labels != original_labels:
+                    concept_extraction_mode = "llm_refine"
+                elif concept_refine_use_llm:
+                    concept_extraction_mode = "llm_refine_fallback_heuristic"
+                else:
+                    concept_extraction_mode = "llm_extract_fallback_heuristic"
             section_payloads = [
                 (heading, labels[idx], chunks, confidence)
                 for idx, (heading, _, chunks, confidence) in enumerate(section_payloads)
@@ -879,6 +896,7 @@ Important rules:
             excerpt_max_chars = 3000
         topic_excerpt = topic_excerpt[:excerpt_max_chars]
 
+        prereq_use_llm = self._is_truthy_env(os.getenv("CURRICULUM_PREREQ_USE_LLM", "true"))
         inferred_prereq_map, prereq_evidence = self._infer_topic_prereqs_with_llm(
             subject=subject,
             sss_level=sss_level,
@@ -887,6 +905,12 @@ Important rules:
             concept_objects=concept_objects,
             topic_excerpt=topic_excerpt,
         )
+        if inferred_prereq_map is not None:
+            prereq_inference_mode = "llm"
+        elif prereq_use_llm:
+            prereq_inference_mode = "llm_fallback_sequential"
+        else:
+            prereq_inference_mode = "sequential_no_llm"
 
         concept_sections: list[ConceptSection] = []
         for index, (_, label, chunks, confidence) in enumerate(section_payloads):
@@ -912,6 +936,8 @@ Important rules:
             topic_title=topic_title,
             concept_sections=concept_sections,
             prereq_evidence=prereq_evidence,
+            concept_extraction_mode=concept_extraction_mode,
+            prereq_inference_mode=prereq_inference_mode,
         )
 
     def upload_curriculum(
@@ -969,7 +995,16 @@ Important rules:
             job,
             stage="parsing",
             message="Started ingestion",
-            extra={"source_root": str(source_root), "supported_files": len(supported_files)},
+            extra={
+                "source_root": str(source_root),
+                "supported_files": len(supported_files),
+                "concept_extract_use_llm": self._is_truthy_env(
+                    os.getenv("CURRICULUM_CONCEPT_EXTRACT_USE_LLM", "true")
+                )
+                or self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_USE_LLM", "true")),
+                "concept_refine_use_llm": self._is_truthy_env(os.getenv("CURRICULUM_CONCEPT_USE_LLM", "true")),
+                "prereq_use_llm": self._is_truthy_env(os.getenv("CURRICULUM_PREREQ_USE_LLM", "true")),
+            },
         )
         self.db.commit()
 
@@ -1003,6 +1038,37 @@ Important rules:
 
                 processed_file_count += 1
                 mapped_topic_ids.add(parsed.topic_id)
+                self.repo.append_ingestion_log(
+                    job,
+                    stage="extraction_mode",
+                    message="Processed extraction/inference mode for file",
+                    extra={
+                        "file": parsed.source_id,
+                        "topic_id": str(parsed.topic_id),
+                        "topic_title": parsed.topic_title,
+                        "concept_extraction_mode": parsed.concept_extraction_mode,
+                        "prereq_inference_mode": parsed.prereq_inference_mode,
+                        "concept_fallback_used": "fallback" in parsed.concept_extraction_mode,
+                        "prereq_fallback_used": parsed.prereq_inference_mode == "llm_fallback_sequential",
+                        "concept_sections_count": len(parsed.concept_sections),
+                        "prereq_evidence_edges": len(parsed.prereq_evidence),
+                    },
+                )
+                if ("fallback" in parsed.concept_extraction_mode) or (
+                    parsed.prereq_inference_mode == "llm_fallback_sequential"
+                ):
+                    self.repo.append_ingestion_log(
+                        job,
+                        stage="llm_fallback",
+                        message="LLM fallback applied for file",
+                        extra={
+                            "file": parsed.source_id,
+                            "topic_id": str(parsed.topic_id),
+                            "topic_title": parsed.topic_title,
+                            "concept_extraction_mode": parsed.concept_extraction_mode,
+                            "prereq_inference_mode": parsed.prereq_inference_mode,
+                        },
+                    )
                 if parsed.prereq_evidence:
                     max_edges = 20
                     edges_for_log = parsed.prereq_evidence[:max_edges]

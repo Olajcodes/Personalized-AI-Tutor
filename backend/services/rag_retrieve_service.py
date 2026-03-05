@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
@@ -48,7 +49,12 @@ class QdrantVectorStore:
                 "qdrant-client is not installed. Add `qdrant-client` to backend dependencies."
             ) from exc
 
-        self._client = QdrantClient(url=self.config.url, api_key=self.config.api_key)
+        timeout_raw = os.getenv("QDRANT_TIMEOUT_SECONDS", "120").strip()
+        try:
+            timeout_seconds = max(10.0, float(timeout_raw))
+        except ValueError:
+            timeout_seconds = 120.0
+        self._client = QdrantClient(url=self.config.url, api_key=self.config.api_key, timeout=timeout_seconds)
         return self._client
 
     def _ensure_embedder(self):
@@ -83,6 +89,7 @@ class QdrantVectorStore:
             raise RagRetrieveServiceError(f"Failed to check Qdrant collection: {exc}") from exc
 
         if exists:
+            self._ensure_payload_indexes()
             return
 
         try:
@@ -92,32 +99,71 @@ class QdrantVectorStore:
                 collection_name=self.config.collection,
                 vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
             )
+            self._ensure_payload_indexes()
         except Exception as exc:
             raise RagRetrieveServiceError(f"Failed to create Qdrant collection: {exc}") from exc
+
+    def _ensure_payload_indexes(self) -> None:
+        client = self._ensure_client()
+        try:
+            from qdrant_client.models import PayloadSchemaType
+        except Exception:
+            return
+
+        indexes = [
+            ("curriculum_version_id", PayloadSchemaType.KEYWORD),
+            ("subject", PayloadSchemaType.KEYWORD),
+            ("sss_level", PayloadSchemaType.KEYWORD),
+            ("term", PayloadSchemaType.INTEGER),
+            ("topic_id", PayloadSchemaType.KEYWORD),
+            ("approved", PayloadSchemaType.BOOL),
+        ]
+        for field_name, field_schema in indexes:
+            try:
+                client.create_payload_index(
+                    collection_name=self.config.collection,
+                    field_name=field_name,
+                    field_schema=field_schema,
+                    wait=True,
+                )
+            except Exception:
+                # Index may already exist (or provider may not support explicit indexing); continue best-effort.
+                continue
 
     def upsert_chunks(self, rows: list[dict[str, Any]]) -> None:
         if not rows:
             return
         client = self._ensure_client()
-        vectors = self._embed_texts([str(row["text"]) for row in rows])
-        if not vectors:
-            raise RagRetrieveServiceError("Embedding model returned no vectors for chunk batch")
-        self.ensure_collection(vector_size=len(vectors[0]))
-
+        batch_size_raw = os.getenv("QDRANT_UPSERT_BATCH_SIZE", "96").strip()
         try:
-            from qdrant_client.models import PointStruct
+            batch_size = max(1, int(batch_size_raw))
+        except ValueError:
+            batch_size = 96
 
-            points = [
-                PointStruct(
-                    id=str(row["id"]),
-                    vector=vectors[idx],
-                    payload=row["payload"],
-                )
-                for idx, row in enumerate(rows)
-            ]
-            client.upsert(collection_name=self.config.collection, points=points, wait=True)
-        except Exception as exc:
-            raise RagRetrieveServiceError(f"Failed to upsert chunks into Qdrant: {exc}") from exc
+        first_vector_size = None
+        for start in range(0, len(rows), batch_size):
+            batch_rows = rows[start : start + batch_size]
+            vectors = self._embed_texts([str(row["text"]) for row in batch_rows])
+            if not vectors:
+                raise RagRetrieveServiceError("Embedding model returned no vectors for chunk batch")
+            if first_vector_size is None:
+                first_vector_size = len(vectors[0])
+                self.ensure_collection(vector_size=first_vector_size)
+
+            try:
+                from qdrant_client.models import PointStruct
+
+                points = [
+                    PointStruct(
+                        id=str(row["id"]),
+                        vector=vectors[idx],
+                        payload=row["payload"],
+                    )
+                    for idx, row in enumerate(batch_rows)
+                ]
+                client.upsert(collection_name=self.config.collection, points=points, wait=True)
+            except Exception as exc:
+                raise RagRetrieveServiceError(f"Failed to upsert chunks into Qdrant: {exc}") from exc
 
     def set_approval_flag(self, *, curriculum_version_id: UUID, approved: bool) -> None:
         client = self._ensure_client()
@@ -185,13 +231,24 @@ class QdrantVectorStore:
                     )
                 )
 
-            result = client.search(
-                collection_name=self.config.collection,
-                query_vector=query_vector,
-                query_filter=Filter(must=must_conditions),
-                limit=payload.top_k,
-                with_payload=True,
-            )
+            query_filter = Filter(must=must_conditions)
+            if hasattr(client, "search"):
+                result = client.search(
+                    collection_name=self.config.collection,
+                    query_vector=query_vector,
+                    query_filter=query_filter,
+                    limit=payload.top_k,
+                    with_payload=True,
+                )
+            else:
+                query_result = client.query_points(
+                    collection_name=self.config.collection,
+                    query=query_vector,
+                    query_filter=query_filter,
+                    limit=payload.top_k,
+                    with_payload=True,
+                )
+                result = getattr(query_result, "points", query_result)
         except Exception as exc:
             raise RagRetrieveServiceError(f"Qdrant retrieval failed: {exc}") from exc
 
