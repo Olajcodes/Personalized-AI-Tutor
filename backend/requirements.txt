@@ -20,3 +20,6 @@ redis
 qdrant-client
 fastembed
 python-docx
+
+google-auth
+requests
