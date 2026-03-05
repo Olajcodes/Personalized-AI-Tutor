@@ -145,7 +145,9 @@ python -m backend.scripts.reset_and_reseed_curriculum `
   --no-disable-neo4j-sync `
   --seed-neo4j `
   --qdrant-batch-size 24 `
-  --qdrant-timeout-seconds 240
+  --qdrant-timeout-seconds 240`
+  --full-db-reset
+  
 ```
 
 Notes:

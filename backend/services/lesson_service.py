@@ -1,38 +1,415 @@
-"""Lesson service (scope enforcement + response assembly)."""
+"""Lesson service (scope enforcement + personalized lesson generation/cache)."""
 
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
 import uuid
+from typing import Any
+
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.models.student_concept_mastery import StudentConceptMastery
 from backend.repositories.lesson_repo import (
+    ensure_personalized_lessons_table,
+    get_personalized_lesson,
     get_student_profile,
-    student_enrolled_in_subject,
     get_topic_with_subject,
-    get_lesson_with_blocks,
+    student_enrolled_in_subject,
+    upsert_personalized_lesson,
 )
+from backend.schemas.internal_rag_schema import InternalRagRetrieveRequest
+from backend.services.rag_retrieve_service import RagRetrieveService, RagRetrieveServiceError
+
 
 class LessonNotFound(Exception):
     pass
+
 
 class ForbiddenLessonAccess(Exception):
     pass
 
 
-def _map_content_block(block_type: str, content: dict) -> dict:
-    payload = {"type": block_type}
+class LessonGenerationError(Exception):
+    pass
 
-    if block_type in {"video", "image"}:
-        url = content.get("url") or content.get("value")
-        if url is not None:
-            payload["url"] = str(url)
-            return payload
 
-    if "value" in content:
-        payload["value"] = content["value"]
-    elif "text" in content:
-        payload["value"] = content["text"]
-    else:
-        payload["value"] = content
-    return payload
+GENERATOR_VERSION = "rag_mastery_v1"
+ALLOWED_BLOCK_TYPES = {"text", "video", "image", "example", "exercise"}
+LOW_VALUE_PHRASES = (
+    "introduces the core ideas",
+    "worked examples, and checkpoints",
+    "needed for mastery progression",
+)
+
+
+def _extract_json_object(raw: str) -> dict | None:
+    content = (raw or "").strip()
+    if not content:
+        return None
+    try:
+        parsed = json.loads(content)
+        return parsed if isinstance(parsed, dict) else None
+    except json.JSONDecodeError:
+        pass
+    match = re.search(r"\{[\s\S]*\}", content)
+    if not match:
+        return None
+    try:
+        parsed = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _normalize_text(value: str) -> str:
+    return re.sub(r"\s+", " ", value or "").strip()
+
+
+def _normalize_generated_blocks(raw_blocks: Any) -> list[dict]:
+    if not isinstance(raw_blocks, list):
+        return []
+
+    normalized: list[dict] = []
+    for block in raw_blocks:
+        if not isinstance(block, dict):
+            continue
+        block_type = str(block.get("type") or block.get("block_type") or "").strip().lower()
+        if block_type not in ALLOWED_BLOCK_TYPES:
+            continue
+
+        if block_type in {"video", "image"}:
+            url = block.get("url") or block.get("value")
+            if url is None:
+                continue
+            normalized.append({"type": block_type, "url": str(url)})
+            continue
+
+        value = block.get("value")
+        if value is None:
+            if "content" in block:
+                value = block["content"]
+            elif "text" in block:
+                value = block["text"]
+        if value is None:
+            continue
+        if isinstance(value, str):
+            value = _normalize_text(value)
+            if not value:
+                continue
+        normalized.append({"type": block_type, "value": value})
+
+    return normalized
+
+
+def _extract_block_texts(blocks: list[dict]) -> list[str]:
+    texts: list[str] = []
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        value = block.get("value")
+        if isinstance(value, str):
+            normalized = _normalize_text(value).lower()
+            if normalized:
+                texts.append(normalized)
+        elif isinstance(value, dict):
+            for key in ("note", "solution", "question", "expected_answer", "prompt"):
+                inner = value.get(key)
+                if isinstance(inner, str):
+                    normalized = _normalize_text(inner).lower()
+                    if normalized:
+                        texts.append(normalized)
+    return texts
+
+
+def _looks_low_value_lesson(*, title: str, summary: str | None, blocks: list[dict], topic_title: str) -> bool:
+    corpus = " ".join(
+        [
+            _normalize_text(title).lower(),
+            _normalize_text(summary or "").lower(),
+            *_extract_block_texts(blocks),
+        ]
+    )
+    if not corpus:
+        return True
+
+    marker_hits = sum(1 for marker in LOW_VALUE_PHRASES if marker in corpus)
+    if marker_hits >= 2:
+        return True
+
+    texts = _extract_block_texts(blocks)
+    unique = {t for t in texts if t}
+    if texts and len(unique) <= max(1, len(texts) // 4):
+        return True
+
+    if _normalize_text(topic_title).lower() == _normalize_text(title).lower() and len(unique) <= 2:
+        return True
+
+    return False
+
+
+def _resolve_llm_client() -> tuple[Any, str, str]:
+    provider = os.getenv("LLM_PROVIDER", "groq").strip().lower()
+    model = os.getenv("LESSON_LLM_MODEL", os.getenv("LLM_MODEL", "openai/gpt-oss-20b")).strip()
+    if not model:
+        raise LessonGenerationError("LESSON_LLM_MODEL/LLM_MODEL is not configured.")
+
+    api_key = (
+        os.getenv("GROQ_API_KEY")
+        if provider == "groq"
+        else (os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY"))
+    )
+    if not api_key:
+        raise LessonGenerationError("No LLM API key configured for lesson generation.")
+
+    try:
+        from openai import OpenAI
+    except ModuleNotFoundError as exc:
+        raise LessonGenerationError("openai dependency is missing for lesson generation.") from exc
+
+    base_url = ""
+    if provider == "groq":
+        base_url = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1").strip()
+    elif provider not in {"openai", ""} and os.getenv("LLM_API_BASE"):
+        base_url = os.getenv("LLM_API_BASE", "").strip()
+
+    try:
+        client = OpenAI(api_key=api_key, base_url=base_url or None)
+    except Exception as exc:
+        raise LessonGenerationError(f"Failed to initialize lesson LLM client: {exc}") from exc
+    return client, provider, model
+
+
+def _get_mastery_rows(
+    db: Session,
+    *,
+    student_id: uuid.UUID,
+    subject: str,
+    sss_level: str,
+    term: int,
+) -> list[StudentConceptMastery]:
+    stmt = (
+        select(StudentConceptMastery)
+        .where(
+            StudentConceptMastery.student_id == student_id,
+            StudentConceptMastery.subject == subject,
+            StudentConceptMastery.sss_level == sss_level,
+            StudentConceptMastery.term == term,
+        )
+        .order_by(StudentConceptMastery.mastery_score.asc(), StudentConceptMastery.updated_at.desc())
+    )
+    return list(db.execute(stmt).scalars().all())
+
+
+def _mastery_signature(rows: list[StudentConceptMastery]) -> str:
+    if not rows:
+        return "no_mastery"
+    payload = "|".join(
+        f"{row.concept_id}:{float(row.mastery_score):.4f}:{row.updated_at.isoformat()}"
+        for row in rows
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
+
+
+def _retrieve_rag_context(
+    *,
+    topic_id: uuid.UUID,
+    topic_title: str,
+    subject: str,
+    sss_level: str,
+    term: int,
+) -> tuple[list[Any], bool]:
+    service = RagRetrieveService()
+    query = f"{topic_title} explained with worked examples and practice for {sss_level} term {term}"
+
+    topic_payload = InternalRagRetrieveRequest(
+        query=query,
+        subject=subject,  # type: ignore[arg-type]
+        sss_level=sss_level,  # type: ignore[arg-type]
+        term=term,
+        topic_ids=[topic_id],
+        top_k=8,
+        approved_only=True,
+    )
+    response = service.retrieve(topic_payload)
+    return response.chunks, False
+
+
+def _build_generation_prompt(
+    *,
+    topic_title: str,
+    subject: str,
+    sss_level: str,
+    term: int,
+    preference: Any,
+    mastery_rows: list[StudentConceptMastery],
+    rag_chunks: list[Any],
+) -> str:
+    weak_concepts = [
+        {"concept_id": row.concept_id, "mastery_score": round(float(row.mastery_score), 4)}
+        for row in mastery_rows[:5]
+    ]
+    strong_concepts = [
+        {"concept_id": row.concept_id, "mastery_score": round(float(row.mastery_score), 4)}
+        for row in mastery_rows[-3:]
+    ] if mastery_rows else []
+
+    preference_payload = {
+        "explanation_depth": getattr(preference, "explanation_depth", "standard"),
+        "examples_first": bool(getattr(preference, "examples_first", False)),
+        "pace": getattr(preference, "pace", "normal"),
+    }
+
+    context_lines: list[str] = []
+    for chunk in rag_chunks[:8]:
+        text = _normalize_text(str(chunk.text or ""))[:450]
+        if not text:
+            continue
+        source_id = str(chunk.source_id or "")
+        chunk_id = str(chunk.chunk_id or "")
+        context_lines.append(f"- ({source_id}#{chunk_id}) {text}")
+
+    total_context_chars = sum(len(line) for line in context_lines)
+    if not context_lines:
+        raise LessonGenerationError("No usable curriculum context was retrieved for lesson generation.")
+    if len(context_lines) < 2 or total_context_chars < 300:
+        raise LessonGenerationError(
+            "Curriculum context is too sparse for reliable lesson generation for this topic."
+        )
+
+    return (
+        "You generate curriculum-grounded lesson drafts for one student.\n"
+        "Return JSON only. No markdown, no commentary.\n"
+        "Do not fabricate facts outside the provided curriculum context.\n"
+        "Use student preference and mastery weaknesses to shape explanation depth and pacing.\n\n"
+        f"Scope: subject={subject}, level={sss_level}, term={term}, topic={topic_title}\n"
+        f"Student preference: {json.dumps(preference_payload, ensure_ascii=True)}\n"
+        f"Weak concepts: {json.dumps(weak_concepts, ensure_ascii=True)}\n"
+        f"Strong concepts: {json.dumps(strong_concepts, ensure_ascii=True)}\n"
+        "Curriculum evidence:\n"
+        f"{chr(10).join(context_lines)}\n\n"
+        "Return EXACT JSON shape:\n"
+        "{\n"
+        '  "title": "string",\n'
+        '  "summary": "string",\n'
+        '  "estimated_duration_minutes": 18,\n'
+        '  "content_blocks": [\n'
+        '    {"type":"text","value":"string"},\n'
+        '    {"type":"example","value":{"prompt":"string","solution":"string","note":"string"}},\n'
+        '    {"type":"exercise","value":{"question":"string","expected_answer":"string"}}\n'
+        "  ]\n"
+        "}\n"
+        "Rules:\n"
+        "- At least 4 blocks.\n"
+        "- Keep blocks concise and teachable.\n"
+        "- Ensure at least one worked example and one exercise.\n"
+        "- Keep language clear for secondary school learners.\n"
+        "- Use concrete details from retrieved evidence; avoid generic restatements.\n"
+        "- Do not repeat placeholder wording like 'introduces core ideas'.\n"
+    )
+
+
+def _generate_personalized_lesson(
+    *,
+    topic_id: uuid.UUID,
+    topic_title: str,
+    subject: str,
+    sss_level: str,
+    term: int,
+    preference: Any,
+    mastery_rows: list[StudentConceptMastery],
+) -> dict:
+    try:
+        rag_chunks, used_scope_fallback = _retrieve_rag_context(
+            topic_id=topic_id,
+            topic_title=topic_title,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+        )
+    except RagRetrieveServiceError as exc:
+        raise LessonGenerationError(f"RAG retrieval failed: {exc}") from exc
+
+    if not rag_chunks:
+        raise LessonGenerationError(
+            "No approved curriculum chunks found for this topic/scope. Ingest and approve curriculum first."
+        )
+
+    prompt = _build_generation_prompt(
+        topic_title=topic_title,
+        subject=subject,
+        sss_level=sss_level,
+        term=term,
+        preference=preference,
+        mastery_rows=mastery_rows,
+        rag_chunks=rag_chunks,
+    )
+    client, provider, model = _resolve_llm_client()
+    content = ""
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            temperature=0,
+            response_format={"type": "json_object"},
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except Exception as exc:
+        # Some providers/models may not support explicit JSON response mode.
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                temperature=0,
+                messages=[{"role": "user", "content": prompt}],
+            )
+        except Exception as retry_exc:
+            raise LessonGenerationError(f"Lesson LLM generation failed: {retry_exc}") from retry_exc
+    content = str(response.choices[0].message.content or "") if response.choices else ""
+
+    parsed = _extract_json_object(content)
+    if not parsed:
+        preview = _normalize_text(content)[:220]
+        raise LessonGenerationError(
+            "Lesson LLM returned invalid JSON. "
+            f"model={model}, provider={provider}, preview={preview!r}"
+        )
+
+    title = _normalize_text(str(parsed.get("title") or topic_title))[:255]
+    summary = _normalize_text(str(parsed.get("summary") or ""))[:1200] or None
+
+    raw_duration = parsed.get("estimated_duration_minutes")
+    try:
+        duration = int(raw_duration)
+    except (TypeError, ValueError):
+        duration = 20
+    duration = max(8, min(duration, 90))
+
+    blocks = _normalize_generated_blocks(parsed.get("content_blocks"))
+    if len(blocks) < 3:
+        raise LessonGenerationError("Lesson generation returned insufficient structured content blocks.")
+    if _looks_low_value_lesson(title=title, summary=summary, blocks=blocks, topic_title=topic_title):
+        raise LessonGenerationError(
+            "Lesson generation quality check failed (generic output). Retry after re-ingestion or adjust LLM model."
+        )
+
+    source_chunk_ids = [str(chunk.chunk_id) for chunk in rag_chunks[:8] if str(chunk.chunk_id or "").strip()]
+    metadata = {
+        "generator_version": GENERATOR_VERSION,
+        "provider": provider,
+        "model": model,
+        "used_scope_fallback": used_scope_fallback,
+        "source_count": len(source_chunk_ids),
+    }
+    return {
+        "title": title,
+        "summary": summary,
+        "estimated_duration_minutes": duration,
+        "content_blocks": blocks,
+        "source_chunk_ids": source_chunk_ids,
+        "generation_metadata": metadata,
+    }
 
 
 def fetch_topic_lesson(db: Session, topic_id: uuid.UUID, student_id: uuid.UUID) -> dict:
@@ -45,7 +422,8 @@ def fetch_topic_lesson(db: Session, topic_id: uuid.UUID, student_id: uuid.UUID) 
     topic_subject = get_topic_with_subject(db, topic_id)
     if not topic_subject:
         raise LessonNotFound("Topic not found.")
-    topic, _subject = topic_subject
+    topic, subject = topic_subject
+    subject_slug = str(subject.slug)
 
     # 3) Governance: approved only
     if not topic.is_approved:
@@ -61,19 +439,65 @@ def fetch_topic_lesson(db: Session, topic_id: uuid.UUID, student_id: uuid.UUID) 
     if not student_enrolled_in_subject(db, student_profile.id, topic.subject_id):
         raise ForbiddenLessonAccess("Student is not enrolled in this subject.")
 
-    # 6) Lesson exists (1:1 with topic)
-    lesson = get_lesson_with_blocks(db, topic.id)
-    if not lesson:
-        raise LessonNotFound("Lesson not found for this topic.")
+    ensure_personalized_lessons_table(db)
+    mastery_rows = _get_mastery_rows(
+        db,
+        student_id=student_id,
+        subject=subject_slug,
+        sss_level=student_profile.sss_level,
+        term=int(student_profile.active_term),
+    )
+    mastery_sig = _mastery_signature(mastery_rows)
+    curriculum_version_id = topic.curriculum_version_id
 
-    # 7) Assemble response (normalized contract)
+    cached = get_personalized_lesson(db, student_id=student_id, topic_id=topic.id)
+    if cached is not None:
+        cached_meta = dict(cached.generation_metadata or {})
+        if (
+            cached.curriculum_version_id == curriculum_version_id
+            and cached_meta.get("generator_version") == GENERATOR_VERSION
+            and cached_meta.get("mastery_signature") == mastery_sig
+            and isinstance(cached.content_blocks, list)
+            and cached.content_blocks
+        ):
+            return {
+                "topic_id": str(topic.id),
+                "title": cached.title,
+                "summary": cached.summary,
+                "estimated_duration_minutes": cached.estimated_duration_minutes,
+                "content_blocks": list(cached.content_blocks),
+            }
+
+    generated = _generate_personalized_lesson(
+        topic_id=topic.id,
+        topic_title=topic.title,
+        subject=subject_slug,
+        sss_level=student_profile.sss_level,
+        term=int(student_profile.active_term),
+        preference=getattr(student_profile, "preference", None),
+        mastery_rows=mastery_rows,
+    )
+    metadata = dict(generated["generation_metadata"])
+    metadata["mastery_signature"] = mastery_sig
+
+    upsert_personalized_lesson(
+        db,
+        student_id=student_id,
+        topic_id=topic.id,
+        curriculum_version_id=curriculum_version_id,
+        title=str(generated["title"]),
+        summary=generated["summary"],
+        estimated_duration_minutes=int(generated["estimated_duration_minutes"]),
+        content_blocks=list(generated["content_blocks"]),
+        source_chunk_ids=list(generated["source_chunk_ids"]),
+        generation_metadata=metadata,
+    )
+    db.commit()
+
     return {
         "topic_id": str(topic.id),
-        "title": lesson.title or topic.title,
-        "summary": getattr(lesson, "summary", None),
-        "estimated_duration_minutes": getattr(lesson, "estimated_duration_minutes", None),
-        "content_blocks": [
-            _map_content_block(b.block_type, b.content or {})
-            for b in lesson.blocks
-        ],
+        "title": str(generated["title"]),
+        "summary": generated["summary"],
+        "estimated_duration_minutes": int(generated["estimated_duration_minutes"]),
+        "content_blocks": list(generated["content_blocks"]),
     }

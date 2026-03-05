@@ -14,9 +14,12 @@ from __future__ import annotations
 import os
 import re
 import uuid
+import zipfile
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Iterable
+import xml.etree.ElementTree as ET
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -261,9 +264,39 @@ def _read_docx(path: Path) -> str:
     try:
         doc = Document(str(path))
     except Exception:
+        doc = None
+
+    if doc is not None:
+        paragraphs = [paragraph.text.strip() for paragraph in doc.paragraphs if paragraph.text and paragraph.text.strip()]
+        text = "\n".join(paragraphs)
+        if text.strip():
+            return text
+
+    # Fallback for malformed archives that python-docx cannot fully load.
+    try:
+        with zipfile.ZipFile(path, "r") as archive:
+            if "word/document.xml" not in archive.namelist():
+                return ""
+            document_xml = archive.read("word/document.xml")
+    except Exception:
         return ""
-    paragraphs = [paragraph.text.strip() for paragraph in doc.paragraphs if paragraph.text and paragraph.text.strip()]
-    return "\n".join(paragraphs)
+
+    try:
+        root = ET.fromstring(document_xml)
+    except ET.ParseError:
+        return ""
+
+    namespace = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+    lines: list[str] = []
+    for paragraph in root.findall(".//w:p", namespace):
+        tokens: list[str] = []
+        for node in paragraph.findall(".//w:t", namespace):
+            token = str(node.text or "").strip()
+            if token:
+                tokens.append(token)
+        if tokens:
+            lines.append(" ".join(tokens))
+    return "\n".join(lines)
 
 
 def _infer_subject(text: str) -> str | None:
@@ -442,6 +475,139 @@ def _fallback_candidates(existing: Iterable[ScopeTopicCandidate]) -> list[ScopeT
                         )
                     )
     return additions
+
+
+def _best_doc_candidate_for_title(
+    *,
+    title: str,
+    scope_candidates: list[ScopeTopicCandidate],
+    used_indexes: set[int],
+) -> ScopeTopicCandidate | None:
+    normalized_title = _normalize_space(title).lower()
+    if not normalized_title:
+        return None
+
+    best_index: int | None = None
+    best_score = -1.0
+    for index, candidate in enumerate(scope_candidates):
+        if index in used_indexes:
+            continue
+        normalized_candidate = _normalize_space(candidate.title).lower()
+        if not normalized_candidate:
+            continue
+        score = SequenceMatcher(a=normalized_title, b=normalized_candidate).ratio()
+        if normalized_title in normalized_candidate or normalized_candidate in normalized_title:
+            score = max(score, 0.92)
+        if score > best_score:
+            best_score = score
+            best_index = index
+
+    if best_index is None or best_score < 0.45:
+        return None
+    used_indexes.add(best_index)
+    return scope_candidates[best_index]
+
+
+def _build_seed_candidates(root: Path) -> list[ScopeTopicCandidate]:
+    """Build clean canonical scope topics and attach best available document text."""
+    doc_candidates = _build_doc_candidates(root)
+    by_scope: dict[tuple[str, str, int], list[ScopeTopicCandidate]] = {}
+    for candidate in doc_candidates:
+        key = (candidate.subject, candidate.sss_level, candidate.term)
+        by_scope.setdefault(key, []).append(candidate)
+
+    scope_raw_text: dict[tuple[str, str, int], str] = {}
+    for file_path in sorted(root.rglob("*.docx")):
+        scope = _infer_scope(root, file_path)
+        if scope is None:
+            continue
+        text = _read_docx(file_path)
+        normalized = _normalize_space(text)
+        if not normalized:
+            continue
+        existing = scope_raw_text.get(scope, "")
+        scope_raw_text[scope] = f"{existing}\n{normalized}".strip()
+
+    def _extract_scope_window(topic_title: str, scope_text: str) -> str | None:
+        lowered = scope_text.lower()
+        if not lowered:
+            return None
+        stopwords = {"and", "of", "the", "to", "in", "for", "with", "by"}
+        keywords = [
+            token
+            for token in re.split(r"[^a-z0-9]+", topic_title.lower())
+            if token and token not in stopwords and len(token) > 2
+        ]
+        if not keywords:
+            return None
+        # Prioritize longer keywords for narrower matching.
+        keywords.sort(key=len, reverse=True)
+        match_index = -1
+        for keyword in keywords:
+            index = lowered.find(keyword)
+            if index >= 0:
+                match_index = index
+                break
+        if match_index < 0:
+            return None
+
+        start = max(0, match_index - 800)
+        end = min(len(scope_text), match_index + 2200)
+        snippet = _normalize_space(scope_text[start:end])
+        return snippet if snippet else None
+
+    output: list[ScopeTopicCandidate] = []
+    for subject in SUBJECT_SLUGS:
+        for sss_level in SSS_LEVELS:
+            for term in TERMS:
+                key = (subject, sss_level, term)
+                scope_candidates = by_scope.get(key, [])
+                scope_text = scope_raw_text.get(key, "")
+                used_indexes: set[int] = set()
+                for canonical_title in BASE_SCOPE_TOPICS[subject][term]:
+                    matched = _best_doc_candidate_for_title(
+                        title=canonical_title,
+                        scope_candidates=scope_candidates,
+                        used_indexes=used_indexes,
+                    )
+                    if matched is not None:
+                        text = _candidate_text(
+                            canonical_title,
+                            matched.text,
+                            subject,
+                            sss_level,
+                            term,
+                        )
+                        source_file = matched.source_file
+                    else:
+                        extracted = _extract_scope_window(canonical_title, scope_text)
+                        if extracted:
+                            text = _candidate_text(
+                                canonical_title,
+                                extracted,
+                                subject,
+                                sss_level,
+                                term,
+                            )
+                            source_file = "scope_window"
+                        else:
+                            text = (
+                                f"{canonical_title} for {sss_level} term {term} in {subject.upper()} introduces the core ideas, "
+                                "worked examples, and checkpoints needed for mastery progression."
+                            )
+                            source_file = "fallback"
+
+                    output.append(
+                        ScopeTopicCandidate(
+                            subject=subject,
+                            sss_level=sss_level,
+                            term=term,
+                            title=canonical_title,
+                            text=text,
+                            source_file=source_file,
+                        )
+                    )
+    return output
 
 
 def _upsert_subject(db: Session, slug: str, name: str) -> Subject:
@@ -738,8 +904,7 @@ def run() -> None:
             db.query(StudentConceptMastery).delete(synchronize_session=False)
             db.commit()
 
-        doc_candidates = _build_doc_candidates(DOCS_ROOT)
-        candidates = doc_candidates + _fallback_candidates(doc_candidates)
+        candidates = _build_seed_candidates(DOCS_ROOT)
 
         created_topics = 0
         updated_topics = 0

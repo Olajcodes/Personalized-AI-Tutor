@@ -183,9 +183,15 @@ def _bulk_ingest_and_approve(source_root: str) -> tuple[int, int, list[str]]:
             f"success={bulk.succeeded_scopes}, failed={bulk.failed_scopes}"
         )
 
+        seen_failures: set[str] = set()
         for item in bulk.results:
             if item.status == "failed":
-                failed_messages.append(f"{item.subject} {item.sss_level} term {item.term}: {item.message}")
+                message = (item.message or "").strip() or "Scope ingestion failed without a detailed error message."
+                record = f"{item.subject} {item.sss_level} term {item.term}: {message}"
+                if record in seen_failures:
+                    continue
+                seen_failures.add(record)
+                failed_messages.append(record)
 
         print("[5/7] Approving ingested versions...")
         for version_id in bulk.approve_ready_version_ids:
@@ -317,6 +323,7 @@ def _print_final_summary() -> None:
             "topics",
             "lessons",
             "lesson_blocks",
+            "personalized_lessons",
             "curriculum_versions",
             "curriculum_topic_maps",
             "curriculum_ingestion_jobs",

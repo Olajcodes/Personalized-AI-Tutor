@@ -1,17 +1,36 @@
 """Topic listing endpoints constrained by student profile scope."""
 
 import uuid
+import re
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from backend.core.database import get_db
-from backend.models.lesson import Lesson
 from backend.models.topic import Topic
 from backend.models.subject import Subject
 from backend.models.student import StudentProfile, StudentSubject
+from backend.models.personalized_lesson import PersonalizedLesson
 
 router = APIRouter(prefix="/learning", tags=["Topics"])
+
+
+_NOISY_DESCRIPTION_MARKERS = (
+    "SECOND TERM E-LEARNING NOTE SUBJECT",
+    "SCHEME OF WORK WEEK TOPIC",
+    "WEEKEND ASSIGNMENT SECTION",
+)
+
+
+def _clean_topic_description(raw: str | None, topic_title: str) -> str:
+    text = re.sub(r"\s+", " ", str(raw or "")).strip()
+    if not text:
+        return f"{topic_title} is available for personalized lesson generation."
+    if any(marker in text.upper() for marker in _NOISY_DESCRIPTION_MARKERS):
+        return f"{topic_title} is available for personalized lesson generation."
+    if len(text) > 220:
+        return f"{text[:217].rstrip()}..."
+    return text
 
 @router.get("/topics")
 def list_topics(
@@ -38,8 +57,12 @@ def list_topics(
     ]
 
     q = (
-        select(Topic, Lesson)
-        .outerjoin(Lesson, Lesson.topic_id == Topic.id)
+        select(Topic, PersonalizedLesson)
+        .outerjoin(
+            PersonalizedLesson,
+            (PersonalizedLesson.topic_id == Topic.id)
+            & (PersonalizedLesson.student_id == student_id),
+        )
         .where(
         Topic.is_approved.is_(True),
         Topic.sss_level == sp.sss_level,
@@ -54,14 +77,21 @@ def list_topics(
     q = q.order_by(Topic.created_at.asc(), Topic.title.asc())
     rows = db.execute(q).all()
     payload = []
-    for topic, lesson in rows:
+    for topic, personalized_lesson in rows:
+        description = (
+            personalized_lesson.summary
+            if personalized_lesson and personalized_lesson.summary
+            else _clean_topic_description(topic.description, topic.title)
+        )
         payload.append(
             {
                 "topic_id": str(topic.id),
                 "title": topic.title,
-                "description": topic.description,
-                "lesson_title": lesson.title if lesson else None,
-                "estimated_duration_minutes": lesson.estimated_duration_minutes if lesson else None,
+                "description": description,
+                "lesson_title": personalized_lesson.title if personalized_lesson else None,
+                "estimated_duration_minutes": (
+                    personalized_lesson.estimated_duration_minutes if personalized_lesson else None
+                ),
                 "sss_level": topic.sss_level,
                 "term": topic.term,
                 "subject_id": str(topic.subject_id),

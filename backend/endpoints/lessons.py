@@ -9,7 +9,12 @@ from sqlalchemy.orm import Session
 
 from backend.core.database import get_db
 from backend.schemas.lesson_schema import TopicLessonResponse
-from backend.services.lesson_service import fetch_topic_lesson, LessonNotFound, ForbiddenLessonAccess
+from backend.services.lesson_service import (
+    fetch_topic_lesson,
+    LessonNotFound,
+    ForbiddenLessonAccess,
+    LessonGenerationError,
+)
 
 router = APIRouter(prefix="/learning", tags=["Lessons"])
 
@@ -30,5 +35,7 @@ def get_topic_lesson(
         raise HTTPException(status_code=404, detail=str(e))
     except ForbiddenLessonAccess as e:
         raise HTTPException(status_code=403, detail=str(e))
-    except Exception:
-        raise HTTPException(status_code=500, detail="Unexpected server error")
+    except LessonGenerationError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected server error: {e}")
