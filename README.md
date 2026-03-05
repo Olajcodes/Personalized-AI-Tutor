@@ -1,82 +1,28 @@
 # Mastery AI
 
-Personalized AI Tutor with Knowledge Graph Memory for Adaptive Learning.
+Mastery AI is a curriculum-governed personalized learning platform for senior secondary students.
+It combines a FastAPI backend, an AI-core orchestration service, a vector store, and a concept graph
+to deliver topic recommendations, tutoring, quizzes, and mastery tracking.
 
 ## Team
 
 - Team Name: Team Mastery AI
 - Program: Gen AI Fellowship Capstone Project
 
-### Team Members
-
-| Name | Area |
-| --- | --- |
-| Saheed Olayinka | AI Engineer, Backend (Lessons and Curriculum Delivery) |
-| Lateef Abioye | AI Engineer, Backend (Activity, Streaks, Gamification) |
-| Mary Adeoye | AI Engineer, Backend (Student Profile and Preferences) |
-| Esther Kudoro | AI Engineer, Backend (Tutor Sessions and Chat History) |
-| Adebimpe Atoyebi | AI Developer, Frontend (Login, Signup, Success) |
-| Gbolahan | AI Developer, Frontend (Class, Subject, Learning Preference, Assessment Splash) |
-| Favour | AI Developer, Frontend (Quiz and AI Progress Pages) |
-| Olusola Somorin | AI Developer, Frontend (Student Mastery and Lesson Views) |
-| Ajijolaoluwa Adesoji | AI Developer, Frontend (Mistake Explanation, Analytics Dashboards) |
-
-## Problem Statement
-
-Most classroom systems teach all learners at the same pace. This leaves prerequisite gaps unresolved and makes exam preparation inefficient. Standard LLM tutors improve accessibility but often remain short-memory chat systems without reliable concept tracking or prerequisite-aware planning.
-
-## Solution Summary
-
-Mastery AI is a curriculum-governed tutoring platform for SSS1 to SSS3 learners in Math, English, and Civic Education. It combines:
-
-- persistent learner state,
-- concept and prerequisite reasoning,
-- adaptive tutoring and assessment loops,
-- teacher-facing mastery visibility,
-- admin governance for curriculum quality.
-
-## Product Scope
-
-- Target levels: `SSS1`, `SSS2`, `SSS3`
-- Terms: `1`, `2`, `3`
-- Subjects: `math`, `english`, `civic`
-- User roles: `student`, `teacher`, `admin`
-
-## Core Capabilities
-
-- Curriculum-bound tutoring with level, term, and subject guardrails
-- Concept-level mastery progression over time
-- Diagnostic and quiz-driven adaptation
-- Prerequisite-aware next-topic recommendations
-- Teacher dashboards with class heatmaps and alerts
-- Admin content ingestion, approval, and curriculum versioning
-
 ## Architecture
 
-Mastery AI is split into two primary codebases in one repository:
+- `frontend/`: React web application
+- `backend/`: FastAPI API, auth, profile, curriculum governance, persistence
+- `ai_core/`: AI orchestration (tutor, quiz generation/insights, safety, retrieval helpers)
+- `PostgreSQL`: transactional data
+- `Qdrant`: curriculum chunk vectors
+- `Neo4j`: topic/concept prerequisite graph
 
-1. `backend/` (FastAPI + PostgreSQL)
-2. `ai_core/` (orchestration and AI logic)
-
-### High-Level Flow
-
-1. Frontend sends user action to backend API.
-2. Backend resolves identity, scope, and persisted state.
-3. For AI interactions, backend delegates to `ai_core` orchestration.
-4. `ai_core` performs scope checks, retrieval, prerequisite lookup, generation, and lightweight mastery updates.
-5. Backend persists outputs, history, and analytics-facing records.
-
-### Data Components
-
-- PostgreSQL: profiles, topics, lessons, activities, sessions, and relational state
-- Neo4j: concept graph and prerequisite reasoning (integration layer in progress)
-- Vector store: retrieval chunks and embeddings (integration layer in progress)
-- Redis: optional caching layer for retrieval and orchestration
-
-## Repository Structure
+## Repository Layout
 
 ```text
 Personalized-AI-Tutor/
+|-- frontend/
 |-- backend/
 |   |-- alembic/
 |   |-- core/
@@ -86,97 +32,25 @@ Personalized-AI-Tutor/
 |   |-- schemas/
 |   |-- scripts/
 |   |-- services/
-|   |-- tests/
 |   `-- main.py
 |-- ai_core/
 |   |-- core_engine/
-|   |-- scripts/
-|   `-- tests/
-`-- README.md
+|   `-- main.py
+`-- docs/
 ```
 
-## Tech Stack
-
-- API: FastAPI
-- ORM and migrations: SQLAlchemy, Alembic
-- Relational DB: PostgreSQL
-- Graph DB: Neo4j
-- AI orchestration: LangGraph-compatible engine design (`ai_core`)
-- Retrieval: vector-store abstraction in `ai_core`
-- Security: JWT and password hashing utilities
-- Testing: pytest
-
-## Current Status
-
-This repository is actively under development in team-parallel mode.
-
-### Implemented and Working
-
-- Auth and user management endpoints (register/login/password)
-- Student profile and preference endpoints
-- Curriculum metadata endpoints (subjects and levels)
-- Student-scoped topic listing and lesson delivery
-- Student learning activity endpoints (log/stats/leaderboard)
-- System health endpoint
-- Migration and seed flow for curriculum lesson data
-- Unit tests for auth, lessons, activity, and section-1 endpoint contracts
-
-### Present but Not Fully Integrated Yet
-
-- AI-core provider and datastore integrations (partially stubbed)
-- Full MVP endpoint surface from the normalized capstone API spec
-
-## API Overview
-
-Base URL: `/api/v1`
-
-### Currently Mounted Routes
-
-- `POST /auth/register`
-- `POST /auth/login`
-- `PUT /auth/password`
-- `POST /students/profile/setup`
-- `GET /students/profile`
-- `PUT /students/profile`
-- `PUT /students/users/{user_id}/preferences`
-- `PUT /users/{user_id}/preferences`
-- `GET /metadata/subjects`
-- `GET /metadata/levels`
-- `GET /learning/topics`
-- `GET /learning/topics/{topic_id}/lesson`
-- `POST /learning/activity/log`
-- `GET /students/stats`
-- `GET /students/leaderboard`
-- `GET /system/health`
-
-Auth note:
-- Login response includes `user_id`.
-- JWT payload includes `user_id` and `student_id` claims (same UUID) for frontend mapping.
-
-### Examples of Planned MVP Routes
-
-- `POST /tutor/chat`
-- `POST /learning/diagnostic/start`
-- `POST /learning/diagnostic/submit`
-- `POST /learning/quizzes/generate`
-- `POST /learning/quizzes/{quiz_id}/submit`
-- `GET /learning/mastery`
-- `GET /teachers/classes/{class_id}/heatmap`
-- `POST /admin/curriculum/upload`
-
-## Local Setup
-
-### Prerequisites
+## Prerequisites
 
 - Python 3.10+
+- Node.js 18+
 - PostgreSQL
-- Git
-
-Optional for extended integration:
-
+- Qdrant
 - Neo4j
-- Redis
-- Vector DB provider
+- Redis (optional)
+
+## Fresh Start (Local Installation)
+
+Run from repository root unless stated otherwise.
 
 ### 1) Clone
 
@@ -185,219 +59,151 @@ git clone https://github.com/Olajcodes/Personalized-AI-Tutor.git
 cd Personalized-AI-Tutor
 ```
 
-### 2) Backend Environment
-
-Create `backend/.env` from `backend/.env.example` and set:
-
-```env
-DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<db>
-JWT_SECRET=change_me
-JWT_ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=1440
-ENV=dev
-AI_CORE_BASE_URL=http://127.0.0.1:8100
-AI_CORE_TIMEOUT_SECONDS=8
-AI_CORE_ALLOW_FALLBACK=true
-CORS_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:4173
-```
-
-### 3) Install Dependencies
+### 2) Python environment and dependencies
 
 ```bash
-python -m pip install -r backend/requirements.txt pytest
+python -m venv .venv
+```
+
+Activate:
+
+- PowerShell:
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+- bash/zsh:
+```bash
+source .venv/bin/activate
+```
+
+Install dependencies:
+
+```bash
+python -m pip install --upgrade pip
+python -m pip install -r backend/requirements.txt
 python -m pip install -r ai_core/requirements.txt
 ```
 
-### 4) Migrate and Seed Backend Data
+### 3) Frontend dependencies
 
-Run from repository root:
+```bash
+cd frontend
+npm install
+cd ..
+```
+
+### 4) Environment files
+
+Create env files from examples:
+
+- PowerShell:
+```powershell
+copy backend\.env.example backend\.env
+copy ai_core\.env.example ai_core\.env
+```
+
+- bash/zsh:
+```bash
+cp backend/.env.example backend/.env
+cp ai_core/.env.example ai_core/.env
+```
+
+For frontend, create `frontend/.env` manually with your API base URL and auth keys required by the UI.
+
+Set required secrets/URLs, especially:
+
+- `backend/.env`
+  - `DATABASE_URL`
+  - `JWT_SECRET`
+  - `AI_CORE_BASE_URL` (local default: `http://127.0.0.1:10000`)
+  - `CORS_ORIGINS` (include local frontend + production frontend domain)
+- `ai_core/.env`
+  - `GROQ_API_KEY` or `LLM_API_KEY`
+  - `POSTGRES_DSN`
+  - `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION`
+  - `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`
+- `frontend/.env`
+  - backend base URL and auth-related variables used by your UI.
+
+### 5) Apply database migrations
 
 ```bash
 python -m alembic -c backend/alembic.ini upgrade head
-python -m backend.scripts.seed_lessons
 ```
 
-For a clean, reproducible ingestion/chunking validation run:
+### 6) One-time reset + ingest + auto-approve curriculum
 
-```bash
-python -m backend.scripts.reset_and_reseed_curriculum \
-  --seed-reset \
-  --qdrant-batch-size 24 \
+This is the recommended clean baseline command.
+It reseeds baseline curriculum entities, ingests all detected scopes from `docs/SSS_NOTES_2026`,
+auto-approves versions, and (optionally) reseeds Neo4j.
+
+```powershell
+python -m backend.scripts.reset_and_reseed_curriculum `
+  --seed-reset `
+  --no-seed-demo-learners `
+  --no-disable-neo4j-sync `
+  --seed-neo4j `
+  --qdrant-batch-size 24 `
   --qdrant-timeout-seconds 240
 ```
 
-Default behavior keeps interface-owned learner data out of seed.
-Add `--seed-demo-learners` only when you explicitly want demo student profiles/stats.
-Add `--disable-llm` only when you explicitly want deterministic fallback-only ingestion.
-
-Detailed troubleshooting and first-run sequence:
-- see [backend/README.md](./backend/README.md)
-
-### 5) Run Backend API
-
-Run from repository root:
-
-```bash
-python -m uvicorn backend.main:app --reload
-```
-
-Swagger:
-
-- `http://127.0.0.1:8000/docs`
-
-## Containerized Setup (Backend + AI Core)
-
-Run from repository root:
-
-```bash
-docker compose up --build
-```
-
-Services:
-- Backend API: `http://127.0.0.1:8000`
-- Backend Swagger: `http://127.0.0.1:8000/docs`
-- AI Core service: `http://127.0.0.1:8100`
-- AI Core health: `http://127.0.0.1:8100/health`
-- Postgres: `localhost:5432`
-
 Notes:
-- Compose runs backend migrations automatically at container startup.
-- Backend uses `DATABASE_URL` from compose env (defaults to local compose Postgres).
-- Backend -> ai_core service-to-service calls use `AI_CORE_BASE_URL` (compose default: `http://ai-core:8100`).
-- Existing `backend/.env` and `ai_core/.env` are still loaded via `env_file`.
 
-Stop services:
+- LLM extraction/inference is enabled by default in this flow.
+- If LLM is unavailable or output is invalid, ingestion falls back safely and logs fallback mode.
+- Use `--disable-llm` only for deterministic fallback-only runs.
 
-```bash
-docker compose down
-```
+### 7) Run services
 
-Stop services and remove DB volume:
+Backend:
 
 ```bash
-docker compose down -v
+python -m uvicorn backend.main:app --reload --port 8000
 ```
 
-## Render Deployment (Backend + AI Core)
-
-This repo is configured for Render Blueprint deployment with [`render.yaml`](./render.yaml).
-
-### Recommended (Blueprint)
-
-1. In Render dashboard, click `New +` -> `Blueprint`.
-2. Select this repository and branch `main`.
-3. Render will create two web services:
-   - `mastery-backend` (Dockerfile: `backend/Dockerfile`)
-   - `mastery-ai-core` (Dockerfile: `ai_core/Dockerfile`)
-4. Set required secret env vars before first deploy:
-   - Backend: `DATABASE_URL`, `JWT_SECRET`, `AI_CORE_BASE_URL`, `CORS_ORIGINS`
-   - Backend recommended: `AI_CORE_ALLOW_FALLBACK=false` in production
-   - AI Core: `LLM_API_KEY` (plus any datastore secrets you use)
-5. Deploy.
-
-### Manual Service Setup (if not using Blueprint)
-
-For backend service:
-- Runtime: `Docker`
-- Dockerfile Path: `backend/Dockerfile`
-- Docker Build Context: `.`
-- Health Check Path: `/api/v1/system/health`
-
-For ai_core service:
-- Runtime: `Docker`
-- Dockerfile Path: `ai_core/Dockerfile`
-- Docker Build Context: `.`
-- Health Check Path: `/health`
-
-If Render shows `failed to read dockerfile: open Dockerfile: no such file or directory`, your service is still pointing to root `./Dockerfile`. Update Dockerfile Path to the values above and redeploy with cache clear.
-
-## Endpoint Verification Guide (Current Working Scope)
-
-Use these in Swagger or HTTP client after seed:
-
-1. `GET /api/v1/metadata/subjects`
-2. `GET /api/v1/learning/topics?student_id=00000000-0000-0000-0000-000000000001&subject=math&term=1`
-3. Use returned `topic_id` in:
-   - `GET /api/v1/learning/topics/{topic_id}/lesson?student_id=00000000-0000-0000-0000-000000000001`
-
-Expected lesson response shape:
-
-```json
-{
-  "topic_id": "uuid",
-  "title": "Lesson title",
-  "content_blocks": [
-    { "type": "text", "value": "..." },
-    { "type": "example", "value": { "...": "..." } },
-    { "type": "exercise", "value": { "...": "..." } }
-  ]
-}
-```
-
-## AI Core Notes
-
-Primary orchestration entrypoint:
-
-- `core_engine.orchestration.tutor_engine.handle_question(...)`
-
-The module structure already includes:
-
-- curriculum policy checks,
-- retrieval abstraction,
-- prerequisite service abstraction,
-- safety filtering,
-- mastery update hook,
-- cost and logging hooks.
-
-Some integrations remain stubbed and are intended to be replaced as each team finalizes its owned service contracts.
-
-## Testing
-
-### Backend
+AI Core:
 
 ```bash
-python -m pytest -q backend/tests
+python -m uvicorn ai_core.main:app --reload --port 10000
 ```
 
-### AI Core
+Frontend:
 
 ```bash
-python -m pytest -q ai_core/tests
+cd frontend
+npm run dev
 ```
 
-## Contribution Workflow
+## Health Checks
 
-1. Pull latest target branch.
-2. Create a feature branch per task.
-3. Keep PRs focused on one bounded scope.
-4. Include migration notes if schema changes are introduced.
-5. Include run and test instructions in PR description.
-6. Attach sample request and response payloads for endpoint changes.
+- Backend Swagger: `http://127.0.0.1:8000/docs`
+- Backend health: `http://127.0.0.1:8000/api/v1/system/health`
+- AI Core health: `http://127.0.0.1:10000/health`
 
-### Suggested Commit Format
+## Production Notes
 
-- `feat: ...`
-- `fix: ...`
-- `chore: ...`
-- `docs: ...`
-- `test: ...`
+- Keep `AI_CORE_ALLOW_FALLBACK=false` in strict production environments if you want hard failure when AI Core is unreachable.
+- Configure `CORS_ORIGINS` explicitly; avoid `*` in production.
+- Keep secrets only in secret managers (Render/CI/CD), not in git-tracked files.
+- Keep curriculum ingestion and approval as an admin-only workflow.
 
-## Security and Governance Notes
+## Deployment
 
-- Do not commit secrets, raw credentials, or private keys.
-- Use `.env` files locally and secrets manager in deployment.
-- Keep curriculum outputs grounded through retrieval and approval workflows.
-- Keep learner data anonymized for demos and evaluation artifacts.
+The repository includes `render.yaml` for Render Blueprint deployment.
 
-## Roadmap
+At minimum configure:
 
-- Complete full normalized MVP endpoint set
-- Integrate AI-core orchestration with backend tutor routes
-- Complete teacher analytics and intervention flows
-- Complete admin ingestion and approval workflow
-- Add CI checks for linting, tests, and schema consistency
-- Prepare demo scripts and capstone presentation artifacts
+- Backend:
+  - `DATABASE_URL`
+  - `JWT_SECRET`
+  - `AI_CORE_BASE_URL`
+  - `CORS_ORIGINS`
+- AI Core:
+  - `GROQ_API_KEY` or `LLM_API_KEY`
+  - datastore credentials (`POSTGRES_DSN`, `QDRANT_*`, `NEO4J_*`)
 
-## License
+## Service-Specific Documentation
 
-License selection is pending. Add an explicit `LICENSE` file before public release.
+- Backend operations and API details: [backend/README.md](./backend/README.md)
+- AI-core runtime and endpoints: [ai_core/README.md](./ai_core/README.md)
