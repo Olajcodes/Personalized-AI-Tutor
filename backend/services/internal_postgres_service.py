@@ -7,6 +7,7 @@ from backend.repositories.internal_postgres_repo import InternalPostgresReposito
 from backend.schemas.internal_postgres_schema import (
     InternalClassRosterOut,
     InternalHistoryOut,
+    InternalLessonContextOut,
     InternalProfileOut,
     InternalQuizAttemptIn,
     InternalQuizAttemptOut,
@@ -15,6 +16,10 @@ from backend.schemas.tutor_session_schema import SessionMessageOut
 
 
 class InternalProfileNotFoundError(ValueError):
+    pass
+
+
+class InternalLessonContextNotFoundError(ValueError):
     pass
 
 
@@ -50,6 +55,20 @@ class InternalPostgresService:
             session_id=session_id,
             student_id=student_id,
             messages=messages,
+        )
+
+    def get_lesson_context(self, *, student_id: UUID, topic_id: UUID) -> InternalLessonContextOut:
+        row = self.repo.get_lesson_context(student_id=student_id, topic_id=topic_id)
+        if not row:
+            raise InternalLessonContextNotFoundError("Personalized lesson not found for this student/topic.")
+        return InternalLessonContextOut(
+            student_id=row["student_id"],
+            topic_id=row["topic_id"],
+            title=row["title"],
+            summary=row.get("summary"),
+            content_blocks=list(row.get("content_blocks") or []),
+            source_chunk_ids=[str(value) for value in (row.get("source_chunk_ids") or [])],
+            generation_metadata=dict(row.get("generation_metadata") or {}),
         )
 
     def store_quiz_attempt(self, payload: InternalQuizAttemptIn) -> InternalQuizAttemptOut:

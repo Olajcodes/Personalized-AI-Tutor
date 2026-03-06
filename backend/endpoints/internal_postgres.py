@@ -15,11 +15,13 @@ from backend.repositories.internal_postgres_repo import InternalPostgresReposito
 from backend.schemas.internal_postgres_schema import (
     InternalClassRosterOut,
     InternalHistoryOut,
+    InternalLessonContextOut,
     InternalProfileOut,
     InternalQuizAttemptIn,
     InternalQuizAttemptOut,
 )
 from backend.services.internal_postgres_service import (
+    InternalLessonContextNotFoundError,
     InternalPostgresService,
     InternalProfileNotFoundError,
 )
@@ -57,6 +59,19 @@ def get_internal_history(
     Requires both `student_id` and `session_id` for ownership validation.
     """
     return _service(db).get_history(student_id=student_id, session_id=session_id)
+
+
+@router.get("/lesson-context", response_model=InternalLessonContextOut)
+def get_internal_lesson_context(
+    student_id: UUID,
+    topic_id: UUID,
+    db: Session = Depends(get_db),
+):
+    """Return the persisted personalized lesson currently associated to a student/topic."""
+    try:
+        return _service(db).get_lesson_context(student_id=student_id, topic_id=topic_id)
+    except InternalLessonContextNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.post("/quiz-attempt", response_model=InternalQuizAttemptOut)
