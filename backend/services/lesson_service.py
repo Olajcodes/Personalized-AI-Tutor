@@ -7,6 +7,7 @@ import json
 import os
 import re
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import select
@@ -44,6 +45,14 @@ LOW_VALUE_PHRASES = (
     "worked examples, and checkpoints",
     "needed for mastery progression",
 )
+
+
+@dataclass(frozen=True)
+class _LLMAttempt:
+    provider: str
+    model: str
+    api_key: str
+    base_url: str | None = None
 
 
 def _extract_json_object(raw: str) -> dict | None:
@@ -151,36 +160,120 @@ def _looks_low_value_lesson(*, title: str, summary: str | None, blocks: list[dic
     return False
 
 
-def _resolve_llm_client() -> tuple[Any, str, str]:
-    provider = os.getenv("LLM_PROVIDER", "groq").strip().lower()
-    model = os.getenv("LESSON_LLM_MODEL", os.getenv("LLM_MODEL", "openai/gpt-oss-20b")).strip()
-    if not model:
+def _is_truthy_env(value: str | None, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_retryable_llm_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    markers = (
+        "rate limit",
+        "rate_limit_exceeded",
+        "insufficient_quota",
+        "quota",
+        "429",
+        "too many requests",
+        "service unavailable",
+        "temporarily unavailable",
+        "timed out",
+        "timeout",
+        "connection error",
+    )
+    return any(marker in text for marker in markers)
+
+
+def _resolve_provider_api_key(provider: str) -> str:
+    normalized = (provider or "").strip().lower()
+    if normalized == "groq":
+        key = os.getenv("GROQ_API_KEY", "").strip()
+        if key:
+            return key
+    key = (os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
+    if key:
+        return key
+    if normalized == "groq":
+        raise LessonGenerationError("No GROQ_API_KEY configured for Groq lesson generation.")
+    raise LessonGenerationError("No OpenAI-compatible API key configured for lesson generation.")
+
+
+def _build_lesson_llm_attempts() -> list[_LLMAttempt]:
+    primary_provider = os.getenv("LLM_PROVIDER", "groq").strip().lower()
+    primary_model = os.getenv("LESSON_LLM_MODEL", os.getenv("LLM_MODEL", "openai/gpt-oss-20b")).strip()
+    if not primary_model:
         raise LessonGenerationError("LESSON_LLM_MODEL/LLM_MODEL is not configured.")
 
-    api_key = (
-        os.getenv("GROQ_API_KEY")
-        if provider == "groq"
-        else (os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY"))
-    )
-    if not api_key:
-        raise LessonGenerationError("No LLM API key configured for lesson generation.")
+    attempts: list[_LLMAttempt] = [
+        _LLMAttempt(
+            provider=primary_provider,
+            model=primary_model,
+            api_key=_resolve_provider_api_key(primary_provider),
+            base_url=(
+                os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1").strip()
+                if primary_provider == "groq"
+                else (
+                    os.getenv("LLM_API_BASE", "").strip()
+                    if primary_provider not in {"openai", ""}
+                    else None
+                )
+            ),
+        )
+    ]
 
+    fallback_enabled = _is_truthy_env(os.getenv("LESSON_OPENAI_FALLBACK_ENABLED"), default=True)
+    fallback_key = (os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY") or "").strip()
+    fallback_model = (
+        os.getenv("LESSON_OPENAI_FALLBACK_MODEL")
+        or os.getenv("OPENAI_LLM_MODEL")
+        or "gpt-4o-mini"
+    ).strip()
+
+    if (
+        fallback_enabled
+        and primary_provider != "openai"
+        and fallback_key
+        and fallback_model
+    ):
+        attempts.append(
+            _LLMAttempt(
+                provider="openai",
+                model=fallback_model,
+                api_key=fallback_key,
+                base_url=None,
+            )
+        )
+
+    return attempts
+
+
+def _resolve_llm_client(attempt: _LLMAttempt) -> tuple[Any, str, str]:
     try:
         from openai import OpenAI
     except ModuleNotFoundError as exc:
         raise LessonGenerationError("openai dependency is missing for lesson generation.") from exc
 
-    base_url = ""
-    if provider == "groq":
-        base_url = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1").strip()
-    elif provider not in {"openai", ""} and os.getenv("LLM_API_BASE"):
-        base_url = os.getenv("LLM_API_BASE", "").strip()
-
     try:
-        client = OpenAI(api_key=api_key, base_url=base_url or None)
+        client = OpenAI(api_key=attempt.api_key, base_url=attempt.base_url or None)
     except Exception as exc:
         raise LessonGenerationError(f"Failed to initialize lesson LLM client: {exc}") from exc
-    return client, provider, model
+    return client, attempt.provider, attempt.model
+
+
+def _request_lesson_generation(client: Any, *, model: str, prompt: str) -> Any:
+    try:
+        return client.chat.completions.create(
+            model=model,
+            temperature=0,
+            response_format={"type": "json_object"},
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except Exception:
+        return client.chat.completions.create(
+            model=model,
+            temperature=0,
+            messages=[{"role": "user", "content": prompt}],
+        )
 
 
 def _get_mastery_rows(
@@ -347,26 +440,27 @@ def _generate_personalized_lesson(
         mastery_rows=mastery_rows,
         rag_chunks=rag_chunks,
     )
-    client, provider, model = _resolve_llm_client()
     content = ""
-    try:
-        response = client.chat.completions.create(
-            model=model,
-            temperature=0,
-            response_format={"type": "json_object"},
-            messages=[{"role": "user", "content": prompt}],
-        )
-    except Exception as exc:
-        # Some providers/models may not support explicit JSON response mode.
+    provider = ""
+    model = ""
+    errors: list[str] = []
+    attempts = _build_lesson_llm_attempts()
+
+    for index, attempt in enumerate(attempts):
+        client, provider, model = _resolve_llm_client(attempt)
         try:
-            response = client.chat.completions.create(
-                model=model,
-                temperature=0,
-                messages=[{"role": "user", "content": prompt}],
-            )
-        except Exception as retry_exc:
-            raise LessonGenerationError(f"Lesson LLM generation failed: {retry_exc}") from retry_exc
-    content = str(response.choices[0].message.content or "") if response.choices else ""
+            response = _request_lesson_generation(client, model=model, prompt=prompt)
+            content = str(response.choices[0].message.content or "") if response.choices else ""
+            break
+        except Exception as exc:
+            errors.append(f"{attempt.provider}:{attempt.model}: {exc}")
+            has_more_attempts = index < len(attempts) - 1
+            if has_more_attempts and _is_retryable_llm_error(exc):
+                continue
+            raise LessonGenerationError(f"Lesson LLM generation failed: {exc}") from exc
+
+    if not content and errors:
+        raise LessonGenerationError("Lesson LLM generation failed: " + " | ".join(errors[:2]))
 
     parsed = _extract_json_object(content)
     if not parsed:
