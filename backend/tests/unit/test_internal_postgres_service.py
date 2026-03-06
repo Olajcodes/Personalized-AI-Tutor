@@ -6,6 +6,7 @@ import pytest
 
 from backend.schemas.internal_postgres_schema import InternalQuizAnswerIn, InternalQuizAttemptIn
 from backend.services.internal_postgres_service import (
+    InternalLessonContextNotFoundError,
     InternalPostgresService,
     InternalProfileNotFoundError,
 )
@@ -15,6 +16,7 @@ class FakeInternalPostgresRepo:
     def __init__(self):
         self.profile_context = None
         self.history_rows = []
+        self.lesson_context = None
         self.saved_payload = None
         self.save_row = None
         self.roster = []
@@ -26,6 +28,10 @@ class FakeInternalPostgresRepo:
     def get_history(self, *, student_id, session_id):
         _ = (student_id, session_id)
         return self.history_rows
+
+    def get_lesson_context(self, *, student_id, topic_id):
+        _ = (student_id, topic_id)
+        return self.lesson_context
 
     def save_quiz_attempt(self, payload):
         self.saved_payload = payload
@@ -83,6 +89,38 @@ def test_get_history_success_maps_messages():
     assert out.session_id == session_id
     assert len(out.messages) == 2
     assert out.messages[1].role == "assistant"
+
+
+def test_get_lesson_context_raises_when_missing():
+    repo = FakeInternalPostgresRepo()
+    service = InternalPostgresService(repo)
+
+    with pytest.raises(InternalLessonContextNotFoundError, match="Personalized lesson not found"):
+        service.get_lesson_context(student_id=uuid4(), topic_id=uuid4())
+
+
+def test_get_lesson_context_success_maps_payload():
+    repo = FakeInternalPostgresRepo()
+    service = InternalPostgresService(repo)
+    student_id = uuid4()
+    topic_id = uuid4()
+    repo.lesson_context = {
+        "student_id": student_id,
+        "topic_id": topic_id,
+        "title": "Lesson: Matrices",
+        "summary": "Focus on operations and determinants.",
+        "content_blocks": [{"type": "text", "value": "Matrices are rectangular arrays."}],
+        "source_chunk_ids": ["chunk-1"],
+        "generation_metadata": {"generator_version": "rag_mastery_v1"},
+    }
+
+    out = service.get_lesson_context(student_id=student_id, topic_id=topic_id)
+
+    assert out.student_id == student_id
+    assert out.topic_id == topic_id
+    assert out.title == "Lesson: Matrices"
+    assert out.content_blocks[0]["type"] == "text"
+    assert out.source_chunk_ids == ["chunk-1"]
 
 
 def test_store_quiz_attempt_success_and_serialization():

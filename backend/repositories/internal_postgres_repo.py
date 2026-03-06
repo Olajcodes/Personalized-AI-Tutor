@@ -85,6 +85,27 @@ class InternalPostgresRepository:
         ).mappings().all()
         return [dict(row) for row in rows]
 
+    def get_lesson_context(self, *, student_id: UUID, topic_id: UUID) -> dict:
+        row = self.db.execute(
+            text(
+                """
+                SELECT
+                    student_id,
+                    topic_id,
+                    title,
+                    summary,
+                    content_blocks,
+                    source_chunk_ids,
+                    generation_metadata
+                FROM personalized_lessons
+                WHERE student_id = :student_id
+                  AND topic_id = :topic_id
+                """
+            ),
+            {"student_id": student_id, "topic_id": topic_id},
+        ).mappings().first()
+        return dict(row) if row else {}
+
     def save_quiz_attempt(self, payload: dict) -> dict:
         if not self._table_exists("internal_quiz_attempts"):
             raise RuntimeError("internal_quiz_attempts table is missing. Apply Section 2 migrations.")

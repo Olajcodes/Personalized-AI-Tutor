@@ -28,6 +28,16 @@ class InternalHistoryOut(BaseModel):
     messages: list[SessionMessageOut]
 
 
+class InternalLessonContextOut(BaseModel):
+    student_id: UUID
+    topic_id: UUID
+    title: str
+    summary: str | None = None
+    content_blocks: list[dict] = Field(default_factory=list)
+    source_chunk_ids: list[str] = Field(default_factory=list)
+    generation_metadata: dict = Field(default_factory=dict)
+
+
 class InternalQuizAnswerIn(BaseModel):
     question_id: str = Field(min_length=1, max_length=255)
     answer: str = Field(min_length=1, max_length=255)
