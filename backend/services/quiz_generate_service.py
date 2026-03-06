@@ -12,6 +12,31 @@ from backend.core.ai_core_client import (
 from backend.repositories.quiz_repo import QuizRepository
 from backend.schemas.quiz_schema import QuestionSchema, QuizGenerateRequest, QuizGenerateResponse
 
+_PLACEHOLDER_MARKERS = (
+    "which option best demonstrates understanding of",
+    "a common misconception students make",
+    "an unrelated fact from another topic",
+    "a partially correct but incomplete statement",
+    "a clear example of",
+)
+
+
+def _looks_placeholder_question(question: dict) -> bool:
+    text = str(question.get("text") or question.get("question_text") or "").strip().lower()
+    if any(marker in text for marker in _PLACEHOLDER_MARKERS):
+        return True
+    if "math:sss" in text or "english:sss" in text or "civic:sss" in text:
+        return True
+
+    options = question.get("options") or []
+    for option in options:
+        lowered = str(option or "").strip().lower()
+        if any(marker in lowered for marker in _PLACEHOLDER_MARKERS):
+            return True
+        if "math:sss" in lowered or "english:sss" in lowered or "civic:sss" in lowered:
+            return True
+    return False
+
 
 class QuizGenerateService:
     def __init__(self, db: Session):
@@ -49,6 +74,11 @@ class QuizGenerateService:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="AI generation returned no questions",
+            )
+        if any(_looks_placeholder_question(question) for question in questions_data):
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="AI generation returned low-quality placeholder quiz content",
             )
 
         quiz = self.repo.create_quiz(

@@ -63,6 +63,27 @@ class PostgresRepo:
 
         return [{"id": row[0], "title": row[1]} for row in rows]
 
+    def get_topic_title(self, *, topic_id: str) -> str | None:
+        """Return a single topic title when a valid approved topic exists."""
+        if not self._is_uuid(topic_id):
+            return None
+
+        sql = """
+            SELECT title
+            FROM topics
+            WHERE id = %s::uuid
+              AND is_approved = TRUE
+            LIMIT 1
+        """
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(sql, (topic_id,))
+                    row = cursor.fetchone()
+        except Exception as exc:
+            raise PostgresRepoError(f"Failed to resolve topic title: {exc}") from exc
+        return str(row[0]) if row and row[0] else None
+
     def list_scope_concepts(
         self,
         *,

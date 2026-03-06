@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import httpx
 
@@ -25,37 +25,6 @@ class AICoreProviderError(AICoreClientError):
 
 class AICoreContractError(AICoreClientError):
     """ai-core returned payload that violates expected contract."""
-
-
-def _fallback_questions(
-    *,
-    subject: str,
-    sss_level: str,
-    term: int,
-    topic_id,
-    difficulty: str,
-    num_questions: int,
-) -> list[dict[str, Any]]:
-    topic_anchor = f"topic:{topic_id}"
-    return [
-        {
-            "id": uuid4(),
-            "text": (
-                f"{subject.title()} ({sss_level} Term {term}) - Q{idx + 1}: "
-                "Select the best answer based on the lesson objective."
-            ),
-            "options": [
-                "A clear and correct application of the rule",
-                "A statement from a different topic",
-                "A partially correct statement missing key detail",
-                "A common misconception learners make",
-            ],
-            "correct_answer": "A",
-            "concept_id": f"{topic_anchor}:fallback_{idx + 1}",
-            "difficulty": difficulty,
-        }
-        for idx in range(num_questions)
-    ]
 
 
 def _coerce_question(raw: Any) -> dict[str, Any]:
@@ -117,15 +86,6 @@ async def generate_quiz_questions(
     """Fetch quiz questions from ai-core with strict response validation."""
     base_url = settings.ai_core_base_url.rstrip("/")
     if not base_url:
-        if settings.ai_core_allow_fallback:
-            return _fallback_questions(
-                subject=subject,
-                sss_level=sss_level,
-                term=term,
-                topic_id=topic_id,
-                difficulty=difficulty,
-                num_questions=num_questions,
-            )
         raise AICoreUnavailableError("AI_CORE_BASE_URL is not configured")
 
     payload = {
@@ -145,16 +105,6 @@ async def generate_quiz_questions(
             response.raise_for_status()
             data = response.json()
     except httpx.HTTPError as exc:
-        if settings.ai_core_allow_fallback:
-            logger.warning("ai-core /quiz/generate failed, using fallback quiz generator: %s", exc)
-            return _fallback_questions(
-                subject=subject,
-                sss_level=sss_level,
-                term=term,
-                topic_id=topic_id,
-                difficulty=difficulty,
-                num_questions=num_questions,
-            )
         raise AICoreProviderError(f"ai-core /quiz/generate failed: {exc}") from exc
 
     questions = data.get("questions") if isinstance(data, dict) else None
