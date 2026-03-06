@@ -75,6 +75,7 @@ def test_run_tutor_chat_contract(monkeypatch):
     assert isinstance(out.actions, list)
     assert isinstance(out.recommendations, list)
     assert "USED_LESSON_CONTEXT" in out.actions
+    assert "NO_MASTERY_WRITE_NO_EVIDENCE" in out.actions
 
 
 def test_run_tutor_chat_aborts_when_no_lesson_or_rag_context(monkeypatch):
@@ -113,6 +114,7 @@ def test_run_tutor_chat_aborts_when_no_lesson_or_rag_context(monkeypatch):
 
     assert "no lesson-aware context found" in out.assistant_message.lower()
     assert "NO_CONTEXT_ABORTED" in out.actions
+    assert "NO_MASTERY_WRITE_NO_EVIDENCE" in out.actions
 
 
 def test_run_tutor_hint_contract(monkeypatch):

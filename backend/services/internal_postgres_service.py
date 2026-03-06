@@ -68,6 +68,12 @@ class InternalPostgresService:
             summary=row.get("summary"),
             content_blocks=list(row.get("content_blocks") or []),
             source_chunk_ids=[str(value) for value in (row.get("source_chunk_ids") or [])],
+            covered_concept_ids=[str(value) for value in (dict(row.get("generation_metadata") or {}).get("covered_concept_ids") or [])],
+            covered_concept_labels={
+                str(key): str(value)
+                for key, value in dict(dict(row.get("generation_metadata") or {}).get("covered_concept_labels") or {}).items()
+                if str(key).strip() and str(value).strip()
+            },
             generation_metadata=dict(row.get("generation_metadata") or {}),
         )
 

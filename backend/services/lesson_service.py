@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import uuid
@@ -24,6 +25,8 @@ from backend.repositories.lesson_repo import (
 )
 from backend.schemas.internal_rag_schema import InternalRagRetrieveRequest
 from backend.services.rag_retrieve_service import RagRetrieveService, RagRetrieveServiceError
+
+logger = logging.getLogger(__name__)
 
 
 class LessonNotFound(Exception):
@@ -132,6 +135,32 @@ def _extract_block_texts(blocks: list[dict]) -> list[str]:
                     if normalized:
                         texts.append(normalized)
     return texts
+
+
+def _extract_covered_concepts(rag_chunks: list[Any]) -> tuple[list[str], dict[str, str]]:
+    covered_ids: list[str] = []
+    covered_labels: dict[str, str] = {}
+    seen: set[str] = set()
+
+    for chunk in rag_chunks:
+        metadata = dict(getattr(chunk, "metadata", None) or {})
+        concept_id = str(metadata.get("concept_id") or "").strip()
+        if not concept_id or concept_id in seen:
+            continue
+        seen.add(concept_id)
+        covered_ids.append(concept_id)
+
+        concept_label = (
+            str(
+                metadata.get("citation_concept_label")
+                or metadata.get("concept_label")
+                or ""
+            ).strip()
+        )
+        if concept_label:
+            covered_labels[concept_id] = concept_label
+
+    return covered_ids, covered_labels
 
 
 def _looks_low_value_lesson(*, title: str, summary: str | None, blocks: list[dict], topic_title: str) -> bool:
@@ -451,10 +480,25 @@ def _generate_personalized_lesson(
         try:
             response = _request_lesson_generation(client, model=model, prompt=prompt)
             content = str(response.choices[0].message.content or "") if response.choices else ""
+            logger.info(
+                "lesson.generate.llm_success provider=%s model=%s fallback_used=%s attempt_index=%s",
+                provider,
+                model,
+                index > 0,
+                index,
+            )
             break
         except Exception as exc:
             errors.append(f"{attempt.provider}:{attempt.model}: {exc}")
             has_more_attempts = index < len(attempts) - 1
+            logger.warning(
+                "lesson.generate.llm_failed provider=%s model=%s attempt_index=%s retryable=%s error=%s",
+                attempt.provider,
+                attempt.model,
+                index,
+                has_more_attempts and _is_retryable_llm_error(exc),
+                exc,
+            )
             if has_more_attempts and _is_retryable_llm_error(exc):
                 continue
             raise LessonGenerationError(f"Lesson LLM generation failed: {exc}") from exc
@@ -489,13 +533,25 @@ def _generate_personalized_lesson(
         )
 
     source_chunk_ids = [str(chunk.chunk_id) for chunk in rag_chunks[:8] if str(chunk.chunk_id or "").strip()]
+    covered_concept_ids, covered_concept_labels = _extract_covered_concepts(rag_chunks)
     metadata = {
         "generator_version": GENERATOR_VERSION,
         "provider": provider,
         "model": model,
         "used_scope_fallback": used_scope_fallback,
         "source_count": len(source_chunk_ids),
+        "covered_concept_ids": covered_concept_ids,
+        "covered_concept_labels": covered_concept_labels,
     }
+    logger.info(
+        "lesson.generate.success topic_id=%s provider=%s model=%s source_count=%s covered_concepts=%s scope_fallback=%s",
+        topic_id,
+        provider,
+        model,
+        len(source_chunk_ids),
+        len(covered_concept_ids),
+        used_scope_fallback,
+    )
     return {
         "title": title,
         "summary": summary,
@@ -573,6 +629,14 @@ def fetch_topic_lesson(db: Session, topic_id: uuid.UUID, student_id: uuid.UUID) 
     )
     metadata = dict(generated["generation_metadata"])
     metadata["mastery_signature"] = mastery_sig
+    logger.info(
+        "lesson.fetch.generated topic_id=%s student_id=%s curriculum_version_id=%s mastery_sig=%s covered_concepts=%s",
+        topic.id,
+        student_id,
+        curriculum_version_id,
+        mastery_sig,
+        len(list(metadata.get("covered_concept_ids") or [])),
+    )
 
     upsert_personalized_lesson(
         db,

@@ -111,7 +111,11 @@ def test_get_lesson_context_success_maps_payload():
         "summary": "Focus on operations and determinants.",
         "content_blocks": [{"type": "text", "value": "Matrices are rectangular arrays."}],
         "source_chunk_ids": ["chunk-1"],
-        "generation_metadata": {"generator_version": "rag_mastery_v1"},
+        "generation_metadata": {
+            "generator_version": "rag_mastery_v1",
+            "covered_concept_ids": ["math:sss2:t2:matrices"],
+            "covered_concept_labels": {"math:sss2:t2:matrices": "matrices"},
+        },
     }
 
     out = service.get_lesson_context(student_id=student_id, topic_id=topic_id)
@@ -121,6 +125,8 @@ def test_get_lesson_context_success_maps_payload():
     assert out.title == "Lesson: Matrices"
     assert out.content_blocks[0]["type"] == "text"
     assert out.source_chunk_ids == ["chunk-1"]
+    assert out.covered_concept_ids == ["math:sss2:t2:matrices"]
+    assert out.covered_concept_labels["math:sss2:t2:matrices"] == "matrices"
 
 
 def test_store_quiz_attempt_success_and_serialization():

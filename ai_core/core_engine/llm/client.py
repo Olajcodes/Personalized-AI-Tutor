@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 class LLMClientError(RuntimeError):
@@ -122,10 +125,25 @@ class LLMClient:
                 content = response.choices[0].message.content if response.choices else None
                 if not content:
                     raise LLMClientError("LLM returned empty content.")
+                logger.info(
+                    "llm.generate success provider=%s model=%s fallback_used=%s attempt_index=%s",
+                    attempt.provider,
+                    attempt.model,
+                    index > 0,
+                    index,
+                )
                 return str(content).strip()
             except Exception as exc:
                 errors.append(f"{attempt.provider}:{attempt.model}: {exc}")
                 has_more_attempts = index < len(attempts) - 1
+                logger.warning(
+                    "llm.generate failed provider=%s model=%s attempt_index=%s retryable=%s error=%s",
+                    attempt.provider,
+                    attempt.model,
+                    index,
+                    has_more_attempts and _is_retryable_provider_error(exc),
+                    exc,
+                )
                 if has_more_attempts and _is_retryable_provider_error(exc):
                     continue
                 raise LLMClientError(f"LLM generation failed: {exc}") from exc
