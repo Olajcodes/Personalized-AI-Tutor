@@ -54,7 +54,7 @@ def get_settings() -> Settings:
     return Settings(
         llm_provider=os.getenv("LLM_PROVIDER", "openai"),
         llm_model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
-        llm_api_key=os.getenv("LLM_API_KEY"),
+        llm_api_key=os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY"),
         groq_api_key=os.getenv("GROQ_API_KEY"),
         postgres_dsn=postgres_dsn,
         neo4j_uri=os.getenv("NEO4J_URI", ""),

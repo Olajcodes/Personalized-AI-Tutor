@@ -74,7 +74,7 @@ def root():
 
 @app.get("/health")
 def health():
-    llm_key_present = bool(os.getenv("GROQ_API_KEY") or os.getenv("LLM_API_KEY"))
+    llm_key_present = bool(os.getenv("GROQ_API_KEY") or os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY"))
     postgres_dsn_present = bool(os.getenv("POSTGRES_DSN") or os.getenv("DATABASE_URL"))
     checks = {
         "llm_api_key": "configured" if llm_key_present else "not_configured",
