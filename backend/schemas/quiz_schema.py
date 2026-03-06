@@ -60,11 +60,16 @@ class ConceptBreakdownItem(BaseModel):
     weight_change: float
 
 
+class QuizResultConceptBreakdownItem(ConceptBreakdownItem):
+    concept_label: str | None = None
+
+
 class QuizResultsResponse(BaseModel):
     score: float
-    concept_breakdown: list[ConceptBreakdownItem]
+    concept_breakdown: list[QuizResultConceptBreakdownItem]
     insights: list[str]
-    recommended_revision_topic_id: UUID | None
+    recommended_revision_topic_id: UUID | None = None
+    recommended_revision_topic_title: str | None = None
 
 
 class GraphMasteryUpdatePayload(BaseModel):

@@ -162,6 +162,14 @@ class QuizRepository:
     def topic_exists(self, topic_id: UUID) -> bool:
         return self.db.query(Topic.id).filter(Topic.id == topic_id).first() is not None
 
+    def get_topic_title(self, topic_id: UUID | None) -> str | None:
+        if topic_id is None:
+            return None
+        row = self.db.query(Topic.title).filter(Topic.id == topic_id).first()
+        if not row or row[0] is None:
+            return None
+        return str(row[0]).strip() or None
+
     def find_topic_id_for_concept(
         self,
         *,
@@ -202,3 +210,38 @@ class QuizRepository:
             return UUID(str(value))
         except (TypeError, ValueError):
             return None
+
+    def find_topic_title_for_concept(
+        self,
+        *,
+        concept_id: str,
+        subject: str,
+        sss_level: str,
+        term: int,
+    ) -> str | None:
+        row = self.db.execute(
+            text(
+                """
+                SELECT t.title
+                FROM curriculum_topic_maps m
+                JOIN topics t ON t.id = m.topic_id
+                JOIN subjects s ON s.id = t.subject_id
+                WHERE m.concept_id = :concept_id
+                  AND s.slug = :subject
+                  AND t.sss_level = :sss_level
+                  AND t.term = :term
+                  AND t.is_approved = TRUE
+                ORDER BY m.confidence DESC, m.updated_at DESC
+                LIMIT 1
+                """
+            ),
+            {
+                "concept_id": concept_id,
+                "subject": subject,
+                "sss_level": sss_level,
+                "term": term,
+            },
+        ).first()
+        if not row or row[0] is None:
+            return None
+        return str(row[0]).strip() or None

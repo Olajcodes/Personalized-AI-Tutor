@@ -1,9 +1,13 @@
 from ai_core.core_engine.api_contracts.schemas import (
+    TutorAssessmentStartRequest,
+    TutorAssessmentSubmitRequest,
     TutorChatRequest,
     TutorExplainMistakeRequest,
     TutorHintRequest,
 )
 from ai_core.core_engine.orchestration.tutor_engine import (
+    run_tutor_assessment_start,
+    run_tutor_assessment_submit,
     run_tutor_chat,
     run_tutor_explain_mistake,
     run_tutor_hint,
@@ -159,3 +163,115 @@ def test_run_tutor_explain_mistake_contract(monkeypatch):
     )
     assert out.explanation
     assert out.improvement_tip
+
+
+def test_run_tutor_assessment_start_contract(monkeypatch):
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._internal_profile_context",
+        lambda request: {"preferences": {"pace": "normal"}},
+    )
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._internal_lesson_context",
+        lambda request: {
+            "title": "Lesson: Algebra Basics",
+            "summary": "Variables and simple equations.",
+            "content_blocks": [{"type": "text", "value": "A variable represents an unknown number."}],
+            "covered_concept_ids": ["math:sss2:t1:variables"],
+            "covered_concept_labels": {"math:sss2:t1:variables": "variables"},
+        },
+    )
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._internal_graph_context",
+        lambda request: {
+            "mastery": [{"concept_id": "math:sss2:t1:variables", "score": 0.3}],
+            "prereqs": [],
+            "unlocked_nodes": ["math:sss2:t1:variables"],
+            "overall_mastery": 0.3,
+        },
+    )
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._internal_rag_retrieve_for_prompt",
+        lambda **kwargs: [],
+    )
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._llm_generate",
+        lambda prompt: """
+        {
+          "question": "What is a variable in algebra?",
+          "ideal_answer": "A variable is a letter or symbol that represents an unknown value.",
+          "hint": "Think about what letters stand for in algebra."
+        }
+        """,
+    )
+
+    out = run_tutor_assessment_start(
+        TutorAssessmentStartRequest(
+            student_id="user-1",
+            session_id="session-1",
+            subject="math",
+            sss_level="SSS2",
+            term=1,
+            topic_id="topic-1",
+            difficulty="medium",
+        )
+    )
+    assert out.question
+    assert out.ideal_answer
+    assert out.concept_id == "math:sss2:t1:variables"
+    assert "ASSESSMENT_TARGET_CONCEPT" in out.actions
+
+
+def test_run_tutor_assessment_submit_contract(monkeypatch):
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._internal_lesson_context",
+        lambda request: {
+            "title": "Lesson: Algebra Basics",
+            "summary": "Variables and simple equations.",
+            "content_blocks": [{"type": "text", "value": "A variable represents an unknown number."}],
+            "covered_concept_ids": ["math:sss2:t1:variables"],
+            "covered_concept_labels": {"math:sss2:t1:variables": "variables"},
+        },
+    )
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._internal_graph_context",
+        lambda request: {
+            "mastery": [{"concept_id": "math:sss2:t1:variables", "score": 0.3}],
+            "prereqs": [],
+            "unlocked_nodes": ["math:sss2:t1:variables"],
+            "overall_mastery": 0.3,
+        },
+    )
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._internal_rag_retrieve_for_prompt",
+        lambda **kwargs: [],
+    )
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._llm_generate",
+        lambda prompt: """
+        {
+          "score": 0.9,
+          "feedback": "Correct. You identified that a variable stands for an unknown value.",
+          "ideal_answer": "A variable is a letter or symbol that represents an unknown value."
+        }
+        """,
+    )
+
+    out = run_tutor_assessment_submit(
+        TutorAssessmentSubmitRequest(
+            student_id="user-1",
+            session_id="session-1",
+            assessment_id="assessment-1",
+            subject="math",
+            sss_level="SSS2",
+            term=1,
+            topic_id="topic-1",
+            answer="It is a symbol for an unknown value.",
+            question="What is a variable in algebra?",
+            concept_id="math:sss2:t1:variables",
+            concept_label="variables",
+            ideal_answer="A variable is a letter or symbol that represents an unknown value.",
+        )
+    )
+    assert out.is_correct is True
+    assert out.score == 0.9
+    assert out.feedback

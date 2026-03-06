@@ -65,7 +65,10 @@ def _request_json(
     payload: dict | None = None,
     timeout: float,
 ) -> dict:
-    response = requests.request(method, url, params=params, json=payload, timeout=timeout)
+    try:
+        response = requests.request(method, url, params=params, json=payload, timeout=timeout)
+    except requests.RequestException as exc:
+        raise QuizGenerationError(f"internal request failed for {url}: {exc}") from exc
     if not response.ok:
         detail = (response.text or "").strip()
         raise QuizGenerationError(

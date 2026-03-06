@@ -7,6 +7,7 @@ Includes:
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from typing import TYPE_CHECKING
@@ -16,6 +17,10 @@ import requests
 
 from ai_core.core_engine.api_contracts.schemas import (
     Citation,
+    TutorAssessmentStartRequest,
+    TutorAssessmentStartResponse,
+    TutorAssessmentSubmitRequest,
+    TutorAssessmentSubmitResponse,
     TutorChatRequest,
     TutorChatResponse,
     TutorExplainMistakeRequest,
@@ -65,6 +70,25 @@ def _normalize_topic_ids(topic_id: str | None) -> list[str]:
         logger.warning("tutor._internal_rag_retrieve skipping invalid topic_id: %s", topic_id)
         return []
     return [str(topic_id)]
+
+
+def _extract_json_object(raw: str) -> dict | None:
+    content = (raw or "").strip()
+    if not content:
+        return None
+    try:
+        parsed = json.loads(content)
+        return parsed if isinstance(parsed, dict) else None
+    except json.JSONDecodeError:
+        pass
+    match = re.search(r"\{[\s\S]*\}", content)
+    if not match:
+        return None
+    try:
+        parsed = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 def _request_json(
@@ -212,6 +236,28 @@ def _internal_rag_retrieve(request: TutorChatRequest) -> list[Citation]:
     return citations
 
 
+def _internal_rag_retrieve_for_prompt(
+    *,
+    student_id: str,
+    session_id: str,
+    subject: str,
+    sss_level: str,
+    term: int,
+    topic_id: str | None,
+    message: str,
+) -> list[Citation]:
+    request = TutorChatRequest(
+        student_id=student_id,
+        session_id=session_id,
+        subject=subject,
+        sss_level=sss_level,
+        term=term,
+        topic_id=topic_id,
+        message=message,
+    )
+    return _internal_rag_retrieve(request)
+
+
 def _llm_generate(prompt: str) -> str:
     client = LLMClient(
         provider=os.getenv("LLM_PROVIDER", "groq"),
@@ -234,6 +280,14 @@ def _readable_concept_label(concept_id: str) -> str:
     token = re.sub(r"-(\d+)$", "", token)
     token = re.sub(r"[^a-z0-9]+", " ", token).strip()
     return token or value
+
+
+def _clamp_score(value: object) -> float:
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, min(1.0, score))
 
 
 def _lesson_context_available(lesson_context: dict | None) -> bool:
@@ -262,6 +316,16 @@ def _lesson_covered_concept_lines(lesson_context: dict | None, *, max_items: int
     for concept_id in concept_ids[:max_items]:
         rendered.append(f"- {concept_labels.get(concept_id) or _readable_concept_label(concept_id)}")
     return rendered
+
+
+def _lesson_concept_label_map(lesson_context: dict | None) -> dict[str, str]:
+    if not lesson_context:
+        return {}
+    return {
+        str(key): str(value)
+        for key, value in dict(lesson_context.get("covered_concept_labels") or {}).items()
+        if str(key).strip()
+    }
 
 
 def _lesson_context_block_lines(lesson_context: dict | None, *, max_blocks: int = 5) -> list[str]:
@@ -372,6 +436,204 @@ def _profile_context_lines(profile_context: dict | None) -> list[str]:
         f"- pace: {preferences.get('pace', 'unknown')}",
     ]
     return lines
+
+
+def _citation_concept_lines(citations: list[Citation], *, max_items: int = 6) -> list[str]:
+    rendered: list[str] = []
+    seen: set[str] = set()
+    for citation in citations:
+        concept_id = str(citation.metadata.get("concept_id") or "").strip()
+        if not concept_id or concept_id in seen:
+            continue
+        seen.add(concept_id)
+        label = str(
+            citation.metadata.get("citation_concept_label")
+            or citation.metadata.get("concept_label")
+            or _readable_concept_label(concept_id)
+        ).strip()
+        rendered.append(f"- {label}")
+        if len(rendered) >= max_items:
+            break
+    return rendered
+
+
+def _assessment_target_concept(
+    *,
+    lesson_context: dict | None,
+    graph_context: dict | None,
+    citations: list[Citation],
+) -> tuple[str, str] | None:
+    concept_labels = _lesson_concept_label_map(lesson_context)
+    covered_ids = _lesson_covered_concept_ids(lesson_context)
+    mastery_map = {
+        str(row.get("concept_id") or ""): _clamp_score(row.get("score"))
+        for row in list((graph_context or {}).get("mastery") or [])
+        if isinstance(row, dict) and str(row.get("concept_id") or "").strip()
+    }
+
+    ranked_covered = [
+        (concept_id, mastery_map.get(concept_id, 0.0))
+        for concept_id in covered_ids
+    ]
+    if ranked_covered:
+        ranked_covered.sort(key=lambda item: item[1])
+        concept_id = ranked_covered[0][0]
+        return concept_id, concept_labels.get(concept_id) or _readable_concept_label(concept_id)
+
+    for citation in citations:
+        concept_id = str(citation.metadata.get("concept_id") or "").strip()
+        if concept_id:
+            label = str(
+                citation.metadata.get("citation_concept_label")
+                or citation.metadata.get("concept_label")
+                or _readable_concept_label(concept_id)
+            ).strip()
+            return concept_id, label
+    return None
+
+
+def _citations_block(citations: list[Citation]) -> str:
+    if citations:
+        return "\n".join(f"- ({item.source_id}#{item.chunk_id}) {item.snippet}" for item in citations)
+    return "- No verified curriculum context retrieved."
+
+
+def _assessment_start_prompt(
+    request: TutorAssessmentStartRequest,
+    *,
+    concept_id: str,
+    concept_label: str,
+    lesson_context: dict | None,
+    graph_context: dict | None,
+    citations: list[Citation],
+) -> str:
+    lesson_title = str((lesson_context or {}).get("title") or "").strip() or "No persisted lesson title"
+    lesson_summary = str((lesson_context or {}).get("summary") or "").strip() or "No persisted lesson summary."
+    lesson_block = "\n".join(_lesson_context_block_lines(lesson_context)) or "- No persisted lesson body available."
+    graph_block = "\n".join(_graph_context_lines(graph_context, lesson_context)) or "- No graph/mastery context available."
+    citations_block = _citations_block(citations)
+    return (
+        "You generate one short-answer formative assessment question for a Nigerian SSS lesson.\n"
+        "Return JSON only.\n"
+        "Do not generate multiple-choice questions.\n"
+        "Do not use generic wording.\n"
+        "Ask exactly one question focused on the target concept.\n\n"
+        f"Scope: subject={request.subject}, level={request.sss_level}, term={request.term}, difficulty={request.difficulty}\n"
+        f"Current lesson title: {lesson_title}\n"
+        f"Current lesson summary: {lesson_summary}\n"
+        f"Target concept id: {concept_id}\n"
+        f"Target concept label: {concept_label}\n\n"
+        f"Lesson body:\n{lesson_block}\n\n"
+        f"Mastery / graph context:\n{graph_block}\n\n"
+        f"Retrieved context:\n{citations_block}\n\n"
+        "Return EXACT JSON shape:\n"
+        "{\n"
+        '  "question": "string",\n'
+        '  "ideal_answer": "string",\n'
+        '  "hint": "string"\n'
+        "}\n"
+        "Rules:\n"
+        "- The question must be answerable from the lesson context.\n"
+        "- The ideal_answer must be concise, correct, and lesson-grounded.\n"
+        "- The hint must guide without giving the full answer away.\n"
+        "- Do not mention internal IDs in visible text.\n"
+    )
+
+
+def _assessment_submit_prompt(
+    request: TutorAssessmentSubmitRequest,
+    *,
+    lesson_context: dict | None,
+    graph_context: dict | None,
+    citations: list[Citation],
+) -> str:
+    lesson_title = str((lesson_context or {}).get("title") or "").strip() or "No persisted lesson title"
+    lesson_summary = str((lesson_context or {}).get("summary") or "").strip() or "No persisted lesson summary."
+    lesson_block = "\n".join(_lesson_context_block_lines(lesson_context)) or "- No persisted lesson body available."
+    graph_block = "\n".join(_graph_context_lines(graph_context, lesson_context)) or "- No graph/mastery context available."
+    citations_block = _citations_block(citations)
+    return (
+        "You evaluate a student's short-answer response for a Nigerian SSS lesson.\n"
+        "Return JSON only.\n"
+        "Be strict, lesson-grounded, and concise.\n\n"
+        f"Scope: subject={request.subject}, level={request.sss_level}, term={request.term}\n"
+        f"Current lesson title: {lesson_title}\n"
+        f"Current lesson summary: {lesson_summary}\n"
+        f"Target concept id: {request.concept_id}\n"
+        f"Target concept label: {request.concept_label}\n"
+        f"Assessment question: {request.question}\n"
+        f"Ideal answer: {request.ideal_answer}\n"
+        f"Student answer: {request.answer}\n\n"
+        f"Lesson body:\n{lesson_block}\n\n"
+        f"Mastery / graph context:\n{graph_block}\n\n"
+        f"Retrieved context:\n{citations_block}\n\n"
+        "Return EXACT JSON shape:\n"
+        "{\n"
+        '  "score": 0.0,\n'
+        '  "feedback": "string",\n'
+        '  "ideal_answer": "string"\n'
+        "}\n"
+        "Rules:\n"
+        "- score must be between 0 and 1.\n"
+        "- feedback must explain what was correct, missing, or wrong.\n"
+        "- ideal_answer may refine the provided ideal answer, but must stay lesson-grounded.\n"
+    )
+
+
+def _validate_assessment_start_payload(
+    parsed: dict | None,
+    *,
+    concept_id: str,
+    concept_label: str,
+    citations: list[Citation],
+) -> TutorAssessmentStartResponse:
+    if not parsed:
+        raise RuntimeError("assessment generation returned invalid JSON")
+    question = " ".join(str(parsed.get("question") or "").split()).strip()
+    ideal_answer = " ".join(str(parsed.get("ideal_answer") or "").split()).strip()
+    hint = " ".join(str(parsed.get("hint") or "").split()).strip()
+    if not question or not ideal_answer:
+        raise RuntimeError("assessment generation returned incomplete content")
+    lowered_question = question.lower()
+    if "which option" in lowered_question or "a common misconception" in lowered_question:
+        raise RuntimeError("assessment generation returned placeholder question content")
+    if re.search(r"\b(math|english|civic):sss[123]:t[123]:", lowered_question):
+        raise RuntimeError("assessment generation leaked internal concept ids")
+    return TutorAssessmentStartResponse(
+        question=question,
+        concept_id=concept_id,
+        concept_label=concept_label,
+        ideal_answer=ideal_answer,
+        hint=hint or None,
+        citations=citations,
+        actions=["USED_RAG_CONTEXT" if citations else "ASSESSMENT_WITHOUT_RAG"],
+    )
+
+
+def _validate_assessment_submit_payload(
+    parsed: dict | None,
+    *,
+    request: TutorAssessmentSubmitRequest,
+    citations: list[Citation],
+) -> TutorAssessmentSubmitResponse:
+    if not parsed:
+        raise RuntimeError("assessment evaluation returned invalid JSON")
+    score = _clamp_score(parsed.get("score"))
+    feedback = " ".join(str(parsed.get("feedback") or "").split()).strip()
+    ideal_answer = " ".join(str(parsed.get("ideal_answer") or request.ideal_answer).split()).strip()
+    if not feedback:
+        raise RuntimeError("assessment evaluation returned empty feedback")
+    return TutorAssessmentSubmitResponse(
+        assessment_id=request.assessment_id,
+        is_correct=score >= 0.8,
+        score=score,
+        feedback=feedback,
+        ideal_answer=ideal_answer or request.ideal_answer,
+        concept_id=request.concept_id,
+        concept_label=request.concept_label,
+        citations=citations,
+        actions=["ASSESSMENT_EVALUATED", "USED_RAG_CONTEXT" if citations else "ASSESSMENT_WITHOUT_RAG"],
+    )
 
 
 def _is_question_request(message: str) -> bool:
@@ -664,6 +926,178 @@ def run_tutor_chat(request: TutorChatRequest) -> TutorChatResponse:
         actions=actions + ["UPDATED_MASTERY_BASIC"],
         recommendations=[recommendation],
     )
+
+
+def run_tutor_assessment_start(request: TutorAssessmentStartRequest) -> TutorAssessmentStartResponse:
+    try:
+        profile_context = _internal_profile_context(
+            TutorChatRequest(
+                student_id=request.student_id,
+                session_id=request.session_id,
+                subject=request.subject,
+                sss_level=request.sss_level,
+                term=request.term,
+                topic_id=request.topic_id,
+                message="start assessment",
+            )
+        )
+    except Exception:
+        profile_context = None
+
+    try:
+        lesson_context = _internal_lesson_context(
+            TutorChatRequest(
+                student_id=request.student_id,
+                session_id=request.session_id,
+                subject=request.subject,
+                sss_level=request.sss_level,
+                term=request.term,
+                topic_id=request.topic_id,
+                message="start assessment",
+            )
+        )
+    except Exception as exc:
+        logger.warning("tutor.run_tutor_assessment_start lesson-context fetch failed: %s", exc)
+        lesson_context = None
+
+    try:
+        graph_context = _internal_graph_context(
+            TutorChatRequest(
+                student_id=request.student_id,
+                session_id=request.session_id,
+                subject=request.subject,
+                sss_level=request.sss_level,
+                term=request.term,
+                topic_id=request.topic_id,
+                message="start assessment",
+            )
+        )
+    except Exception as exc:
+        logger.warning("tutor.run_tutor_assessment_start graph-context fetch failed: %s", exc)
+        graph_context = None
+
+    try:
+        citations = _internal_rag_retrieve_for_prompt(
+            student_id=request.student_id,
+            session_id=request.session_id,
+            subject=request.subject,
+            sss_level=request.sss_level,
+            term=int(request.term),
+            topic_id=request.topic_id,
+            message=f"{request.subject} {request.sss_level} term {request.term} {request.topic_id} assessment question",
+        )
+    except Exception as exc:
+        logger.warning("tutor.run_tutor_assessment_start retrieval failed: %s", exc)
+        citations = []
+
+    if not citations and not _lesson_context_available(lesson_context):
+        raise RuntimeError(
+            "No lesson-aware assessment context found. Generate the lesson and ensure approved curriculum chunks exist."
+        )
+
+    target = _assessment_target_concept(
+        lesson_context=lesson_context,
+        graph_context=graph_context,
+        citations=citations,
+    )
+    if target is None:
+        raise RuntimeError("No valid target concept found for tutor assessment.")
+    concept_id, concept_label = target
+
+    prompt = _assessment_start_prompt(
+        request,
+        concept_id=concept_id,
+        concept_label=concept_label,
+        lesson_context=lesson_context,
+        graph_context=graph_context,
+        citations=citations,
+    )
+    try:
+        raw = _llm_generate(prompt)
+    except (LLMClientError, Exception) as exc:
+        raise RuntimeError(f"assessment question generation failed: {exc}") from exc
+
+    parsed = _extract_json_object(raw)
+    out = _validate_assessment_start_payload(
+        parsed,
+        concept_id=concept_id,
+        concept_label=concept_label,
+        citations=citations,
+    )
+    actions = list(out.actions)
+    if profile_context:
+        actions.append("USED_PROFILE_CONTEXT")
+    if graph_context:
+        actions.append("USED_GRAPH_CONTEXT")
+    actions.append("ASSESSMENT_TARGET_CONCEPT")
+    return out.model_copy(update={"actions": actions})
+
+
+def run_tutor_assessment_submit(request: TutorAssessmentSubmitRequest) -> TutorAssessmentSubmitResponse:
+    try:
+        lesson_context = _internal_lesson_context(
+            TutorChatRequest(
+                student_id=request.student_id,
+                session_id=request.session_id,
+                subject=request.subject,
+                sss_level=request.sss_level,
+                term=request.term,
+                topic_id=request.topic_id,
+                message=request.question,
+            )
+        )
+    except Exception as exc:
+        logger.warning("tutor.run_tutor_assessment_submit lesson-context fetch failed: %s", exc)
+        lesson_context = None
+
+    try:
+        graph_context = _internal_graph_context(
+            TutorChatRequest(
+                student_id=request.student_id,
+                session_id=request.session_id,
+                subject=request.subject,
+                sss_level=request.sss_level,
+                term=request.term,
+                topic_id=request.topic_id,
+                message=request.question,
+            )
+        )
+    except Exception as exc:
+        logger.warning("tutor.run_tutor_assessment_submit graph-context fetch failed: %s", exc)
+        graph_context = None
+
+    try:
+        citations = _internal_rag_retrieve_for_prompt(
+            student_id=request.student_id,
+            session_id=request.session_id,
+            subject=request.subject,
+            sss_level=request.sss_level,
+            term=int(request.term),
+            topic_id=request.topic_id,
+            message=f"{request.question} {request.concept_label} {request.answer}",
+        )
+    except Exception as exc:
+        logger.warning("tutor.run_tutor_assessment_submit retrieval failed: %s", exc)
+        citations = []
+
+    if not citations and not _lesson_context_available(lesson_context):
+        raise RuntimeError(
+            "No lesson-aware assessment context found. Generate the lesson and ensure approved curriculum chunks exist."
+        )
+
+    prompt = _assessment_submit_prompt(
+        request,
+        lesson_context=lesson_context,
+        graph_context=graph_context,
+        citations=citations,
+    )
+    try:
+        raw = _llm_generate(prompt)
+    except (LLMClientError, Exception) as exc:
+        raise RuntimeError(f"assessment answer evaluation failed: {exc}") from exc
+
+    parsed = _extract_json_object(raw)
+    return _validate_assessment_submit_payload(parsed, request=request, citations=citations)
 
 
 def run_tutor_hint(request: TutorHintRequest) -> TutorHintResponse:

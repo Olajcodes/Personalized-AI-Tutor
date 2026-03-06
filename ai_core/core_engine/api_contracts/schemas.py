@@ -58,6 +58,53 @@ class TutorChatResponse(BaseModel):
     recommendations: List[TutorRecommendation] = Field(default_factory=list)
 
 
+class TutorAssessmentStartRequest(BaseModel):
+    student_id: str
+    session_id: str
+    subject: Literal["math", "english", "civic"]
+    sss_level: Literal["SSS1", "SSS2", "SSS3"]
+    term: Literal[1, 2, 3]
+    topic_id: str
+    difficulty: Literal["easy", "medium", "hard"] = "medium"
+
+
+class TutorAssessmentStartResponse(BaseModel):
+    question: str
+    concept_id: str
+    concept_label: str
+    ideal_answer: str
+    hint: Optional[str] = None
+    citations: List[Citation] = Field(default_factory=list)
+    actions: List[str] = Field(default_factory=list)
+
+
+class TutorAssessmentSubmitRequest(BaseModel):
+    student_id: str
+    session_id: str
+    assessment_id: str
+    subject: Literal["math", "english", "civic"]
+    sss_level: Literal["SSS1", "SSS2", "SSS3"]
+    term: Literal[1, 2, 3]
+    topic_id: str
+    answer: str
+    question: str
+    concept_id: str
+    concept_label: str
+    ideal_answer: str
+
+
+class TutorAssessmentSubmitResponse(BaseModel):
+    assessment_id: str
+    is_correct: bool
+    score: float = Field(ge=0.0, le=1.0)
+    feedback: str
+    ideal_answer: str
+    concept_id: str
+    concept_label: str
+    citations: List[Citation] = Field(default_factory=list)
+    actions: List[str] = Field(default_factory=list)
+
+
 class TutorHintRequest(BaseModel):
     student_id: str
     session_id: Optional[str] = None

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -7,12 +8,36 @@ from sqlalchemy.orm import Session
 
 from backend.core.ai_core_client import generate_quiz_insights
 from backend.repositories.quiz_repo import QuizRepository
-from backend.schemas.quiz_schema import ConceptBreakdownItem, QuizResultsResponse
+from backend.schemas.quiz_schema import QuizResultConceptBreakdownItem, QuizResultsResponse
 
 
 class QuizResultsService:
     def __init__(self, db: Session):
         self.repo = QuizRepository(db)
+
+    @staticmethod
+    def _readable_concept_label(concept_id: str, *, fallback_topic_title: str | None = None) -> str:
+        value = str(concept_id or "").strip()
+        if not value:
+            return str(fallback_topic_title or "Untitled Concept").strip()
+
+        try:
+            UUID(value)
+            fallback = str(fallback_topic_title or "").strip()
+            return fallback or "Untitled Concept"
+        except ValueError:
+            pass
+
+        topic_match = re.fullmatch(r"topic:([0-9a-fA-F-]{36})(?::.*)?", value)
+        if topic_match:
+            fallback = str(fallback_topic_title or "").strip()
+            return fallback or "Topic Concept"
+
+        token = value.rsplit(":", 1)[-1].strip()
+        token = re.sub(r"-(\d+)$", "", token)
+        token = re.sub(r"[_-]+", " ", token)
+        token = re.sub(r"\s+", " ", token).strip()
+        return token.title() if token else str(fallback_topic_title or "Untitled Concept").strip()
 
     async def get_results(self, quiz_id: UUID, student_id: UUID, attempt_id: UUID) -> QuizResultsResponse:
         attempt = self.repo.get_attempt_with_answers(attempt_id)
@@ -25,6 +50,7 @@ class QuizResultsService:
 
         questions = self.repo.get_questions_for_quiz(quiz_id)
         question_map = {q.id: q for q in questions}
+        quiz_topic_title = self.repo.get_topic_title(getattr(quiz, "topic_id", None))
 
         concept_correctness: dict[str, list[bool]] = {}
         for answer in getattr(attempt, "answers", []):
@@ -37,7 +63,7 @@ class QuizResultsService:
                 concept_id = str(quiz.topic_id or question.id)
             concept_correctness.setdefault(concept_id, []).append(bool(answer.is_correct))
 
-        concept_breakdown: list[ConceptBreakdownItem] = []
+        concept_breakdown: list[QuizResultConceptBreakdownItem] = []
         weakest_concept: str | None = None
         weakest_accuracy = 1.0
 
@@ -45,10 +71,21 @@ class QuizResultsService:
             accuracy = sum(values) / len(values)
             is_correct = accuracy >= 0.5
             weight_change = 0.15 if is_correct else -0.05
+            mapped_topic_title = self.repo.find_topic_title_for_concept(
+                concept_id=concept_id,
+                subject=str(getattr(quiz, "subject", "")).strip().lower(),
+                sss_level=str(getattr(quiz, "sss_level", "")).strip(),
+                term=int(getattr(quiz, "term", 0) or 0),
+            )
+            concept_label = self._readable_concept_label(
+                concept_id,
+                fallback_topic_title=mapped_topic_title or quiz_topic_title,
+            )
 
             concept_breakdown.append(
-                ConceptBreakdownItem(
+                QuizResultConceptBreakdownItem(
                     concept_id=concept_id,
+                    concept_label=concept_label,
                     is_correct=is_correct,
                     weight_change=weight_change,
                 )
@@ -64,18 +101,21 @@ class QuizResultsService:
             insights = ["Insights are temporarily unavailable. Review missed concepts and retry."]
 
         recommended_topic = None
+        recommended_topic_title = None
         if weakest_concept is not None:
             recommended_topic = await self._get_topic_for_concept(
                 weakest_concept,
                 quiz=quiz,
                 fallback_topic_id=quiz.topic_id,
             )
+            recommended_topic_title = self.repo.get_topic_title(recommended_topic)
 
         return QuizResultsResponse(
             score=float(attempt.score or 0.0),
             concept_breakdown=concept_breakdown,
             insights=insights,
             recommended_revision_topic_id=recommended_topic,
+            recommended_revision_topic_title=recommended_topic_title,
         )
 
     async def _get_topic_for_concept(

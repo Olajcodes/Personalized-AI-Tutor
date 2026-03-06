@@ -8,20 +8,27 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from ai_core.core_engine.orchestration.quiz_engine import (
     generate_quiz_questions,
     generate_quiz_insights,
+    QuizGenerationError,
 )
 from ai_core.core_engine.orchestration.tutor_engine import (
+    run_tutor_assessment_start,
+    run_tutor_assessment_submit,
     run_tutor_chat,
     run_tutor_explain_mistake,
     run_tutor_hint,
 )
 from ai_core.core_engine.api_contracts.schemas import (
+    TutorAssessmentStartRequest,
+    TutorAssessmentStartResponse,
+    TutorAssessmentSubmitRequest,
+    TutorAssessmentSubmitResponse,
     TutorChatRequest,
     TutorChatResponse,
     TutorExplainMistakeRequest,
@@ -79,6 +86,15 @@ def health():
     checks = {
         "llm_api_key": "configured" if llm_key_present else "not_configured",
         "postgres_dsn": "configured" if postgres_dsn_present else "not_configured",
+        "backend_internal_postgres_url": "configured"
+        if os.getenv("BACKEND_INTERNAL_POSTGRES_URL")
+        else "not_configured",
+        "backend_internal_rag_url": "configured"
+        if os.getenv("BACKEND_INTERNAL_RAG_URL")
+        else "not_configured",
+        "backend_internal_graph_context_url": "configured"
+        if os.getenv("BACKEND_INTERNAL_GRAPH_CONTEXT_URL")
+        else "not_configured",
         "neo4j_uri": "configured" if os.getenv("NEO4J_URI") else "not_configured",
         "redis_url": "configured" if os.getenv("REDIS_URL") else "not_configured",
         "qdrant_url": "configured" if os.getenv("QDRANT_URL") else "not_configured",
@@ -95,16 +111,22 @@ def health():
 
 @app.post("/quiz/generate", response_model=QuizGenerateResponse)
 async def quiz_generate(payload: QuizGenerateRequest):
-    questions_raw = await generate_quiz_questions(
-        student_id=payload.student_id,
-        subject=payload.subject,
-        sss_level=payload.sss_level,
-        term=payload.term,
-        topic_id=payload.topic_id,
-        purpose=payload.purpose,
-        difficulty=payload.difficulty,
-        num_questions=payload.num_questions,
-    )
+    try:
+        questions_raw = await generate_quiz_questions(
+            student_id=payload.student_id,
+            subject=payload.subject,
+            sss_level=payload.sss_level,
+            term=payload.term,
+            topic_id=payload.topic_id,
+            purpose=payload.purpose,
+            difficulty=payload.difficulty,
+            num_questions=payload.num_questions,
+        )
+    except QuizGenerationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
 
     # Convert dicts -> Pydantic models
     questions = [QuestionSchema(**q) for q in questions_raw]
@@ -120,6 +142,16 @@ async def quiz_insights(quiz_id: UUID, attempt_id: UUID):
 @app.post("/tutor/chat", response_model=TutorChatResponse)
 def tutor_chat(payload: TutorChatRequest):
     return run_tutor_chat(payload)
+
+
+@app.post("/tutor/assessment/start", response_model=TutorAssessmentStartResponse)
+def tutor_assessment_start(payload: TutorAssessmentStartRequest):
+    return run_tutor_assessment_start(payload)
+
+
+@app.post("/tutor/assessment/submit", response_model=TutorAssessmentSubmitResponse)
+def tutor_assessment_submit(payload: TutorAssessmentSubmitRequest):
+    return run_tutor_assessment_submit(payload)
 
 
 @app.post("/tutor/hint", response_model=TutorHintResponse)
