@@ -35,6 +35,8 @@ class InternalLessonContextOut(BaseModel):
     summary: str | None = None
     content_blocks: list[dict] = Field(default_factory=list)
     source_chunk_ids: list[str] = Field(default_factory=list)
+    covered_concept_ids: list[str] = Field(default_factory=list)
+    covered_concept_labels: dict[str, str] = Field(default_factory=dict)
     generation_metadata: dict = Field(default_factory=dict)
 
 

@@ -245,6 +245,25 @@ def _lesson_context_available(lesson_context: dict | None) -> bool:
     return isinstance(blocks, list) and bool(blocks)
 
 
+def _lesson_covered_concept_ids(lesson_context: dict | None) -> list[str]:
+    if not lesson_context:
+        return []
+    return [str(value) for value in list(lesson_context.get("covered_concept_ids") or []) if str(value).strip()]
+
+
+def _lesson_covered_concept_lines(lesson_context: dict | None, *, max_items: int = 6) -> list[str]:
+    concept_ids = _lesson_covered_concept_ids(lesson_context)
+    concept_labels = {
+        str(key): str(value)
+        for key, value in dict((lesson_context or {}).get("covered_concept_labels") or {}).items()
+        if str(key).strip()
+    }
+    rendered: list[str] = []
+    for concept_id in concept_ids[:max_items]:
+        rendered.append(f"- {concept_labels.get(concept_id) or _readable_concept_label(concept_id)}")
+    return rendered
+
+
 def _lesson_context_block_lines(lesson_context: dict | None, *, max_blocks: int = 5) -> list[str]:
     if not lesson_context:
         return []
@@ -285,14 +304,21 @@ def _history_context_lines(history_context: dict | None, *, max_messages: int = 
     return rendered
 
 
-def _graph_context_lines(graph_context: dict | None) -> list[str]:
+def _graph_context_lines(graph_context: dict | None, lesson_context: dict | None) -> list[str]:
     if not graph_context:
         return []
 
+    covered_concept_ids = set(_lesson_covered_concept_ids(lesson_context))
     mastery_rows = list(graph_context.get("mastery") or [])
+    covered_mastery_rows = [
+        row
+        for row in mastery_rows
+        if isinstance(row, dict) and str(row.get("concept_id") or "") in covered_concept_ids
+    ]
+    mastery_focus_rows = covered_mastery_rows or mastery_rows
     weak_rows = sorted(
         [
-            row for row in mastery_rows
+            row for row in mastery_focus_rows
             if isinstance(row, dict) and isinstance(row.get("score"), (int, float))
         ],
         key=lambda row: float(row.get("score", 0.0)),
@@ -302,7 +328,15 @@ def _graph_context_lines(graph_context: dict | None) -> list[str]:
         for row in weak_rows
     )
 
-    prereq_rows = list(graph_context.get("prereqs") or [])[:5]
+    prereq_rows = [
+        row for row in list(graph_context.get("prereqs") or [])
+        if isinstance(row, dict)
+        and (
+            not covered_concept_ids
+            or str(row.get("concept_id") or "") in covered_concept_ids
+            or str(row.get("prerequisite_concept_id") or "") in covered_concept_ids
+        )
+    ][:5]
     prereq_summary = ", ".join(
         (
             f"{_readable_concept_label(str(row.get('prerequisite_concept_id') or ''))}"
@@ -316,8 +350,12 @@ def _graph_context_lines(graph_context: dict | None) -> list[str]:
         f"- overall_mastery: {float(graph_context.get('overall_mastery') or 0.0):.2f}",
         f"- unlocked_nodes: {len(list(graph_context.get('unlocked_nodes') or []))}",
     ]
+    if covered_concept_ids:
+        lines.append(f"- lesson_covered_concepts: {len(covered_concept_ids)}")
     if weak_summary:
-        lines.append(f"- weak_concepts: {weak_summary}")
+        lines.append(
+            f"- weak_concepts_in_lesson: {weak_summary}" if covered_concept_ids else f"- weak_concepts: {weak_summary}"
+        )
     if prereq_summary:
         lines.append(f"- prerequisite_edges: {prereq_summary}")
     return lines
@@ -334,6 +372,20 @@ def _profile_context_lines(profile_context: dict | None) -> list[str]:
         f"- pace: {preferences.get('pace', 'unknown')}",
     ]
     return lines
+
+
+def _is_question_request(message: str) -> bool:
+    normalized = " ".join((message or "").lower().split())
+    markers = (
+        "ask me a question",
+        "ask me question",
+        "quiz me",
+        "test me",
+        "give me a question",
+        "give me one question",
+        "check my understanding",
+    )
+    return any(marker in normalized for marker in markers)
 
 
 def _chat_prompt(
@@ -355,10 +407,12 @@ def _chat_prompt(
     lesson_lines = _lesson_context_block_lines(lesson_context)
     lesson_block = "\n".join(lesson_lines) if lesson_lines else "- No persisted lesson body available."
     history_block = "\n".join(_history_context_lines(history_context)) or "- No prior tutor history."
-    graph_block = "\n".join(_graph_context_lines(graph_context)) or "- No graph/mastery context available."
+    graph_block = "\n".join(_graph_context_lines(graph_context, lesson_context)) or "- No graph/mastery context available."
     profile_block = "\n".join(_profile_context_lines(profile_context)) or "- No profile preferences available."
+    covered_concepts_block = "\n".join(_lesson_covered_concept_lines(lesson_context)) or "- No explicit lesson concept coverage metadata."
     lesson_title = str((lesson_context or {}).get("title") or "").strip() or "No persisted lesson title"
     lesson_summary = str((lesson_context or {}).get("summary") or "").strip() or "No persisted lesson summary."
+    question_mode = _is_question_request(request.message)
 
     return (
         "You are Mastery AI, a lesson-aware curriculum-bound tutor for Nigerian SSS learners.\n"
@@ -372,13 +426,19 @@ def _chat_prompt(
         "- If context is insufficient, say what is missing and ask one focused follow-up question.\n"
         "- Keep explanation concise, stepwise, and student-friendly.\n"
         "- Stay inside the currently selected lesson topic unless the student explicitly asks to broaden the scope.\n"
+        "- Never pretend a student has mastered something unless there is explicit evidence.\n"
         "- For unsafe requests, refuse and redirect to safe learning support.\n\n"
         f"Current lesson title: {lesson_title}\n"
         f"Current lesson summary: {lesson_summary}\n"
+        f"Lesson covered concepts:\n{covered_concepts_block}\n\n"
         f"Current lesson body:\n{lesson_block}\n\n"
         f"Student profile and preferences:\n{profile_block}\n\n"
         f"Recent tutor history:\n{history_block}\n\n"
         f"Mastery / graph context:\n{graph_block}\n\n"
+        f"Question-request mode: {'yes' if question_mode else 'no'}\n"
+        "If question-request mode is yes, ask exactly one lesson-scoped check question first. "
+        "Prefer the weakest concept inside the current lesson when identifiable. "
+        "Do not give the answer in the same turn.\n\n"
         f"Student question: {request.message}\n\n"
         f"Retrieved context:\n{citations_block}\n"
     )
@@ -500,7 +560,7 @@ def run_tutor_chat(request: TutorChatRequest) -> TutorChatResponse:
     history_context: dict | None = None
     lesson_context: dict | None = None
     graph_context: dict | None = None
-    actions: list[str] = ["ENFORCED_SCOPE_POLICY"]
+    actions: list[str] = ["ENFORCED_SCOPE_POLICY", "NO_MASTERY_WRITE_NO_EVIDENCE"]
 
     actions.append("CALLED_TOOL:internal_postgres.profile")
     try:
@@ -586,6 +646,17 @@ def run_tutor_chat(request: TutorChatRequest) -> TutorChatResponse:
         type="next_topic",
         topic_id=request.topic_id,
         reason="Stay on the current lesson and close the weakest gaps before moving to a new topic.",
+    )
+    logger.info(
+        "tutor.run_tutor_chat success subject=%s level=%s term=%s topic_id=%s lesson_context=%s covered_concepts=%s citations=%s actions=%s",
+        request.subject,
+        request.sss_level,
+        request.term,
+        request.topic_id,
+        _lesson_context_available(lesson_context),
+        len(_lesson_covered_concept_ids(lesson_context)),
+        len(citations),
+        ",".join(actions),
     )
     return TutorChatResponse(
         assistant_message=assistant_message,
