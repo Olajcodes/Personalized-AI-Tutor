@@ -147,6 +147,24 @@ class TutorSessionRepository:
         self.db.commit()
         return dict(row) if row else {}
 
+    def update_message_content(self, *, message_id: UUID, content: str) -> dict:
+        row = self.db.execute(
+            text(
+                """
+                UPDATE tutor_messages
+                SET content = :content, updated_at = NOW()
+                WHERE id = :message_id
+                RETURNING id, session_id, role, content, created_at, updated_at
+                """
+            ),
+            {
+                "message_id": message_id,
+                "content": content,
+            },
+        ).mappings().first()
+        self.db.commit()
+        return dict(row) if row else {}
+
     def end_session(
         self,
         *,

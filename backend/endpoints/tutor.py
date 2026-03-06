@@ -15,6 +15,10 @@ from backend.core.auth import get_current_user
 from backend.core.database import get_db
 from backend.repositories.tutor_session_repo import TutorSessionRepository
 from backend.schemas.tutor_schema import (
+    TutorAssessmentStartIn,
+    TutorAssessmentStartOut,
+    TutorAssessmentSubmitIn,
+    TutorAssessmentSubmitOut,
     TutorChatIn,
     TutorChatOut,
     TutorExplainMistakeIn,
@@ -22,6 +26,7 @@ from backend.schemas.tutor_schema import (
     TutorHintIn,
     TutorHintOut,
 )
+from backend.services.tutor_assessment_service import TutorAssessmentService
 from backend.services.tutor_orchestration_service import (
     TutorOrchestrationService,
     TutorProviderUnavailableError,
@@ -37,6 +42,10 @@ def _service() -> TutorOrchestrationService:
 
 def _session_repo(db: Session) -> TutorSessionRepository:
     return TutorSessionRepository(db)
+
+
+def _assessment_service(db: Session) -> TutorAssessmentService:
+    return TutorAssessmentService(db)
 
 
 @router.post("/chat", response_model=TutorChatOut, status_code=status.HTTP_200_OK)
@@ -80,6 +89,50 @@ async def tutor_chat(
         payload.topic_id,
     )
     return response
+
+
+@router.post("/assessment/start", response_model=TutorAssessmentStartOut, status_code=status.HTTP_200_OK)
+async def tutor_assessment_start(
+    payload: TutorAssessmentStartIn,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if payload.student_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="student_id must match authenticated user id",
+        )
+
+    repo = _session_repo(db)
+    if not repo.session_exists_for_student(session_id=payload.session_id, student_id=payload.student_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found for this student.")
+
+    try:
+        return await _assessment_service(db).start_assessment(payload)
+    except TutorProviderUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+
+
+@router.post("/assessment/submit", response_model=TutorAssessmentSubmitOut, status_code=status.HTTP_200_OK)
+async def tutor_assessment_submit(
+    payload: TutorAssessmentSubmitIn,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if payload.student_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="student_id must match authenticated user id",
+        )
+
+    repo = _session_repo(db)
+    if not repo.session_exists_for_student(session_id=payload.session_id, student_id=payload.student_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found for this student.")
+
+    try:
+        return await _assessment_service(db).submit_assessment(payload)
+    except TutorProviderUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
 
 
 @router.post("/hint", response_model=TutorHintOut, status_code=status.HTTP_200_OK)

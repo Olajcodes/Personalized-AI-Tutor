@@ -18,11 +18,17 @@ from ai_core.core_engine.orchestration.quiz_engine import (
     QuizGenerationError,
 )
 from ai_core.core_engine.orchestration.tutor_engine import (
+    run_tutor_assessment_start,
+    run_tutor_assessment_submit,
     run_tutor_chat,
     run_tutor_explain_mistake,
     run_tutor_hint,
 )
 from ai_core.core_engine.api_contracts.schemas import (
+    TutorAssessmentStartRequest,
+    TutorAssessmentStartResponse,
+    TutorAssessmentSubmitRequest,
+    TutorAssessmentSubmitResponse,
     TutorChatRequest,
     TutorChatResponse,
     TutorExplainMistakeRequest,
@@ -136,6 +142,16 @@ async def quiz_insights(quiz_id: UUID, attempt_id: UUID):
 @app.post("/tutor/chat", response_model=TutorChatResponse)
 def tutor_chat(payload: TutorChatRequest):
     return run_tutor_chat(payload)
+
+
+@app.post("/tutor/assessment/start", response_model=TutorAssessmentStartResponse)
+def tutor_assessment_start(payload: TutorAssessmentStartRequest):
+    return run_tutor_assessment_start(payload)
+
+
+@app.post("/tutor/assessment/submit", response_model=TutorAssessmentSubmitResponse)
+def tutor_assessment_submit(payload: TutorAssessmentSubmitRequest):
+    return run_tutor_assessment_submit(payload)
 
 
 @app.post("/tutor/hint", response_model=TutorHintResponse)

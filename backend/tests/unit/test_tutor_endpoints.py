@@ -41,8 +41,36 @@ def test_tutor_endpoints_chat_hint_explain(monkeypatch):
         async def explain_mistake(self, payload):
             return {"explanation": "Rule mismatch.", "improvement_tip": "Apply the rule first."}
 
+    class _FakeAssessmentService:
+        async def start_assessment(self, payload):
+            return {
+                "assessment_id": str(uuid4()),
+                "question": "What is a variable?",
+                "concept_id": "math:sss2:t1:variables",
+                "concept_label": "variables",
+                "ideal_answer": "A symbol for an unknown value.",
+                "hint": "Think of what x stands for.",
+                "citations": [],
+                "actions": ["ASSESSMENT_TARGET_CONCEPT"],
+            }
+
+        async def submit_assessment(self, payload):
+            return {
+                "assessment_id": str(payload.assessment_id),
+                "is_correct": True,
+                "score": 0.9,
+                "feedback": "Correct answer.",
+                "ideal_answer": "A symbol for an unknown value.",
+                "concept_id": "math:sss2:t1:variables",
+                "concept_label": "variables",
+                "mastery_updated": True,
+                "new_mastery": 0.62,
+                "actions": ["MASTERED_CHECK_RECORDED"],
+            }
+
     monkeypatch.setattr("backend.endpoints.tutor._service", lambda: _FakeService())
     monkeypatch.setattr("backend.endpoints.tutor._session_repo", lambda db: _FakeRepo())
+    monkeypatch.setattr("backend.endpoints.tutor._assessment_service", lambda db: _FakeAssessmentService())
 
     app.dependency_overrides[get_db] = _override_db
     app.dependency_overrides[get_current_user] = _override_user
@@ -88,12 +116,39 @@ def test_tutor_endpoints_chat_hint_explain(monkeypatch):
             "correct_answer": "4",
         },
     )
+    assessment_start_response = client.post(
+        "/api/v1/tutor/assessment/start",
+        json={
+            "student_id": str(student_id),
+            "session_id": str(session_id),
+            "subject": "math",
+            "sss_level": "SSS2",
+            "term": 1,
+            "topic_id": str(uuid4()),
+            "difficulty": "medium",
+        },
+    )
+    assessment_submit_response = client.post(
+        "/api/v1/tutor/assessment/submit",
+        json={
+            "student_id": str(student_id),
+            "session_id": str(session_id),
+            "assessment_id": str(uuid4()),
+            "subject": "math",
+            "sss_level": "SSS2",
+            "term": 1,
+            "topic_id": str(uuid4()),
+            "answer": "A variable is an unknown value.",
+        },
+    )
 
     app.dependency_overrides.clear()
 
     assert chat_response.status_code == 200
     assert hint_response.status_code == 200
     assert explain_response.status_code == 200
+    assert assessment_start_response.status_code == 200
+    assert assessment_submit_response.status_code == 200
     assert chat_response.json()["assistant_message"]
 
 

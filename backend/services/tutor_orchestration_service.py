@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 import httpx
 
 from backend.core.config import settings
 from backend.schemas.tutor_schema import (
+    TutorAssessmentStartIn,
+    TutorAssessmentStartOut,
+    TutorAssessmentSubmitIn,
+    TutorAssessmentSubmitOut,
     TutorChatIn,
     TutorChatOut,
     TutorExplainMistakeIn,
@@ -49,6 +54,37 @@ class TutorOrchestrationService:
             citations=[],
             actions=["UPDATED_MASTERY_BASIC"],
             recommendations=[recommendation],
+        )
+
+    @staticmethod
+    def _fallback_assessment_start(payload: TutorAssessmentStartIn) -> TutorAssessmentStartOut:
+        return TutorAssessmentStartOut(
+            assessment_id=UUID("00000000-0000-0000-0000-000000000000"),
+            question=(
+                f"Briefly explain one key idea you have learned in {payload.subject.upper()} "
+                f"({payload.sss_level} term {payload.term})."
+            ),
+            concept_id=str(payload.topic_id),
+            concept_label="current lesson concept",
+            ideal_answer="State the rule clearly and give one correct example from the lesson.",
+            hint="State the main rule first, then give one example.",
+            citations=[],
+            actions=["ASSESSMENT_FALLBACK"],
+        )
+
+    @staticmethod
+    def _fallback_assessment_submit(payload: TutorAssessmentSubmitIn) -> TutorAssessmentSubmitOut:
+        return TutorAssessmentSubmitOut(
+            assessment_id=payload.assessment_id,
+            is_correct=False,
+            score=0.0,
+            feedback="Assessment provider unavailable. No mastery update was applied.",
+            ideal_answer="",
+            concept_id=str(payload.topic_id),
+            concept_label="current lesson concept",
+            mastery_updated=False,
+            new_mastery=None,
+            actions=["ASSESSMENT_FALLBACK"],
         )
 
     @staticmethod
@@ -110,6 +146,69 @@ class TutorOrchestrationService:
             if not self.allow_fallback:
                 raise
             return self._fallback_chat(payload)
+
+    async def assessment_start(self, payload: TutorAssessmentStartIn) -> TutorAssessmentStartOut:
+        request_payload = {
+            "student_id": str(payload.student_id),
+            "session_id": str(payload.session_id),
+            "subject": payload.subject,
+            "sss_level": payload.sss_level,
+            "term": payload.term,
+            "topic_id": str(payload.topic_id),
+            "difficulty": payload.difficulty,
+        }
+
+        try:
+            data = await self._post("/tutor/assessment/start", request_payload)
+            return TutorAssessmentStartOut.model_validate(
+                {
+                    **data,
+                    "assessment_id": UUID("00000000-0000-0000-0000-000000000000"),
+                }
+            )
+        except (TutorProviderUnavailableError, TutorProviderContractError):
+            if not self.allow_fallback:
+                raise
+            return self._fallback_assessment_start(payload)
+
+    async def assessment_submit(
+        self,
+        payload: TutorAssessmentSubmitIn,
+        *,
+        question: str,
+        concept_id: str,
+        concept_label: str,
+        ideal_answer: str,
+    ) -> TutorAssessmentSubmitOut:
+        request_payload = {
+            "student_id": str(payload.student_id),
+            "session_id": str(payload.session_id),
+            "assessment_id": str(payload.assessment_id),
+            "subject": payload.subject,
+            "sss_level": payload.sss_level,
+            "term": payload.term,
+            "topic_id": str(payload.topic_id),
+            "answer": payload.answer,
+            "question": question,
+            "concept_id": concept_id,
+            "concept_label": concept_label,
+            "ideal_answer": ideal_answer,
+        }
+
+        try:
+            data = await self._post("/tutor/assessment/submit", request_payload)
+            return TutorAssessmentSubmitOut.model_validate(
+                {
+                    **data,
+                    "assessment_id": payload.assessment_id,
+                    "mastery_updated": False,
+                    "new_mastery": None,
+                }
+            )
+        except (TutorProviderUnavailableError, TutorProviderContractError):
+            if not self.allow_fallback:
+                raise
+            return self._fallback_assessment_submit(payload)
 
     async def hint(self, payload: TutorHintIn) -> TutorHintOut:
         request_payload = {
