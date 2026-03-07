@@ -31,6 +31,10 @@ from ai_core.core_engine.api_contracts.schemas import (
     TutorRequest,
     TutorResponse,
 )
+from ai_core.core_engine.integrations.internal_api import (
+    internal_service_headers,
+    internal_service_key_configured,
+)
 from ai_core.core_engine.llm.client import LLMClient, LLMClientError
 from ai_core.core_engine.observability.logging import get_logger
 from ai_core.core_engine.safety.injection import sanitize_user_text
@@ -99,7 +103,16 @@ def _request_json(
     payload: dict | None = None,
     timeout: float,
 ) -> dict:
-    response = requests.request(method, url, params=params, json=payload, timeout=timeout)
+    if not internal_service_key_configured():
+        raise RuntimeError("INTERNAL_SERVICE_KEY is not configured for ai-core internal backend calls.")
+    response = requests.request(
+        method,
+        url,
+        params=params,
+        json=payload,
+        timeout=timeout,
+        headers=internal_service_headers(),
+    )
     if not response.ok:
         detail = (response.text or "").strip()
         raise RuntimeError(
@@ -197,7 +210,14 @@ def _internal_rag_retrieve(request: TutorChatRequest) -> list[Citation]:
     }
 
     def _request_chunks(request_payload: dict) -> list[dict]:
-        response = requests.post(base_url, json=request_payload, timeout=timeout)
+        if not internal_service_key_configured():
+            raise RuntimeError("INTERNAL_SERVICE_KEY is not configured for ai-core internal backend calls.")
+        response = requests.post(
+            base_url,
+            json=request_payload,
+            timeout=timeout,
+            headers=internal_service_headers(),
+        )
         if not response.ok:
             detail = (response.text or "").strip()
             raise RuntimeError(

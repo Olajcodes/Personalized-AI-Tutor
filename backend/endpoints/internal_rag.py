@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
+from backend.core.internal_service_auth import require_internal_service_key
 from backend.schemas.internal_rag_schema import InternalRagRetrieveRequest, InternalRagRetrieveResponse
 from backend.services.rag_retrieve_service import RagRetrieveService, RagRetrieveServiceError
 
-router = APIRouter(prefix="/internal/rag", tags=["Internal RAG APIs"])
+router = APIRouter(
+    prefix="/internal/rag",
+    tags=["Internal RAG APIs"],
+    dependencies=[Depends(require_internal_service_key)],
+)
 
 _service = RagRetrieveService()
 

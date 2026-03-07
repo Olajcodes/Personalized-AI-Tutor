@@ -2,6 +2,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from backend.core.config import settings
 from backend.main import app
 
 
@@ -20,9 +21,11 @@ def test_internal_rag_retrieve_success(monkeypatch):
         }
 
     monkeypatch.setattr("backend.endpoints.internal_rag._service.retrieve", _fake_retrieve)
+    monkeypatch.setattr(settings, "internal_service_key", "test-internal-key")
     client = TestClient(app)
     response = client.post(
         "/api/v1/internal/rag/retrieve",
+        headers={"X-Internal-Service-Key": "test-internal-key"},
         json={
             "query": "Explain linear equations",
             "subject": "math",
@@ -37,10 +40,12 @@ def test_internal_rag_retrieve_success(monkeypatch):
     assert response.json()["chunks"][0]["chunk_id"] == "chunk-1"
 
 
-def test_internal_rag_retrieve_validation_error():
+def test_internal_rag_retrieve_validation_error(monkeypatch):
+    monkeypatch.setattr(settings, "internal_service_key", "test-internal-key")
     client = TestClient(app)
     response = client.post(
         "/api/v1/internal/rag/retrieve",
+        headers={"X-Internal-Service-Key": "test-internal-key"},
         json={
             "query": "x",  # too short
             "subject": "math",

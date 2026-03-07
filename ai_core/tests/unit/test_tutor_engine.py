@@ -1,3 +1,5 @@
+import pytest
+
 from ai_core.core_engine.api_contracts.schemas import (
     TutorAssessmentStartRequest,
     TutorAssessmentSubmitRequest,
@@ -6,6 +8,7 @@ from ai_core.core_engine.api_contracts.schemas import (
     TutorHintRequest,
 )
 from ai_core.core_engine.orchestration.tutor_engine import (
+    _internal_rag_retrieve,
     run_tutor_assessment_start,
     run_tutor_assessment_submit,
     run_tutor_chat,
@@ -275,3 +278,20 @@ def test_run_tutor_assessment_submit_contract(monkeypatch):
     assert out.is_correct is True
     assert out.score == 0.9
     assert out.feedback
+
+
+def test_internal_rag_retrieve_requires_internal_service_key(monkeypatch):
+    monkeypatch.delenv("INTERNAL_SERVICE_KEY", raising=False)
+
+    with pytest.raises(RuntimeError, match="INTERNAL_SERVICE_KEY"):
+        _internal_rag_retrieve(
+            TutorChatRequest(
+                student_id="user-1",
+                session_id="session-1",
+                subject="math",
+                sss_level="SSS2",
+                term=1,
+                topic_id="11111111-1111-1111-1111-111111111111",
+                message="Explain algebra basics",
+            )
+        )

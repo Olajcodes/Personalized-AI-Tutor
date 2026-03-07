@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from backend.core.database import get_db
+from backend.core.internal_service_auth import require_internal_service_key
 from backend.schemas.internal_graph_schema import (
     InternalGraphContextOut,
     InternalGraphUpdateIn,
@@ -18,7 +19,11 @@ from backend.schemas.internal_graph_schema import (
 )
 from backend.services.graph_client_service import GraphClientValidationError, graph_client_service
 
-router = APIRouter(prefix="/internal/graph", tags=["Internal Graph APIs"])
+router = APIRouter(
+    prefix="/internal/graph",
+    tags=["Internal Graph APIs"],
+    dependencies=[Depends(require_internal_service_key)],
+)
 
 
 @router.get("/context", response_model=InternalGraphContextOut)

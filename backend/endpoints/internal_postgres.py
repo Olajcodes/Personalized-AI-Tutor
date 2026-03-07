@@ -10,6 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from backend.core.internal_service_auth import require_internal_service_key
 from backend.core.database import get_db
 from backend.repositories.internal_postgres_repo import InternalPostgresRepository
 from backend.schemas.internal_postgres_schema import (
@@ -26,7 +27,11 @@ from backend.services.internal_postgres_service import (
     InternalProfileNotFoundError,
 )
 
-router = APIRouter(prefix="/internal/postgres", tags=["Internal Postgres Contracts"])
+router = APIRouter(
+    prefix="/internal/postgres",
+    tags=["Internal Postgres Contracts"],
+    dependencies=[Depends(require_internal_service_key)],
+)
 
 
 def _service(db: Session) -> InternalPostgresService:

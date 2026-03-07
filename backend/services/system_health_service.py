@@ -91,6 +91,9 @@ class SystemHealthService:
             "neo4j": self._check_neo4j(),
             "vector_db": self._check_vector_db(),
             "llm_api": self._check_llm_api(),
+            "internal_service_auth": {
+                "status": "configured" if settings.internal_service_key else "not_configured"
+            },
         }
         overall_status = "ok"
         if checks["postgres"]["status"] != "ok":

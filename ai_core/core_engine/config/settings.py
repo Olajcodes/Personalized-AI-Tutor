@@ -35,6 +35,7 @@ class Settings:
     qdrant_url: str
     qdrant_api_key: str | None
     qdrant_collection: str
+    internal_service_key: str | None
 
     enable_basic_moderation: bool
     max_input_chars: int
@@ -67,6 +68,7 @@ def get_settings() -> Settings:
         qdrant_url=os.getenv("QDRANT_URL", ""),
         qdrant_api_key=os.getenv("QDRANT_API_KEY"),
         qdrant_collection=vector_collection,
+        internal_service_key=os.getenv("INTERNAL_SERVICE_KEY"),
         enable_basic_moderation=_bool("ENABLE_BASIC_MODERATION", True),
         max_input_chars=int(os.getenv("MAX_INPUT_CHARS", "6000")),
         log_level=os.getenv("LOG_LEVEL", "INFO"),

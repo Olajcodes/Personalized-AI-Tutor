@@ -17,6 +17,7 @@ from ai_core.core_engine.orchestration.quiz_engine import (
     generate_quiz_insights,
     QuizGenerationError,
 )
+from ai_core.core_engine.integrations.internal_api import internal_service_key_configured
 from ai_core.core_engine.orchestration.tutor_engine import (
     run_tutor_assessment_start,
     run_tutor_assessment_submit,
@@ -95,6 +96,7 @@ def health():
         "backend_internal_graph_context_url": "configured"
         if os.getenv("BACKEND_INTERNAL_GRAPH_CONTEXT_URL")
         else "not_configured",
+        "internal_service_key": "configured" if internal_service_key_configured() else "not_configured",
         "neo4j_uri": "configured" if os.getenv("NEO4J_URI") else "not_configured",
         "redis_url": "configured" if os.getenv("REDIS_URL") else "not_configured",
         "qdrant_url": "configured" if os.getenv("QDRANT_URL") else "not_configured",

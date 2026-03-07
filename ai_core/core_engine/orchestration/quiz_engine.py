@@ -16,6 +16,10 @@ from typing import Any
 
 import requests
 
+from ai_core.core_engine.integrations.internal_api import (
+    internal_service_headers,
+    internal_service_key_configured,
+)
 from ai_core.core_engine.llm.client import LLMClient, LLMClientError
 from ai_core.core_engine.observability.logging import get_logger
 
@@ -65,8 +69,17 @@ def _request_json(
     payload: dict | None = None,
     timeout: float,
 ) -> dict:
+    if not internal_service_key_configured():
+        raise QuizGenerationError("INTERNAL_SERVICE_KEY is not configured for ai-core internal backend calls.")
     try:
-        response = requests.request(method, url, params=params, json=payload, timeout=timeout)
+        response = requests.request(
+            method,
+            url,
+            params=params,
+            json=payload,
+            timeout=timeout,
+            headers=internal_service_headers(),
+        )
     except requests.RequestException as exc:
         raise QuizGenerationError(f"internal request failed for {url}: {exc}") from exc
     if not response.ok:
@@ -415,6 +428,34 @@ def _validate_generated_questions(
     return normalized
 
 
+def _rebalance_answer_positions(
+    questions: list[dict[str, Any]],
+    *,
+    topic_id: uuid.UUID,
+) -> list[dict[str, Any]]:
+    if not questions:
+        return []
+
+    letters = "ABCD"
+    offset = topic_id.int % 4
+    rebalanced: list[dict[str, Any]] = []
+
+    for idx, question in enumerate(questions):
+        current_index = letters.index(str(question["correct_answer"]).upper())
+        desired_index = (offset + idx) % 4
+        options = list(question["options"])
+        correct_option = options.pop(current_index)
+        options.insert(desired_index, correct_option)
+        rebalanced.append(
+            {
+                **question,
+                "options": options,
+                "correct_answer": letters[desired_index],
+            }
+        )
+    return rebalanced
+
+
 async def generate_quiz_questions(
     student_id: uuid.UUID | None,
     subject: str,
@@ -475,6 +516,7 @@ async def generate_quiz_questions(
         difficulty=difficulty,
         num_questions=num_questions,
     )
+    questions = _rebalance_answer_positions(questions, topic_id=topic_id)
     logger.info(
         "quiz.generate.success topic_id=%s subject=%s level=%s term=%s questions=%s concepts=%s rag_chunks=%s lesson_context=%s",
         topic_id,

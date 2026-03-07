@@ -1,9 +1,12 @@
 import uuid
+from types import SimpleNamespace
 
 import pytest
 
 from ai_core.core_engine.orchestration.quiz_engine import (
     QuizGenerationError,
+    _request_json,
+    _rebalance_answer_positions,
     generate_quiz_insights,
     generate_quiz_questions,
 )
@@ -194,3 +197,50 @@ async def test_generate_quiz_insights_returns_list():
     insights = await generate_quiz_insights(quiz_id, attempt_id)
     assert isinstance(insights, list)
     assert len(insights) > 0
+
+
+def test_rebalance_answer_positions_distributes_correct_letters():
+    topic_id = uuid.UUID("00000000-0000-0000-0000-000000000002")
+    questions = [
+        {
+            "id": uuid.uuid4(),
+            "text": f"Question {idx}",
+            "options": [f"Correct {idx}", f"Wrong {idx}B", f"Wrong {idx}C", f"Wrong {idx}D"],
+            "correct_answer": "A",
+            "concept_id": f"civic:sss1:t2:concept-{idx}",
+            "difficulty": "medium",
+            "explanation": "Because it is correct.",
+        }
+        for idx in range(5)
+    ]
+
+    rebalanced = _rebalance_answer_positions(questions, topic_id=topic_id)
+
+    assert [item["correct_answer"] for item in rebalanced] == ["C", "D", "A", "B", "C"]
+    for idx, item in enumerate(rebalanced):
+        correct_index = "ABCD".index(item["correct_answer"])
+        assert item["options"][correct_index] == f"Correct {idx}"
+
+
+def test_request_json_requires_internal_service_key(monkeypatch):
+    monkeypatch.delenv("INTERNAL_SERVICE_KEY", raising=False)
+
+    with pytest.raises(QuizGenerationError, match="INTERNAL_SERVICE_KEY"):
+        _request_json("GET", "http://example.com/internal", timeout=1)
+
+
+def test_request_json_sends_internal_service_header(monkeypatch):
+    monkeypatch.setenv("INTERNAL_SERVICE_KEY", "secret-key")
+
+    captured = {}
+
+    def _fake_request(method, url, params=None, json=None, timeout=None, headers=None):
+        captured["headers"] = headers or {}
+        return SimpleNamespace(ok=True, json=lambda: {"ok": True})
+
+    monkeypatch.setattr("ai_core.core_engine.orchestration.quiz_engine.requests.request", _fake_request)
+
+    response = _request_json("GET", "http://example.com/internal", timeout=1)
+
+    assert response == {"ok": True}
+    assert captured["headers"]["X-Internal-Service-Key"] == "secret-key"
