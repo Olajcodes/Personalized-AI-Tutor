@@ -4,5 +4,8 @@
 __pycache__/
 *.log
 *.db
-
-frontend
+.pytest_cache/
+frontend/node_modules/
+frontend/dist/
+frontend/.firebase/
+frontend/.vite/

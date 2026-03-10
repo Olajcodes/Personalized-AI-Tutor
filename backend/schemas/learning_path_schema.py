@@ -13,6 +13,9 @@ class PathNextIn(BaseModel):
 
 class PathNextOut(BaseModel):
     recommended_topic_id: str | None
+    recommended_topic_title: str | None = None
+    recommended_concept_id: str | None = None
+    recommended_concept_label: str | None = None
     reason: str
     prereq_gaps: list[str]
 
@@ -20,8 +23,12 @@ class PathNextOut(BaseModel):
 class LearningMapNodeOut(BaseModel):
     topic_id: str
     concept_id: str
-    status: Literal["mastered", "current", "locked"]
+    title: str
+    details: str | None = None
+    status: Literal["mastered", "current", "locked", "ready"]
     mastery_score: float
+    concept_label: str | None = None
+    kind: Literal["topic", "concept"] = "topic"
 
 
 class LearningMapVisualOut(BaseModel):

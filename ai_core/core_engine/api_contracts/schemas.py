@@ -48,6 +48,7 @@ class TutorChatRequest(BaseModel):
 class TutorRecommendation(BaseModel):
     type: str
     topic_id: Optional[str] = None
+    topic_title: Optional[str] = None
     reason: str
 
 
@@ -56,6 +57,13 @@ class TutorChatResponse(BaseModel):
     citations: List[Citation] = Field(default_factory=list)
     actions: List[str] = Field(default_factory=list)
     recommendations: List[TutorRecommendation] = Field(default_factory=list)
+    mode: Optional[Literal["teach", "socratic", "diagnose", "drill", "recap", "exam-practice"]] = None
+    key_points: List[str] = Field(default_factory=list)
+    concept_focus: List[str] = Field(default_factory=list)
+    prerequisite_warning: Optional[str] = None
+    next_action: Optional[str] = None
+    recommended_assessment: Optional[str] = None
+    recommended_topic_title: Optional[str] = None
 
 
 class TutorAssessmentStartRequest(BaseModel):
@@ -137,3 +145,41 @@ class TutorExplainMistakeRequest(BaseModel):
 class TutorExplainMistakeResponse(BaseModel):
     explanation: str
     improvement_tip: str
+
+
+class TutorRecapRequest(BaseModel):
+    student_id: str
+    session_id: str
+    subject: Literal["math", "english", "civic"]
+    sss_level: Literal["SSS1", "SSS2", "SSS3"]
+    term: Literal[1, 2, 3]
+    topic_id: str
+
+
+class TutorDrillRequest(BaseModel):
+    student_id: str
+    session_id: str
+    subject: Literal["math", "english", "civic"]
+    sss_level: Literal["SSS1", "SSS2", "SSS3"]
+    term: Literal[1, 2, 3]
+    topic_id: str
+    difficulty: Literal["easy", "medium", "hard"] = "medium"
+
+
+class TutorPrereqBridgeRequest(BaseModel):
+    student_id: str
+    session_id: str
+    subject: Literal["math", "english", "civic"]
+    sss_level: Literal["SSS1", "SSS2", "SSS3"]
+    term: Literal[1, 2, 3]
+    topic_id: str
+
+
+class TutorStudyPlanRequest(BaseModel):
+    student_id: str
+    session_id: str
+    subject: Literal["math", "english", "civic"]
+    sss_level: Literal["SSS1", "SSS2", "SSS3"]
+    term: Literal[1, 2, 3]
+    topic_id: str
+    horizon_days: int = Field(default=7, ge=1, le=21)

@@ -2,13 +2,16 @@
 
 Public endpoints for tutor chat and guided assistance modes:
 - chat
+- session bootstrap
 - hint
 - explain mistake
 """
 
+import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from backend.core.auth import get_current_user
@@ -21,11 +24,18 @@ from backend.schemas.tutor_schema import (
     TutorAssessmentSubmitOut,
     TutorChatIn,
     TutorChatOut,
+    TutorDrillIn,
     TutorExplainMistakeIn,
     TutorExplainMistakeOut,
     TutorHintIn,
     TutorHintOut,
+    TutorPrereqBridgeIn,
+    TutorRecapIn,
+    TutorSessionBootstrapIn,
+    TutorSessionBootstrapOut,
+    TutorStudyPlanIn,
 )
+from backend.services.lesson_experience_service import LessonExperienceService
 from backend.services.tutor_assessment_service import TutorAssessmentService
 from backend.services.tutor_orchestration_service import (
     TutorOrchestrationService,
@@ -46,6 +56,29 @@ def _session_repo(db: Session) -> TutorSessionRepository:
 
 def _assessment_service(db: Session) -> TutorAssessmentService:
     return TutorAssessmentService(db)
+
+
+def _lesson_experience_service(db: Session) -> LessonExperienceService:
+    return LessonExperienceService(db)
+
+
+@router.post("/session/bootstrap", response_model=TutorSessionBootstrapOut, status_code=status.HTTP_200_OK)
+def tutor_session_bootstrap(
+    payload: TutorSessionBootstrapIn,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if payload.student_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="student_id must match authenticated user id",
+        )
+    try:
+        return _lesson_experience_service(db).bootstrap(payload)
+    except TutorProviderUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.post("/chat", response_model=TutorChatOut, status_code=status.HTTP_200_OK)
@@ -91,6 +124,45 @@ async def tutor_chat(
     return response
 
 
+@router.post("/chat/stream", status_code=status.HTTP_200_OK)
+async def tutor_chat_stream(
+    payload: TutorChatIn,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if payload.student_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="student_id must match authenticated user id",
+        )
+
+    repo = _session_repo(db)
+    if not repo.session_exists_for_student(session_id=payload.session_id, student_id=payload.student_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found for this student.")
+
+    repo.add_message(session_id=payload.session_id, role="student", content=payload.message)
+
+    async def event_stream():
+        yield "event: status\ndata: " + json.dumps({"phase": "retrieving_context"}) + "\n\n"
+        try:
+            response = await _service().chat(payload)
+        except TutorProviderUnavailableError as exc:
+            yield "event: error\ndata: " + json.dumps({"detail": str(exc)}) + "\n\n"
+            return
+
+        assistant_message = (
+            response.assistant_message
+            if hasattr(response, "assistant_message")
+            else str(response.get("assistant_message", ""))
+        )
+        repo.add_message(session_id=payload.session_id, role="assistant", content=assistant_message)
+        yield "event: status\ndata: " + json.dumps({"phase": "composing_response"}) + "\n\n"
+        yield "event: message\ndata: " + json.dumps(response.model_dump()) + "\n\n"
+        yield "event: done\ndata: {}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
 @router.post("/assessment/start", response_model=TutorAssessmentStartOut, status_code=status.HTTP_200_OK)
 async def tutor_assessment_start(
     payload: TutorAssessmentStartIn,
@@ -108,7 +180,9 @@ async def tutor_assessment_start(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found for this student.")
 
     try:
-        return await _assessment_service(db).start_assessment(payload)
+        response = await _assessment_service(db).start_assessment(payload)
+        LessonExperienceService.invalidate_session_cache(session_id=payload.session_id)
+        return response
     except TutorProviderUnavailableError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
 
@@ -130,7 +204,77 @@ async def tutor_assessment_submit(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found for this student.")
 
     try:
-        return await _assessment_service(db).submit_assessment(payload)
+        response = await _assessment_service(db).submit_assessment(payload)
+        LessonExperienceService.invalidate_session_cache(session_id=payload.session_id)
+        return response
+    except TutorProviderUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+
+
+@router.post("/recap", response_model=TutorChatOut, status_code=status.HTTP_200_OK)
+async def tutor_recap(
+    payload: TutorRecapIn,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if payload.student_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="student_id must match authenticated user id")
+    repo = _session_repo(db)
+    if not repo.session_exists_for_student(session_id=payload.session_id, student_id=payload.student_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found for this student.")
+    try:
+        return await _service().recap(payload)
+    except TutorProviderUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+
+
+@router.post("/drill", response_model=TutorChatOut, status_code=status.HTTP_200_OK)
+async def tutor_drill(
+    payload: TutorDrillIn,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if payload.student_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="student_id must match authenticated user id")
+    repo = _session_repo(db)
+    if not repo.session_exists_for_student(session_id=payload.session_id, student_id=payload.student_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found for this student.")
+    try:
+        return await _service().drill(payload)
+    except TutorProviderUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+
+
+@router.post("/prereq-bridge", response_model=TutorChatOut, status_code=status.HTTP_200_OK)
+async def tutor_prereq_bridge(
+    payload: TutorPrereqBridgeIn,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if payload.student_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="student_id must match authenticated user id")
+    repo = _session_repo(db)
+    if not repo.session_exists_for_student(session_id=payload.session_id, student_id=payload.student_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found for this student.")
+    try:
+        return await _service().prereq_bridge(payload)
+    except TutorProviderUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+
+
+@router.post("/study-plan", response_model=TutorChatOut, status_code=status.HTTP_200_OK)
+async def tutor_study_plan(
+    payload: TutorStudyPlanIn,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if payload.student_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="student_id must match authenticated user id")
+    repo = _session_repo(db)
+    if not repo.session_exists_for_student(session_id=payload.session_id, student_id=payload.student_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found for this student.")
+    try:
+        return await _service().study_plan(payload)
     except TutorProviderUnavailableError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
 

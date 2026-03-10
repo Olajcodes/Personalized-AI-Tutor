@@ -143,13 +143,23 @@ class RagRetriever:
             if approved_only:
                 must_conditions.append(FieldCondition(key="approved", match=MatchValue(value=True)))
 
-            response = client.search(
-                collection_name=self.qdrant_collection,
-                query_vector=query_vector,
-                query_filter=Filter(must=must_conditions),
-                with_payload=True,
-                limit=top_k,
-            )
+            search_kwargs = {
+                "collection_name": self.qdrant_collection,
+                "query_filter": Filter(must=must_conditions),
+                "with_payload": True,
+                "limit": top_k,
+            }
+            if hasattr(client, "search"):
+                response = client.search(
+                    query_vector=query_vector,
+                    **search_kwargs,
+                )
+            else:
+                query_response = client.query_points(
+                    query=query_vector,
+                    **search_kwargs,
+                )
+                response = list(getattr(query_response, "points", []) or [])
         except Exception as exc:
             raise RagRetrieverError(f"Qdrant retrieval failed: {exc}") from exc
 

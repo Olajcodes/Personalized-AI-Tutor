@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from backend.models.student_concept_mastery import StudentConceptMastery
 from backend.repositories.lesson_repo import (
     ensure_personalized_lessons_table,
+    get_lesson_with_blocks,
     get_personalized_lesson,
     get_student_profile,
     get_topic_with_subject,
@@ -114,6 +115,39 @@ def _normalize_generated_blocks(raw_blocks: Any) -> list[dict]:
                 continue
         normalized.append({"type": block_type, "value": value})
 
+    return normalized
+
+
+def _map_legacy_lesson_blocks(lesson: Any) -> list[dict]:
+    blocks = sorted(
+        list(getattr(lesson, "blocks", []) or []),
+        key=lambda item: int(getattr(item, "order_index", 0) or 0),
+    )
+    normalized: list[dict] = []
+    for block in blocks:
+        block_type = str(getattr(block, "block_type", "") or "").strip().lower()
+        payload = getattr(block, "content", None) or {}
+        if block_type not in ALLOWED_BLOCK_TYPES:
+            continue
+        if block_type in {"video", "image"}:
+            url = ""
+            if isinstance(payload, dict):
+                url = str(payload.get("url") or payload.get("value") or "").strip()
+            elif payload is not None:
+                url = str(payload).strip()
+            if url:
+                normalized.append({"type": block_type, "url": url})
+            continue
+
+        value: Any = payload
+        if isinstance(payload, dict):
+            value = payload.get("text")
+            if value is None and "value" in payload:
+                value = payload.get("value")
+        if isinstance(value, str):
+            value = _normalize_text(value)
+        if value:
+            normalized.append({"type": block_type, "value": value})
     return normalized
 
 
@@ -589,6 +623,25 @@ def fetch_topic_lesson(db: Session, topic_id: uuid.UUID, student_id: uuid.UUID) 
     if not student_enrolled_in_subject(db, student_profile.id, topic.subject_id):
         raise ForbiddenLessonAccess("Student is not enrolled in this subject.")
 
+    # Legacy path for static lesson content when curriculum-backed generation has not been linked yet.
+    if not getattr(topic, "curriculum_version_id", None):
+        lesson = get_lesson_with_blocks(db, topic.id)
+        if lesson is None:
+            raise LessonNotFound("Lesson not found")
+        return {
+            "topic_id": str(topic.id),
+            "title": str(getattr(lesson, "title", topic.title)),
+            "summary": None,
+            "estimated_duration_minutes": None,
+            "content_blocks": _map_legacy_lesson_blocks(lesson),
+            "covered_concepts": [],
+            "prerequisites": [],
+            "weakest_concepts": [],
+            "next_unlock": None,
+            "why_this_matters": None,
+            "assessment_ready": False,
+        }
+
     ensure_personalized_lessons_table(db)
     mastery_rows = _get_mastery_rows(
         db,
@@ -601,6 +654,21 @@ def fetch_topic_lesson(db: Session, topic_id: uuid.UUID, student_id: uuid.UUID) 
     curriculum_version_id = topic.curriculum_version_id
 
     cached = get_personalized_lesson(db, student_id=student_id, topic_id=topic.id)
+    graph_context = None
+    try:
+        from backend.services.lesson_graph_service import lesson_graph_service
+
+        graph_context = lesson_graph_service.get_lesson_graph_context(
+            db,
+            student_id=student_id,
+            subject=subject_slug,
+            sss_level=student_profile.sss_level,
+            term=int(student_profile.active_term),
+            topic_id=topic.id,
+        )
+    except Exception as exc:  # pragma: no cover - lesson should still load if graph view is unavailable
+        logger.warning("lesson.fetch.graph_context_unavailable topic_id=%s student_id=%s detail=%s", topic.id, student_id, exc)
+
     if cached is not None:
         cached_meta = dict(cached.generation_metadata or {})
         if (
@@ -610,12 +678,42 @@ def fetch_topic_lesson(db: Session, topic_id: uuid.UUID, student_id: uuid.UUID) 
             and isinstance(cached.content_blocks, list)
             and cached.content_blocks
         ):
+            covered_concepts = []
+            if graph_context is not None:
+                current_ids = {
+                    str(item.concept_id)
+                    for item in graph_context.current_concepts
+                }
+                for concept_id in list(cached_meta.get("covered_concept_ids") or []):
+                    if concept_id not in current_ids:
+                        continue
+                    node = next(
+                        (item for item in graph_context.current_concepts if str(item.concept_id) == str(concept_id)),
+                        None,
+                    )
+                    covered_concepts.append(
+                        {
+                            "concept_id": str(concept_id),
+                            "label": (
+                                cached_meta.get("covered_concept_labels", {}).get(str(concept_id))
+                                or (node.label if node else str(concept_id))
+                            ),
+                            "mastery_score": node.mastery_score if node else None,
+                            "mastery_state": node.mastery_state if node else None,
+                        }
+                    )
             return {
                 "topic_id": str(topic.id),
                 "title": cached.title,
                 "summary": cached.summary,
                 "estimated_duration_minutes": cached.estimated_duration_minutes,
                 "content_blocks": list(cached.content_blocks),
+                "covered_concepts": covered_concepts,
+                "prerequisites": list(getattr(graph_context, "prerequisite_concepts", []) or []),
+                "weakest_concepts": list(getattr(graph_context, "weakest_concepts", []) or []),
+                "next_unlock": getattr(graph_context, "next_unlock", None),
+                "why_this_matters": getattr(graph_context, "why_this_matters", None),
+                "assessment_ready": bool(getattr(graph_context, "current_concepts", []) or []),
             }
 
     generated = _generate_personalized_lesson(
@@ -652,10 +750,41 @@ def fetch_topic_lesson(db: Session, topic_id: uuid.UUID, student_id: uuid.UUID) 
     )
     db.commit()
 
+    covered_concepts = []
+    if graph_context is not None:
+        current_ids = {
+            str(item.concept_id)
+            for item in graph_context.current_concepts
+        }
+        for concept_id in list(metadata.get("covered_concept_ids") or []):
+            if concept_id not in current_ids:
+                continue
+            node = next(
+                (item for item in graph_context.current_concepts if str(item.concept_id) == str(concept_id)),
+                None,
+            )
+            covered_concepts.append(
+                {
+                    "concept_id": str(concept_id),
+                    "label": (
+                        metadata.get("covered_concept_labels", {}).get(str(concept_id))
+                        or (node.label if node else str(concept_id))
+                    ),
+                    "mastery_score": node.mastery_score if node else None,
+                    "mastery_state": node.mastery_state if node else None,
+                }
+            )
+
     return {
         "topic_id": str(topic.id),
         "title": str(generated["title"]),
         "summary": generated["summary"],
         "estimated_duration_minutes": int(generated["estimated_duration_minutes"]),
         "content_blocks": list(generated["content_blocks"]),
+        "covered_concepts": covered_concepts,
+        "prerequisites": list(getattr(graph_context, "prerequisite_concepts", []) or []),
+        "weakest_concepts": list(getattr(graph_context, "weakest_concepts", []) or []),
+        "next_unlock": getattr(graph_context, "next_unlock", None),
+        "why_this_matters": getattr(graph_context, "why_this_matters", None),
+        "assessment_ready": bool(getattr(graph_context, "current_concepts", []) or []),
     }

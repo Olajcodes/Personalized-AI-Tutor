@@ -1,0 +1,196 @@
+import React, { useMemo } from 'react';
+import { motion } from 'framer-motion';
+import { ArrowRight, GitBranch } from 'lucide-react';
+
+const ROLE_X = {
+  prerequisite: 136,
+  current: 360,
+  downstream: 584,
+};
+
+const ROLE_LABEL = {
+  prerequisite: 'Build First',
+  current: 'You Are Here',
+  downstream: 'Unlocks Next',
+};
+
+const MASTERY_TONE = {
+  demonstrated: {
+    node: '#10b981',
+    halo: 'rgba(16, 185, 129, 0.18)',
+    fill: '#ecfdf5',
+    text: '#065f46',
+  },
+  needs_review: {
+    node: '#f59e0b',
+    halo: 'rgba(245, 158, 11, 0.18)',
+    fill: '#fffbeb',
+    text: '#92400e',
+  },
+  unassessed: {
+    node: '#64748b',
+    halo: 'rgba(100, 116, 139, 0.14)',
+    fill: '#f8fafc',
+    text: '#334155',
+  },
+};
+
+const roleOrder = ['prerequisite', 'current', 'downstream'];
+
+const safeArray = (value) => (Array.isArray(value) ? value : []);
+
+function wrapLabel(label) {
+  const words = String(label || '').split(/\s+/).filter(Boolean);
+  const lines = [];
+  let current = '';
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > 18 && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  }
+
+  if (current) lines.push(current);
+  return lines.slice(0, 3);
+}
+
+function buildLayout(graphContext) {
+  const grouped = {
+    prerequisite: safeArray(graphContext?.prerequisite_concepts),
+    current: safeArray(graphContext?.current_concepts),
+    downstream: safeArray(graphContext?.downstream_concepts),
+  };
+
+  const positions = {};
+  const nodes = [];
+
+  roleOrder.forEach((role) => {
+    const column = grouped[role];
+    const total = Math.max(column.length, 1);
+    const startY = total === 1 ? 180 : Math.max(118, 210 - ((total - 1) * 84) / 2);
+
+    column.forEach((node, index) => {
+      const x = ROLE_X[role];
+      const y = startY + (index * 84);
+      positions[node.concept_id] = { x, y, role };
+      nodes.push({ ...node, x, y });
+    });
+  });
+
+  const renderedEdges = safeArray(graphContext?.graph_edges)
+    .filter((edge) => positions[edge.source_concept_id] && positions[edge.target_concept_id])
+    .map((edge) => {
+      const from = positions[edge.source_concept_id];
+      const to = positions[edge.target_concept_id];
+      const curveOffset = Math.max(46, Math.abs(to.x - from.x) * 0.32);
+      return {
+        ...edge,
+        d: `M ${from.x + 48} ${from.y} C ${from.x + curveOffset} ${from.y}, ${to.x - curveOffset} ${to.y}, ${to.x - 48} ${to.y}`,
+      };
+    });
+
+  return { grouped, nodes, renderedEdges };
+}
+
+export default function LessonKnowledgeGraph({ graphContext, nextUnlock }) {
+  const { grouped, nodes, renderedEdges } = useMemo(() => buildLayout(graphContext), [graphContext]);
+
+  return (
+    <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <GitBranch className="text-indigo-600" size={18} />
+          <div>
+            <h2 className="text-sm font-black uppercase tracking-[0.2em] text-slate-600">Knowledge Graph Rail</h2>
+            <p className="text-xs text-slate-500">Live prerequisite flow around this lesson</p>
+          </div>
+        </div>
+        <div className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-700">
+          Neo4j-backed
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-[1.5rem] border border-slate-100 bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_100%)] px-3 py-4">
+        <div className="mb-3 grid grid-cols-3 gap-2 px-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+          {roleOrder.map((role) => (
+            <div key={role} className="text-center">{ROLE_LABEL[role]}</div>
+          ))}
+        </div>
+
+        <svg viewBox="0 0 720 360" className="h-[360px] w-full">
+          <defs>
+            <linearGradient id="graphEdge" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#94a3b8" stopOpacity="0.36" />
+              <stop offset="50%" stopColor="#6366f1" stopOpacity="0.7" />
+              <stop offset="100%" stopColor="#22c55e" stopOpacity="0.44" />
+            </linearGradient>
+          </defs>
+
+          {renderedEdges.map((edge, index) => (
+            <motion.path
+              key={`${edge.source_concept_id}-${edge.target_concept_id}`}
+              d={edge.d}
+              fill="none"
+              stroke="url(#graphEdge)"
+              strokeWidth="3"
+              strokeLinecap="round"
+              initial={{ pathLength: 0, opacity: 0 }}
+              animate={{ pathLength: 1, opacity: 1 }}
+              transition={{ duration: 0.65, delay: index * 0.06 }}
+            />
+          ))}
+
+          {nodes.map((node, index) => {
+            const tone = MASTERY_TONE[node.mastery_state] || MASTERY_TONE.unassessed;
+            const labelLines = wrapLabel(node.label);
+            return (
+              <motion.g
+                key={node.concept_id}
+                initial={{ opacity: 0, scale: 0.92, y: 12 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.34, delay: index * 0.05 }}
+              >
+                <motion.circle
+                  cx={node.x}
+                  cy={node.y}
+                  r={node.role === 'current' ? 42 : 34}
+                  fill={tone.halo}
+                  animate={node.role === 'current' ? { scale: [1, 1.08, 1] } : { scale: 1 }}
+                  transition={node.role === 'current' ? { repeat: Infinity, duration: 2.4, ease: 'easeInOut' } : undefined}
+                  style={{ transformOrigin: `${node.x}px ${node.y}px` }}
+                />
+                <circle cx={node.x} cy={node.y} r={node.role === 'current' ? 34 : 28} fill={tone.fill} stroke={tone.node} strokeWidth="2.4" />
+                <text x={node.x} y={node.y - 5} textAnchor="middle" fontSize="11" fontWeight="800" fill={tone.text}>
+                  {labelLines.map((line, lineIndex) => (
+                    <tspan key={`${node.concept_id}-${lineIndex}`} x={node.x} dy={lineIndex === 0 ? 0 : 13}>{line}</tspan>
+                  ))}
+                </text>
+                <text x={node.x} y={node.y + 34} textAnchor="middle" fontSize="10" fontWeight="700" fill="#475569">
+                  {Math.round((node.mastery_score || 0) * 100)}% mastery
+                </text>
+              </motion.g>
+            );
+          })}
+        </svg>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto_1fr]">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600">Weak prerequisite</p>
+          <p className="mt-1 font-semibold">{grouped.prerequisite[0]?.label || 'No blocking prerequisite detected yet.'}</p>
+        </div>
+        <div className="flex items-center justify-center text-slate-300">
+          <ArrowRight size={18} />
+        </div>
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">Unlocked next</p>
+          <p className="mt-1 font-semibold">{nextUnlock?.topic_title || nextUnlock?.concept_label || 'Stay with this concept cluster a bit longer.'}</p>
+        </div>
+      </div>
+    </div>
+  );
+}

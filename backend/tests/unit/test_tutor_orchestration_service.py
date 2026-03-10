@@ -29,7 +29,8 @@ async def test_chat_fallback_when_provider_unconfigured(monkeypatch):
     )
 
     assert out.assistant_message
-    assert "UPDATED_MASTERY_BASIC" in out.actions
+    assert "FALLBACK_GUIDANCE_ONLY" in out.actions
+    assert "UPDATED_MASTERY_BASIC" not in out.actions
 
 
 @pytest.mark.anyio

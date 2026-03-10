@@ -5,6 +5,14 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from backend.schemas.graph_learning_schema import (
+    GraphConceptEdgeOut,
+    GraphConceptNodeOut,
+    GraphNextStepOut,
+    LessonGraphContextOut,
+)
+from backend.schemas.lesson_schema import TopicLessonResponse
+
 
 class TutorCitationOut(BaseModel):
     source_id: str
@@ -15,6 +23,7 @@ class TutorCitationOut(BaseModel):
 class TutorRecommendationOut(BaseModel):
     type: str
     topic_id: str | None = None
+    topic_title: str | None = None
     reason: str
 
 
@@ -33,6 +42,101 @@ class TutorChatOut(BaseModel):
     citations: list[TutorCitationOut] = Field(default_factory=list)
     actions: list[str] = Field(default_factory=list)
     recommendations: list[TutorRecommendationOut] = Field(default_factory=list)
+    mode: Literal["teach", "socratic", "diagnose", "drill", "recap", "exam-practice"] | None = None
+    key_points: list[str] = Field(default_factory=list)
+    concept_focus: list[str] = Field(default_factory=list)
+    prerequisite_warning: str | None = None
+    next_action: str | None = None
+    recommended_assessment: str | None = None
+    recommended_topic_title: str | None = None
+
+
+class TutorQuickActionOut(BaseModel):
+    id: str
+    label: str
+    prompt: str
+    icon: str
+    intent: Literal[
+        "teach",
+        "socratic",
+        "diagnose",
+        "drill",
+        "recap",
+        "exam-practice",
+        "assessment_start",
+    ]
+
+
+class TutorPendingAssessmentOut(BaseModel):
+    assessment_id: UUID
+    question: str
+    concept_id: str
+    concept_label: str
+    hint: str | None = None
+    difficulty: str | None = None
+
+
+class TutorSessionBootstrapIn(BaseModel):
+    student_id: UUID
+    subject: Literal["math", "english", "civic"]
+    sss_level: Literal["SSS1", "SSS2", "SSS3"]
+    term: Literal[1, 2, 3]
+    topic_id: UUID
+    session_id: UUID | None = None
+
+
+class TutorSessionBootstrapOut(BaseModel):
+    session_id: UUID
+    session_started: bool = False
+    greeting: str
+    topic_id: UUID
+    lesson: TopicLessonResponse
+    graph_context: LessonGraphContextOut
+    suggested_actions: list[TutorQuickActionOut] = Field(default_factory=list)
+    pending_assessment: TutorPendingAssessmentOut | None = None
+    next_unlock: GraphNextStepOut | None = None
+    why_this_topic: str | None = None
+    graph_nodes: list[GraphConceptNodeOut] = Field(default_factory=list)
+    graph_edges: list[GraphConceptEdgeOut] = Field(default_factory=list)
+    assessment_ready: bool = False
+
+
+class TutorRecapIn(BaseModel):
+    student_id: UUID
+    session_id: UUID
+    subject: Literal["math", "english", "civic"]
+    sss_level: Literal["SSS1", "SSS2", "SSS3"]
+    term: Literal[1, 2, 3]
+    topic_id: UUID
+
+
+class TutorDrillIn(BaseModel):
+    student_id: UUID
+    session_id: UUID
+    subject: Literal["math", "english", "civic"]
+    sss_level: Literal["SSS1", "SSS2", "SSS3"]
+    term: Literal[1, 2, 3]
+    topic_id: UUID
+    difficulty: Literal["easy", "medium", "hard"] = "medium"
+
+
+class TutorPrereqBridgeIn(BaseModel):
+    student_id: UUID
+    session_id: UUID
+    subject: Literal["math", "english", "civic"]
+    sss_level: Literal["SSS1", "SSS2", "SSS3"]
+    term: Literal[1, 2, 3]
+    topic_id: UUID
+
+
+class TutorStudyPlanIn(BaseModel):
+    student_id: UUID
+    session_id: UUID
+    subject: Literal["math", "english", "civic"]
+    sss_level: Literal["SSS1", "SSS2", "SSS3"]
+    term: Literal[1, 2, 3]
+    topic_id: UUID
+    horizon_days: int = Field(default=7, ge=1, le=21)
 
 
 class TutorAssessmentStartIn(BaseModel):

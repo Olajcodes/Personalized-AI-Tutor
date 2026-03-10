@@ -62,6 +62,17 @@ class TutorAssessmentService:
             return UUID(str(row["id"])), state
         return None
 
+    def get_pending_assessment(self, *, session_id: UUID) -> dict | None:
+        history = self.repo.get_session_history(session_id=session_id)
+        for row in reversed(history):
+            state = self._decode_state(str(row.get("content") or ""))
+            if not state:
+                continue
+            if str(state.get("status") or "").strip().lower() != "pending":
+                continue
+            return state
+        return None
+
     @staticmethod
     def _assessment_weight(score: float) -> tuple[bool, float]:
         if score >= 0.8:

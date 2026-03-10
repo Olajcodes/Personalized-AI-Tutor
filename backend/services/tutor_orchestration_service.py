@@ -13,11 +13,15 @@ from backend.schemas.tutor_schema import (
     TutorAssessmentSubmitOut,
     TutorChatIn,
     TutorChatOut,
+    TutorDrillIn,
     TutorExplainMistakeIn,
     TutorExplainMistakeOut,
     TutorHintIn,
     TutorHintOut,
+    TutorPrereqBridgeIn,
+    TutorRecapIn,
     TutorRecommendationOut,
+    TutorStudyPlanIn,
 )
 
 
@@ -48,12 +52,15 @@ class TutorOrchestrationService:
         )
         return TutorChatOut(
             assistant_message=(
-                f"Let's work through this together. For {payload.subject.upper()} ({payload.sss_level}, term {payload.term}), "
-                "start by identifying the core rule, then apply it to one simple example."
+                "Tutor provider unavailable right now. "
+                f"Stay on {payload.subject.upper()} ({payload.sss_level}, term {payload.term}) and focus on one concrete example before moving on."
             ),
             citations=[],
-            actions=["UPDATED_MASTERY_BASIC"],
+            actions=["FALLBACK_GUIDANCE_ONLY"],
             recommendations=[recommendation],
+            mode="teach",
+            key_points=["Use one worked example before trying a harder question."],
+            next_action="Try the lesson checkpoint or ask for one simpler example.",
         )
 
     @staticmethod
@@ -102,6 +109,23 @@ class TutorOrchestrationService:
                 f"The expected answer is '{payload.correct_answer}', while you selected '{payload.student_answer}'."
             ),
             improvement_tip="State the governing rule first, then re-check each option against that rule.",
+        )
+
+    @staticmethod
+    def _fallback_mode_response(*, message: str, action: str, topic_id: str | None) -> TutorChatOut:
+        return TutorChatOut(
+            assistant_message=message,
+            citations=[],
+            actions=[action, "FALLBACK_GUIDANCE_ONLY"],
+            recommendations=[
+                TutorRecommendationOut(
+                    type="next_topic",
+                    topic_id=topic_id,
+                    reason="Stay on the active topic and complete one focused checkpoint before moving on.",
+                )
+            ],
+            key_points=["Use the lesson content and active graph hints to keep your revision focused."],
+            next_action="Ask the tutor for a checkpoint question or recap this lesson in three points.",
         )
 
     async def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -230,6 +254,92 @@ class TutorOrchestrationService:
             if not self.allow_fallback:
                 raise
             return self._fallback_hint(payload)
+
+    async def recap(self, payload: TutorRecapIn) -> TutorChatOut:
+        request_payload = {
+            "student_id": str(payload.student_id),
+            "session_id": str(payload.session_id),
+            "subject": payload.subject,
+            "sss_level": payload.sss_level,
+            "term": payload.term,
+            "topic_id": str(payload.topic_id),
+        }
+        try:
+            data = await self._post("/tutor/recap", request_payload)
+            return TutorChatOut.model_validate(data)
+        except (TutorProviderUnavailableError, TutorProviderContractError):
+            if not self.allow_fallback:
+                raise
+            return self._fallback_mode_response(
+                message="Recap unavailable right now. Re-read the summary, then state the topic in three short points from memory.",
+                action="RECAP_FALLBACK",
+                topic_id=str(payload.topic_id),
+            )
+
+    async def drill(self, payload: TutorDrillIn) -> TutorChatOut:
+        request_payload = {
+            "student_id": str(payload.student_id),
+            "session_id": str(payload.session_id),
+            "subject": payload.subject,
+            "sss_level": payload.sss_level,
+            "term": payload.term,
+            "topic_id": str(payload.topic_id),
+            "difficulty": payload.difficulty,
+        }
+        try:
+            data = await self._post("/tutor/drill", request_payload)
+            return TutorChatOut.model_validate(data)
+        except (TutorProviderUnavailableError, TutorProviderContractError):
+            if not self.allow_fallback:
+                raise
+            return self._fallback_mode_response(
+                message="Drill mode is unavailable right now. Write one short answer to the lesson's main concept and self-check it against the worked example.",
+                action="DRILL_FALLBACK",
+                topic_id=str(payload.topic_id),
+            )
+
+    async def prereq_bridge(self, payload: TutorPrereqBridgeIn) -> TutorChatOut:
+        request_payload = {
+            "student_id": str(payload.student_id),
+            "session_id": str(payload.session_id),
+            "subject": payload.subject,
+            "sss_level": payload.sss_level,
+            "term": payload.term,
+            "topic_id": str(payload.topic_id),
+        }
+        try:
+            data = await self._post("/tutor/prereq-bridge", request_payload)
+            return TutorChatOut.model_validate(data)
+        except (TutorProviderUnavailableError, TutorProviderContractError):
+            if not self.allow_fallback:
+                raise
+            return self._fallback_mode_response(
+                message="Prerequisite bridge is unavailable right now. Step back to the foundational rule that feeds this lesson and explain it in your own words.",
+                action="PREREQ_BRIDGE_FALLBACK",
+                topic_id=str(payload.topic_id),
+            )
+
+    async def study_plan(self, payload: TutorStudyPlanIn) -> TutorChatOut:
+        request_payload = {
+            "student_id": str(payload.student_id),
+            "session_id": str(payload.session_id),
+            "subject": payload.subject,
+            "sss_level": payload.sss_level,
+            "term": payload.term,
+            "topic_id": str(payload.topic_id),
+            "horizon_days": payload.horizon_days,
+        }
+        try:
+            data = await self._post("/tutor/study-plan", request_payload)
+            return TutorChatOut.model_validate(data)
+        except (TutorProviderUnavailableError, TutorProviderContractError):
+            if not self.allow_fallback:
+                raise
+            return self._fallback_mode_response(
+                message="Study-plan generation is unavailable right now. Do one recap, one checkpoint, and one revision quiz on this topic over the next two days.",
+                action="STUDY_PLAN_FALLBACK",
+                topic_id=str(payload.topic_id),
+            )
 
     async def explain_mistake(self, payload: TutorExplainMistakeIn) -> TutorExplainMistakeOut:
         request_payload = {

@@ -23,13 +23,17 @@ from ai_core.core_engine.api_contracts.schemas import (
     TutorAssessmentSubmitResponse,
     TutorChatRequest,
     TutorChatResponse,
+    TutorDrillRequest,
     TutorExplainMistakeRequest,
     TutorExplainMistakeResponse,
     TutorHintRequest,
     TutorHintResponse,
+    TutorPrereqBridgeRequest,
+    TutorRecapRequest,
     TutorRecommendation,
     TutorRequest,
     TutorResponse,
+    TutorStudyPlanRequest,
 )
 from ai_core.core_engine.integrations.internal_api import (
     internal_service_headers,
@@ -726,6 +730,340 @@ def _chat_prompt(
     )
 
 
+def _infer_tutor_mode_from_message(message: str) -> str:
+    text = (message or "").strip().lower()
+    if any(phrase in text for phrase in ("waec", "exam", "past question")):
+        return "exam-practice"
+    if any(phrase in text for phrase in ("recap", "summary", "summarize", "revise")):
+        return "recap"
+    if any(phrase in text for phrase in ("drill", "practice", "harder one")):
+        return "drill"
+    if any(phrase in text for phrase in ("why am i learning", "prerequisite", "previous topic", "bridge")):
+        return "diagnose"
+    if any(phrase in text for phrase in ("ask me a question", "quiz me", "test me")):
+        return "socratic"
+    return "teach"
+
+
+def _weak_concept_labels(graph_context: dict | None, lesson_context: dict | None, *, limit: int = 3) -> list[str]:
+    covered_ids = set(_lesson_covered_concept_ids(lesson_context))
+    rows = [
+        row
+        for row in list((graph_context or {}).get("mastery") or [])
+        if isinstance(row, dict)
+        and (not covered_ids or str(row.get("concept_id") or "") in covered_ids)
+    ]
+    ranked = sorted(rows, key=lambda row: _clamp_score(row.get("score")))[:limit]
+    labels = _lesson_concept_label_map(lesson_context)
+    return [
+        labels.get(str(row.get("concept_id") or "")) or _readable_concept_label(str(row.get("concept_id") or ""))
+        for row in ranked
+        if str(row.get("concept_id") or "").strip()
+    ]
+
+
+def _recommendations_from_graph(
+    *,
+    request: TutorChatRequest,
+    graph_context: dict | None,
+) -> list[TutorRecommendation]:
+    recommendations: list[TutorRecommendation] = []
+    next_unlock = dict((graph_context or {}).get("next_unlock") or {})
+    next_topic_id = str(next_unlock.get("topic_id") or request.topic_id or "").strip() or None
+    next_topic_title = str(next_unlock.get("topic_title") or "").strip() or None
+    reason = str(next_unlock.get("reason") or "").strip() or (
+        "Stay on the current lesson and close the weakest gaps before moving to a new topic."
+    )
+    recommendations.append(
+        TutorRecommendation(
+            type="next_topic",
+            topic_id=next_topic_id,
+            topic_title=next_topic_title,
+            reason=reason,
+        )
+    )
+    return recommendations
+
+
+def _structured_tutor_prompt(
+    *,
+    mode: str,
+    user_goal: str,
+    request: TutorChatRequest,
+    citations: list[Citation],
+    profile_context: dict | None,
+    history_context: dict | None,
+    lesson_context: dict | None,
+    graph_context: dict | None,
+) -> str:
+    lesson_title = str((lesson_context or {}).get("title") or "").strip() or "No persisted lesson title"
+    lesson_summary = str((lesson_context or {}).get("summary") or "").strip() or "No persisted lesson summary."
+    covered_concepts_block = "\n".join(_lesson_covered_concept_lines(lesson_context)) or "- No explicit lesson concept coverage metadata."
+    lesson_block = "\n".join(_lesson_context_block_lines(lesson_context)) or "- No persisted lesson body available."
+    profile_block = "\n".join(_profile_context_lines(profile_context)) or "- No profile preferences available."
+    history_block = "\n".join(_history_context_lines(history_context)) or "- No prior tutor history."
+    graph_block = "\n".join(_graph_context_lines(graph_context, lesson_context)) or "- No graph/mastery context available."
+    citations_block = _citations_block(citations)
+    mode_guidance = {
+        "teach": "Explain clearly, stepwise, and with one concrete example.",
+        "socratic": "Ask one guiding question first, then give a short nudge instead of a full lecture.",
+        "diagnose": "Explain why this topic matters now, point out weak prerequisite links, and name the next best action.",
+        "drill": "Generate one short drill prompt and a compact coaching answer around it.",
+        "recap": "Compress the topic into three sharp points and one memory hook.",
+        "exam-practice": "Coach the learner in WAEC style: exam-focused, precise, and time-aware.",
+    }.get(mode, "Explain clearly and stay grounded.")
+    return (
+        "You are Mastery AI, a graph-aware tutor for Nigerian SSS learners.\n"
+        "Return JSON only.\n"
+        "Use lesson context as primary grounding, graph/mastery context as adaptive guidance, and retrieved chunks as evidence.\n"
+        "Do not fabricate facts, sources, or topic progression.\n"
+        "Never claim mastery updates happened.\n"
+        "Do not mention internal IDs in visible text.\n\n"
+        f"Mode: {mode}\n"
+        f"Mode guidance: {mode_guidance}\n"
+        f"Student goal: {user_goal}\n"
+        f"Scope: subject={request.subject}, level={request.sss_level}, term={request.term}\n"
+        f"Current lesson title: {lesson_title}\n"
+        f"Current lesson summary: {lesson_summary}\n\n"
+        f"Lesson covered concepts:\n{covered_concepts_block}\n\n"
+        f"Lesson body:\n{lesson_block}\n\n"
+        f"Student profile:\n{profile_block}\n\n"
+        f"Recent tutor history:\n{history_block}\n\n"
+        f"Graph / mastery context:\n{graph_block}\n\n"
+        f"Retrieved citations:\n{citations_block}\n\n"
+        "Return EXACT JSON shape:\n"
+        "{\n"
+        '  "assistant_message": "string",\n'
+        '  "key_points": ["string"],\n'
+        '  "concept_focus": ["string"],\n'
+        '  "prerequisite_warning": "string or empty",\n'
+        '  "next_action": "string",\n'
+        '  "recommended_assessment": "string or empty"\n'
+        "}\n"
+        "Rules:\n"
+        "- assistant_message must be engaging and concise, not generic.\n"
+        "- key_points should contain 2 to 4 short bullets.\n"
+        "- concept_focus should name the most relevant concepts in readable language.\n"
+        "- prerequisite_warning should be empty if not needed.\n"
+        "- next_action must tell the student exactly what to do next.\n"
+        "- recommended_assessment should suggest one check if useful, else empty.\n"
+    )
+
+
+def _validate_structured_tutor_payload(
+    parsed: dict | None,
+    *,
+    mode: str,
+    request: TutorChatRequest,
+    citations: list[Citation],
+    actions: list[str],
+    graph_context: dict | None,
+    lesson_context: dict | None,
+) -> TutorChatResponse:
+    if not parsed:
+        raise RuntimeError("tutor generation returned invalid JSON")
+    assistant_message = " ".join(str(parsed.get("assistant_message") or "").split()).strip()
+    if not assistant_message:
+        raise RuntimeError("tutor generation returned empty assistant message")
+    key_points = [
+        " ".join(str(item).split()).strip()
+        for item in list(parsed.get("key_points") or [])
+        if " ".join(str(item).split()).strip()
+    ][:4]
+    concept_focus = [
+        " ".join(str(item).split()).strip()
+        for item in list(parsed.get("concept_focus") or [])
+        if " ".join(str(item).split()).strip()
+    ][:4]
+    if not concept_focus:
+        concept_focus = _weak_concept_labels(graph_context, lesson_context) or _lesson_covered_concept_lines(lesson_context, max_items=3)
+    prerequisite_warning = " ".join(str(parsed.get("prerequisite_warning") or "").split()).strip() or None
+    next_action = " ".join(str(parsed.get("next_action") or "").split()).strip() or None
+    recommended_assessment = " ".join(str(parsed.get("recommended_assessment") or "").split()).strip() or None
+    return TutorChatResponse(
+        assistant_message=assistant_message,
+        citations=citations,
+        actions=actions,
+        recommendations=_recommendations_from_graph(request=request, graph_context=graph_context),
+        mode=mode,  # type: ignore[arg-type]
+        key_points=key_points,
+        concept_focus=concept_focus,
+        prerequisite_warning=prerequisite_warning,
+        next_action=next_action,
+        recommended_assessment=recommended_assessment,
+        recommended_topic_title=(
+            str(dict((graph_context or {}).get("next_unlock") or {}).get("topic_title") or "").strip() or None
+        ),
+    )
+
+
+def _plain_text_tutor_payload(
+    raw: str,
+    *,
+    mode: str,
+    request: TutorChatRequest,
+    citations: list[Citation],
+    actions: list[str],
+    graph_context: dict | None,
+    lesson_context: dict | None,
+) -> TutorChatResponse:
+    assistant_message = " ".join(str(raw or "").split()).strip()
+    if not assistant_message:
+        raise RuntimeError("tutor generation returned empty text")
+    return TutorChatResponse(
+        assistant_message=assistant_message,
+        citations=citations,
+        actions=actions,
+        recommendations=_recommendations_from_graph(request=request, graph_context=graph_context),
+        mode=mode,  # type: ignore[arg-type]
+        key_points=_weak_concept_labels(graph_context, lesson_context)[:3],
+        concept_focus=_weak_concept_labels(graph_context, lesson_context) or _lesson_covered_concept_lines(lesson_context, max_items=3),
+        prerequisite_warning=None,
+        next_action="Use the graph rail or ask for one focused checkpoint next.",
+        recommended_assessment="Ask for one quick checkpoint to confirm understanding.",
+        recommended_topic_title=(
+            str(dict((graph_context or {}).get("next_unlock") or {}).get("topic_title") or "").strip() or None
+        ),
+    )
+
+
+def _collect_tutor_context(request: TutorChatRequest) -> tuple[list[Citation], dict | None, dict | None, dict | None, dict | None, list[str]]:
+    citations: list[Citation] = []
+    profile_context: dict | None = None
+    history_context: dict | None = None
+    lesson_context: dict | None = None
+    graph_context: dict | None = None
+    actions: list[str] = ["ENFORCED_SCOPE_POLICY", "NO_MASTERY_WRITE_NO_EVIDENCE"]
+
+    actions.append("CALLED_TOOL:internal_postgres.profile")
+    try:
+        profile_context = _internal_profile_context(request)
+    except Exception as exc:
+        logger.warning("tutor.context profile fetch failed: %s", exc)
+        actions.append("PROFILE_CONTEXT_FAILED")
+    else:
+        actions.append("USED_PROFILE_CONTEXT")
+
+    actions.append("CALLED_TOOL:internal_postgres.history")
+    try:
+        history_context = _internal_history_context(request)
+    except Exception as exc:
+        logger.warning("tutor.context history fetch failed: %s", exc)
+        actions.append("SESSION_HISTORY_FAILED")
+    else:
+        actions.append("USED_SESSION_HISTORY")
+
+    if request.topic_id:
+        actions.append("CALLED_TOOL:internal_postgres.lesson_context")
+        try:
+            lesson_context = _internal_lesson_context(request)
+        except Exception as exc:
+            logger.warning("tutor.context lesson-context fetch failed: %s", exc)
+            actions.append("LESSON_CONTEXT_FAILED")
+        else:
+            actions.append("USED_LESSON_CONTEXT" if _lesson_context_available(lesson_context) else "LESSON_CONTEXT_EMPTY")
+
+    actions.append("CALLED_TOOL:internal_graph.context")
+    try:
+        graph_context = _internal_graph_context(request)
+    except Exception as exc:
+        logger.warning("tutor.context graph-context fetch failed: %s", exc)
+        actions.append("GRAPH_CONTEXT_FAILED")
+    else:
+        actions.append("USED_GRAPH_CONTEXT")
+
+    actions.append("CALLED_TOOL:internal_rag.retrieve")
+    try:
+        citations = _internal_rag_retrieve(request)
+    except Exception as exc:
+        logger.warning("tutor.context retrieval failed: %s", exc)
+        actions.append("RAG_RETRIEVAL_FAILED")
+    else:
+        actions.append("USED_RAG_CONTEXT" if citations else "NO_RAG_CONTEXT")
+
+    return citations, profile_context, history_context, lesson_context, graph_context, actions
+
+
+def _run_structured_tutor_mode(
+    *,
+    request: TutorChatRequest,
+    mode: str,
+    user_goal: str,
+) -> TutorChatResponse:
+    citations, profile_context, history_context, lesson_context, graph_context, actions = _collect_tutor_context(request)
+
+    if not citations and not _lesson_context_available(lesson_context):
+        topic_part = f", topic_id={request.topic_id}" if request.topic_id else ""
+        return TutorChatResponse(
+            assistant_message=(
+                "Tutor unavailable: no lesson-aware context found for "
+                f"subject={request.subject}, level={request.sss_level}, term={request.term}{topic_part}. "
+                "Generate the lesson successfully and ensure approved curriculum chunks exist for this scope/topic."
+            ),
+            citations=[],
+            actions=actions + ["NO_CONTEXT_ABORTED"],
+            recommendations=[],
+            mode=mode,  # type: ignore[arg-type]
+        )
+
+    prompt = _structured_tutor_prompt(
+        mode=mode,
+        user_goal=user_goal,
+        request=request,
+        citations=citations,
+        profile_context=profile_context,
+        history_context=history_context,
+        lesson_context=lesson_context,
+        graph_context=graph_context,
+    )
+    try:
+        raw = _llm_generate(prompt)
+    except (LLMClientError, Exception) as exc:
+        detail = str(exc) or "unknown model error"
+        logger.warning("tutor.mode llm generation failed mode=%s detail=%s", mode, detail)
+        return TutorChatResponse(
+            assistant_message=f"Tutor unavailable: model generation failed: {detail}",
+            citations=citations,
+            actions=actions + ["LLM_UNAVAILABLE"],
+            recommendations=[],
+            mode=mode,  # type: ignore[arg-type]
+        )
+
+    parsed = _extract_json_object(raw)
+    if parsed is None:
+        response = _plain_text_tutor_payload(
+            raw,
+            mode=mode,
+            request=request,
+            citations=citations,
+            actions=actions + [f"MODE:{mode.upper()}", "LLM_PLAIN_TEXT_FALLBACK"],
+            graph_context=graph_context,
+            lesson_context=lesson_context,
+        )
+    else:
+        response = _validate_structured_tutor_payload(
+            parsed,
+            mode=mode,
+            request=request,
+            citations=citations,
+            actions=actions + [f"MODE:{mode.upper()}"],
+            graph_context=graph_context,
+            lesson_context=lesson_context,
+        )
+    logger.info(
+        "tutor.mode success mode=%s subject=%s level=%s term=%s topic_id=%s lesson_context=%s covered_concepts=%s citations=%s",
+        mode,
+        request.subject,
+        request.sss_level,
+        request.term,
+        request.topic_id,
+        _lesson_context_available(lesson_context),
+        len(_lesson_covered_concept_ids(lesson_context)),
+        len(citations),
+    )
+    return response
+
+
 def handle_question(
     request: TutorRequest,
     *,
@@ -837,114 +1175,75 @@ def run_tutor_chat(request: TutorChatRequest) -> TutorChatResponse:
         )
 
     request = request.model_copy(update={"message": safe_message})
-    citations: list[Citation] = []
-    profile_context: dict | None = None
-    history_context: dict | None = None
-    lesson_context: dict | None = None
-    graph_context: dict | None = None
-    actions: list[str] = ["ENFORCED_SCOPE_POLICY", "NO_MASTERY_WRITE_NO_EVIDENCE"]
+    mode = _infer_tutor_mode_from_message(request.message)
+    return _run_structured_tutor_mode(request=request, mode=mode, user_goal=request.message)
 
-    actions.append("CALLED_TOOL:internal_postgres.profile")
-    try:
-        profile_context = _internal_profile_context(request)
-    except Exception as exc:
-        logger.warning("tutor.run_tutor_chat profile fetch failed: %s", exc)
-        actions.append("PROFILE_CONTEXT_FAILED")
-    else:
-        actions.append("USED_PROFILE_CONTEXT")
 
-    actions.append("CALLED_TOOL:internal_postgres.history")
-    try:
-        history_context = _internal_history_context(request)
-    except Exception as exc:
-        logger.warning("tutor.run_tutor_chat history fetch failed: %s", exc)
-        actions.append("SESSION_HISTORY_FAILED")
-    else:
-        actions.append("USED_SESSION_HISTORY")
-
-    if request.topic_id:
-        actions.append("CALLED_TOOL:internal_postgres.lesson_context")
-        try:
-            lesson_context = _internal_lesson_context(request)
-        except Exception as exc:
-            logger.warning("tutor.run_tutor_chat lesson-context fetch failed: %s", exc)
-            actions.append("LESSON_CONTEXT_FAILED")
-        else:
-            actions.append("USED_LESSON_CONTEXT" if _lesson_context_available(lesson_context) else "LESSON_CONTEXT_EMPTY")
-
-    actions.append("CALLED_TOOL:internal_graph.context")
-    try:
-        graph_context = _internal_graph_context(request)
-    except Exception as exc:
-        logger.warning("tutor.run_tutor_chat graph-context fetch failed: %s", exc)
-        actions.append("GRAPH_CONTEXT_FAILED")
-    else:
-        actions.append("USED_GRAPH_CONTEXT")
-
-    actions.append("CALLED_TOOL:internal_rag.retrieve")
-    try:
-        citations = _internal_rag_retrieve(request)
-    except Exception as exc:
-        detail = str(exc) or "unknown retrieval error"
-        logger.warning("tutor.run_tutor_chat retrieval failed: %s", detail)
-        actions.append("RAG_RETRIEVAL_FAILED")
-    else:
-        actions.append("USED_RAG_CONTEXT" if citations else "NO_RAG_CONTEXT")
-
-    if not citations and not _lesson_context_available(lesson_context):
-        topic_part = f", topic_id={request.topic_id}" if request.topic_id else ""
-        return TutorChatResponse(
-            assistant_message=(
-                "Tutor unavailable: no lesson-aware context found for "
-                f"subject={request.subject}, level={request.sss_level}, term={request.term}{topic_part}. "
-                "Generate the lesson successfully and ensure approved curriculum chunks exist for this scope/topic."
-            ),
-            citations=[],
-            actions=actions + ["NO_CONTEXT_ABORTED"],
-            recommendations=[],
-        )
-
-    prompt = _chat_prompt(
-        request,
-        citations=citations,
-        profile_context=profile_context,
-        history_context=history_context,
-        lesson_context=lesson_context,
-        graph_context=graph_context,
-    )
-    try:
-        assistant_message = _llm_generate(prompt)
-    except (LLMClientError, Exception) as exc:
-        detail = str(exc) or "unknown model error"
-        logger.warning("tutor.run_tutor_chat llm generation failed: %s", detail)
-        return TutorChatResponse(
-            assistant_message=f"Tutor unavailable: model generation failed: {detail}",
-            citations=citations,
-            actions=actions + ["LLM_UNAVAILABLE"],
-            recommendations=[],
-        )
-
-    recommendation = TutorRecommendation(
-        type="next_topic",
+def run_tutor_recap(request: TutorRecapRequest) -> TutorChatResponse:
+    chat_request = TutorChatRequest(
+        student_id=request.student_id,
+        session_id=request.session_id,
+        subject=request.subject,
+        sss_level=request.sss_level,
+        term=request.term,
         topic_id=request.topic_id,
-        reason="Stay on the current lesson and close the weakest gaps before moving to a new topic.",
+        message="Recap this lesson in three sharp points and one memory hook.",
     )
-    logger.info(
-        "tutor.run_tutor_chat success subject=%s level=%s term=%s topic_id=%s lesson_context=%s covered_concepts=%s citations=%s actions=%s",
-        request.subject,
-        request.sss_level,
-        request.term,
-        request.topic_id,
-        _lesson_context_available(lesson_context),
-        len(_lesson_covered_concept_ids(lesson_context)),
-        len(citations),
-        ",".join(actions),
+    return _run_structured_tutor_mode(
+        request=chat_request,
+        mode="recap",
+        user_goal="Give a concise revision recap of the active lesson.",
     )
-    return TutorChatResponse(
-        assistant_message=assistant_message,
-        citations=citations,
-        actions=actions + ["UPDATED_MASTERY_BASIC"],
-        recommendations=[recommendation],
+
+
+def run_tutor_drill(request: TutorDrillRequest) -> TutorChatResponse:
+    chat_request = TutorChatRequest(
+        student_id=request.student_id,
+        session_id=request.session_id,
+        subject=request.subject,
+        sss_level=request.sss_level,
+        term=request.term,
+        topic_id=request.topic_id,
+        message=f"Generate one {request.difficulty} drill for this lesson and coach me through it.",
+    )
+    return _run_structured_tutor_mode(
+        request=chat_request,
+        mode="drill",
+        user_goal=f"Create one {request.difficulty} drill around the active lesson and coach the learner.",
+    )
+
+
+def run_tutor_prereq_bridge(request: TutorPrereqBridgeRequest) -> TutorChatResponse:
+    chat_request = TutorChatRequest(
+        student_id=request.student_id,
+        session_id=request.session_id,
+        subject=request.subject,
+        sss_level=request.sss_level,
+        term=request.term,
+        topic_id=request.topic_id,
+        message="Explain the prerequisite bridge into this lesson and why it matters now.",
+    )
+    return _run_structured_tutor_mode(
+        request=chat_request,
+        mode="diagnose",
+        user_goal="Explain the weakest prerequisite bridge feeding the active lesson and what it unlocks next.",
+    )
+
+
+def run_tutor_study_plan(request: TutorStudyPlanRequest) -> TutorChatResponse:
+    chat_request = TutorChatRequest(
+        student_id=request.student_id,
+        session_id=request.session_id,
+        subject=request.subject,
+        sss_level=request.sss_level,
+        term=request.term,
+        topic_id=request.topic_id,
+        message=f"Create a focused {request.horizon_days}-day study plan for this lesson.",
+    )
+    return _run_structured_tutor_mode(
+        request=chat_request,
+        mode="teach",
+        user_goal=f"Create a focused {request.horizon_days}-day study plan using the current lesson, graph weaknesses, and retrieval evidence.",
     )
 
 

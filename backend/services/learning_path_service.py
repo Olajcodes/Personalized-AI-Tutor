@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from sqlalchemy.orm import Session
+import re
+from statistics import mean
 from uuid import UUID
+
+from sqlalchemy.orm import Session
 
 from backend.repositories.diagnostic_repo import DiagnosticRepository
 from backend.repositories.graph_repo import GraphRepository
@@ -22,65 +25,180 @@ class LearningPathValidationError(ValueError):
 
 class LearningPathService:
     @staticmethod
-    def _topic_concept_id(topic_id) -> str:
-        return str(topic_id)
+    def _readable_concept_label(concept_id: str, *, fallback_topic_title: str | None = None) -> str:
+        value = str(concept_id or "").strip()
+        if not value:
+            return str(fallback_topic_title or "Untitled Concept").strip()
+        try:
+            UUID(value)
+            fallback = str(fallback_topic_title or "").strip()
+            return fallback or "Topic Concept"
+        except ValueError:
+            pass
+        token = value.rsplit(":", 1)[-1].strip().lower()
+        token = re.sub(r"-(\d+)$", "", token)
+        token = re.sub(r"[_-]+", " ", token)
+        token = re.sub(r"\s+", " ", token).strip()
+        return token.title() if token else str(fallback_topic_title or "Untitled Concept").strip()
 
-    def calculate_next_step(self, db: Session, payload: PathNextIn) -> PathNextOut:
+    @staticmethod
+    def _scope_graph_rows(
+        *,
+        db: Session,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+    ) -> tuple[list, list[dict], dict[str, float]]:
         diagnostic_repo = DiagnosticRepository(db)
         if not diagnostic_repo.validate_student_scope(
-            student_id=payload.student_id,
-            subject=payload.subject,
-            sss_level=payload.sss_level,
-            term=payload.term,
+            student_id=student_id,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
         ):
             raise LearningPathValidationError(
                 "Student scope is invalid. Ensure profile, level, term, and subject enrollment are correct."
             )
 
-        topics = diagnostic_repo.get_scope_topics(
-            subject=payload.subject,
-            sss_level=payload.sss_level,
-            term=payload.term,
-        )
+        topics = diagnostic_repo.get_scope_topics(subject=subject, sss_level=sss_level, term=term)
         if not topics:
             raise LearningPathValidationError("No approved topics found for the requested scope.")
 
+        rows = diagnostic_repo.get_scope_topic_concept_rows(subject=subject, sss_level=sss_level, term=term)
         mastery_map = GraphRepository(db).get_mastery_map(
+            student_id=student_id,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+        )
+        return topics, rows, mastery_map
+
+    def _topic_graph(
+        self,
+        *,
+        topics: list,
+        rows: list[dict],
+        mastery_map: dict[str, float],
+    ) -> tuple[dict[str, list[dict]], dict[str, tuple[str, str]], dict[str, set[str]]]:
+        topic_lookup = {str(topic.id): topic for topic in topics}
+        topic_rows: dict[str, list[dict]] = {str(topic.id): [] for topic in topics}
+        concept_to_topic: dict[str, tuple[str, str]] = {}
+        prereqs_by_concept: dict[str, set[str]] = {}
+
+        for row in rows:
+            topic_id = str(row.get("topic_id") or "").strip()
+            concept_id = str(row.get("concept_id") or "").strip()
+            topic_title = str(row.get("topic_title") or "").strip()
+            if not topic_id or not concept_id:
+                continue
+            if topic_id not in topic_rows:
+                continue
+            label = self._readable_concept_label(concept_id, fallback_topic_title=topic_title)
+            item = {
+                "concept_id": concept_id,
+                "concept_label": label,
+                "topic_title": topic_title,
+                "score": mastery_map.get(concept_id, 0.0),
+                "prereqs": [
+                    str(value).strip()
+                    for value in (row.get("prereq_concept_ids") or [])
+                    if str(value).strip() and str(value).strip() != concept_id
+                ],
+            }
+            topic_rows[topic_id].append(item)
+            concept_to_topic[concept_id] = (topic_id, topic_title or getattr(topic_lookup.get(topic_id), "title", ""))
+            prereqs_by_concept.setdefault(concept_id, set()).update(item["prereqs"])
+
+        for topic in topics:
+            topic_id = str(topic.id)
+            if topic_rows[topic_id]:
+                continue
+            concept_id = str(topic.id)
+            topic_rows[topic_id].append(
+                {
+                    "concept_id": concept_id,
+                    "concept_label": str(topic.title),
+                    "topic_title": str(topic.title),
+                    "score": mastery_map.get(concept_id, 0.0),
+                    "prereqs": [],
+                }
+            )
+            concept_to_topic[concept_id] = (topic_id, str(topic.title))
+            prereqs_by_concept.setdefault(concept_id, set())
+
+        return topic_rows, concept_to_topic, prereqs_by_concept
+
+    def calculate_next_step(self, db: Session, payload: PathNextIn) -> PathNextOut:
+        topics, rows, mastery_map = self._scope_graph_rows(
+            db=db,
             student_id=payload.student_id,
             subject=payload.subject,
             sss_level=payload.sss_level,
             term=payload.term,
         )
+        topic_rows, concept_to_topic, prereqs_by_concept = self._topic_graph(
+            topics=topics,
+            rows=rows,
+            mastery_map=mastery_map,
+        )
 
-        for idx, topic in enumerate(topics):
-            concept_id = self._topic_concept_id(topic.id)
-            concept_mastery = mastery_map.get(concept_id, 0.0)
-            if concept_mastery >= MASTERY_THRESHOLD:
+        for topic in topics:
+            topic_id = str(topic.id)
+            concept_rows = topic_rows.get(topic_id, [])
+            if not concept_rows:
                 continue
 
-            prereq_gaps: list[str] = []
-            if idx > 0:
-                prereq_topic = topics[idx - 1]
-                prereq_concept_id = self._topic_concept_id(prereq_topic.id)
-                prereq_mastery = mastery_map.get(prereq_concept_id, 0.0)
-                if prereq_mastery < MASTERY_THRESHOLD:
-                    prereq_gaps.append(prereq_concept_id)
-                    return PathNextOut(
-                        recommended_topic_id=str(prereq_topic.id),
-                        reason="Prerequisite mastery is below threshold; complete prerequisite topic first.",
-                        prereq_gaps=prereq_gaps,
-                    )
+            unmet_prereqs = []
+            for concept_row in concept_rows:
+                for prereq_id in concept_row["prereqs"]:
+                    if mastery_map.get(prereq_id, 0.0) < MASTERY_THRESHOLD:
+                        unmet_prereqs.append(prereq_id)
+            unmet_prereqs = list(dict.fromkeys(unmet_prereqs))
+            if unmet_prereqs:
+                blocking_concept = unmet_prereqs[0]
+                blocking_topic_id, blocking_topic_title = concept_to_topic.get(
+                    blocking_concept,
+                    (None, None),
+                )
+                return PathNextOut(
+                    recommended_topic_id=blocking_topic_id,
+                    recommended_topic_title=blocking_topic_title,
+                    recommended_concept_id=blocking_concept,
+                    recommended_concept_label=self._readable_concept_label(
+                        blocking_concept,
+                        fallback_topic_title=blocking_topic_title,
+                    ),
+                    reason="A prerequisite concept is still weak; revisit the blocking foundation before proceeding.",
+                    prereq_gaps=unmet_prereqs,
+                )
 
-            return PathNextOut(
-                recommended_topic_id=str(topic.id),
-                reason="Recommended next topic based on mastery and prerequisite progression.",
-                prereq_gaps=prereq_gaps,
-            )
+            topic_mastery = mean([float(item["score"]) for item in concept_rows]) if concept_rows else 0.0
+            if topic_mastery < MASTERY_THRESHOLD:
+                weakest_concept = min(concept_rows, key=lambda item: float(item["score"]))
+                return PathNextOut(
+                    recommended_topic_id=topic_id,
+                    recommended_topic_title=str(topic.title),
+                    recommended_concept_id=str(weakest_concept["concept_id"]),
+                    recommended_concept_label=str(weakest_concept["concept_label"]),
+                    reason="Recommended next topic based on the weakest concept still below mastery threshold.",
+                    prereq_gaps=[],
+                )
 
-        weakest_topic = min(topics, key=lambda t: mastery_map.get(self._topic_concept_id(t.id), 1.0))
+        weakest_topic = min(
+            topics,
+            key=lambda item: mean(
+                [float(row["score"]) for row in topic_rows.get(str(item.id), [])] or [1.0]
+            ),
+        )
+        weakest_rows = topic_rows.get(str(weakest_topic.id), [])
+        weakest_concept = min(weakest_rows, key=lambda item: float(item["score"])) if weakest_rows else None
         return PathNextOut(
             recommended_topic_id=str(weakest_topic.id),
-            reason="All scoped topics are above threshold; recommending weakest topic for revision.",
+            recommended_topic_title=str(weakest_topic.title),
+            recommended_concept_id=str(weakest_concept["concept_id"]) if weakest_concept else None,
+            recommended_concept_label=str(weakest_concept["concept_label"]) if weakest_concept else None,
+            reason="All scoped topics are above threshold; recommending the weakest concept cluster for revision.",
             prereq_gaps=[],
         )
 
@@ -94,49 +212,59 @@ class LearningPathService:
         term: int,
         view: str,
     ) -> LearningMapVisualOut:
-        diagnostic_repo = DiagnosticRepository(db)
-        if not diagnostic_repo.validate_student_scope(
-            student_id=student_id,
-            subject=subject,
-            sss_level=sss_level,
-            term=term,
-        ):
-            raise LearningPathValidationError(
-                "Student scope is invalid. Ensure profile, level, term, and subject enrollment are correct."
-            )
-
-        topics = diagnostic_repo.get_scope_topics(subject=subject, sss_level=sss_level, term=term)
-        mastery_map = GraphRepository(db).get_mastery_map(
+        topics, rows, mastery_map = self._scope_graph_rows(
+            db=db,
             student_id=student_id,
             subject=subject,
             sss_level=sss_level,
             term=term,
         )
+        topic_rows, _, prereqs_by_concept = self._topic_graph(topics=topics, rows=rows, mastery_map=mastery_map)
 
         nodes: list[LearningMapNodeOut] = []
         current_assigned = False
-        for idx, topic in enumerate(topics):
-            concept_id = self._topic_concept_id(topic.id)
-            score = round(mastery_map.get(concept_id, 0.0), 4)
-            prev_concept_id = self._topic_concept_id(topics[idx - 1].id) if idx > 0 else None
-            prev_mastered = idx == 0 or mastery_map.get(prev_concept_id, 0.0) >= MASTERY_THRESHOLD
+        for topic in topics:
+            topic_id = str(topic.id)
+            concept_rows = topic_rows.get(topic_id, [])
+            topic_mastery = mean([float(item["score"]) for item in concept_rows]) if concept_rows else 0.0
+            weakest_concept = min(concept_rows, key=lambda item: float(item["score"])) if concept_rows else None
 
-            if score >= MASTERY_THRESHOLD:
+            prereq_ids = {
+                prereq_id
+                for row in concept_rows
+                for prereq_id in prereqs_by_concept.get(str(row["concept_id"]), set())
+            }
+            prereqs_mastered = all(mastery_map.get(prereq_id, 0.0) >= MASTERY_THRESHOLD for prereq_id in prereq_ids)
+
+            if topic_mastery >= MASTERY_THRESHOLD:
                 status = "mastered"
-            elif prev_mastered and not current_assigned:
+            elif prereqs_mastered and not current_assigned:
                 status = "current"
                 current_assigned = True
-            elif prev_mastered:
-                status = "current"
+            elif prereqs_mastered:
+                status = "ready"
             else:
                 status = "locked"
 
+            if status == "mastered":
+                details = f"{round(topic_mastery * 100)}% mastery"
+            elif status == "current" and weakest_concept is not None:
+                details = f"Weakest focus: {weakest_concept['concept_label']}"
+            elif status == "ready":
+                details = "Unlocked and ready to learn"
+            else:
+                details = "Strengthen prerequisites first"
+
             nodes.append(
                 LearningMapNodeOut(
-                    topic_id=str(topic.id),
-                    concept_id=concept_id,
+                    topic_id=topic_id,
+                    concept_id=str(weakest_concept["concept_id"]) if weakest_concept else topic_id,
+                    title=str(topic.title),
+                    details=details,
                     status=status,
-                    mastery_score=score,
+                    mastery_score=round(topic_mastery, 4),
+                    concept_label=str(weakest_concept["concept_label"]) if weakest_concept else None,
+                    kind="topic" if view == "topic" else "concept",
                 )
             )
 

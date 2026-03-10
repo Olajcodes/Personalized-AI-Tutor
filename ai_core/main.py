@@ -19,13 +19,18 @@ from ai_core.core_engine.orchestration.quiz_engine import (
 )
 from ai_core.core_engine.integrations.internal_api import internal_service_key_configured
 from ai_core.core_engine.orchestration.tutor_engine import (
+    run_tutor_drill,
     run_tutor_assessment_start,
     run_tutor_assessment_submit,
     run_tutor_chat,
     run_tutor_explain_mistake,
     run_tutor_hint,
+    run_tutor_prereq_bridge,
+    run_tutor_recap,
+    run_tutor_study_plan,
 )
 from ai_core.core_engine.api_contracts.schemas import (
+    TutorDrillRequest,
     TutorAssessmentStartRequest,
     TutorAssessmentStartResponse,
     TutorAssessmentSubmitRequest,
@@ -36,6 +41,9 @@ from ai_core.core_engine.api_contracts.schemas import (
     TutorExplainMistakeResponse,
     TutorHintRequest,
     TutorHintResponse,
+    TutorPrereqBridgeRequest,
+    TutorRecapRequest,
+    TutorStudyPlanRequest,
 )
 from ai_core.core_engine.api_contracts.quiz_schemas import (
     QuizGenerateRequest,
@@ -144,6 +152,26 @@ async def quiz_insights(quiz_id: UUID, attempt_id: UUID):
 @app.post("/tutor/chat", response_model=TutorChatResponse)
 def tutor_chat(payload: TutorChatRequest):
     return run_tutor_chat(payload)
+
+
+@app.post("/tutor/recap", response_model=TutorChatResponse)
+def tutor_recap(payload: TutorRecapRequest):
+    return run_tutor_recap(payload)
+
+
+@app.post("/tutor/drill", response_model=TutorChatResponse)
+def tutor_drill(payload: TutorDrillRequest):
+    return run_tutor_drill(payload)
+
+
+@app.post("/tutor/prereq-bridge", response_model=TutorChatResponse)
+def tutor_prereq_bridge(payload: TutorPrereqBridgeRequest):
+    return run_tutor_prereq_bridge(payload)
+
+
+@app.post("/tutor/study-plan", response_model=TutorChatResponse)
+def tutor_study_plan(payload: TutorStudyPlanRequest):
+    return run_tutor_study_plan(payload)
 
 
 @app.post("/tutor/assessment/start", response_model=TutorAssessmentStartResponse)

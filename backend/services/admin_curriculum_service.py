@@ -670,10 +670,56 @@ Important rules:
         return path.read_text(encoding="utf-8", errors="ignore")
 
     @staticmethod
+    def _read_json_topic_file(path: Path) -> tuple[str, str | None]:
+        raw = path.read_text(encoding="utf-8", errors="ignore")
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise AdminCurriculumValidationError(f"Invalid JSON curriculum file: {path}") from exc
+        if not isinstance(payload, dict):
+            raise AdminCurriculumValidationError(f"Curriculum JSON file must be an object: {path}")
+
+        topic_title = str(payload.get("topic_title") or "").strip() or None
+        learning_objectives = [
+            " ".join(str(item).split()).strip()
+            for item in list(payload.get("learning_objectives") or [])
+            if " ".join(str(item).split()).strip()
+        ]
+        keywords = [
+            " ".join(str(item).split()).strip()
+            for item in list(payload.get("keywords") or [])
+            if " ".join(str(item).split()).strip()
+        ]
+
+        sections: list[str] = []
+        for section in list(payload.get("sections") or []):
+            if not isinstance(section, dict):
+                continue
+            heading = " ".join(str(section.get("heading") or "").split()).strip()
+            content = " ".join(str(section.get("content") or "").split()).strip()
+            if not content:
+                continue
+            if heading:
+                sections.append(f"{heading}\n{content}")
+            else:
+                sections.append(content)
+
+        preface: list[str] = []
+        if topic_title:
+            preface.append(f"Topic: {topic_title}")
+        if learning_objectives:
+            preface.append("Learning Objectives:\n" + "\n".join(f"- {item}" for item in learning_objectives))
+        if keywords:
+            preface.append("Keywords: " + ", ".join(keywords))
+
+        text = "\n\n".join([*preface, *sections]).strip()
+        return text, topic_title
+
+    @staticmethod
     def _collect_supported_files(root: Path) -> tuple[list[Path], list[Path]]:
         all_files = [path for path in root.rglob("*") if path.is_file()]
-        supported = [path for path in all_files if path.suffix.lower() in {".docx", ".txt"}]
-        skipped = [path for path in all_files if path.suffix.lower() not in {".docx", ".txt"}]
+        supported = [path for path in all_files if path.suffix.lower() in {".docx", ".txt", ".json"}]
+        skipped = [path for path in all_files if path.suffix.lower() not in {".docx", ".txt", ".json"}]
         return supported, skipped
 
     @staticmethod
@@ -853,10 +899,13 @@ Important rules:
         sss_level: str,
         term: int,
     ) -> ChunkedDocument | None:
+        explicit_topic_hint: str | None = None
         if file_path.suffix.lower() == ".docx":
             text = self._read_docx(file_path)
         elif file_path.suffix.lower() == ".txt":
             text = self._read_text_file(file_path)
+        elif file_path.suffix.lower() == ".json":
+            text, explicit_topic_hint = self._read_json_topic_file(file_path)
         else:
             return None
 
@@ -864,7 +913,7 @@ Important rules:
         if not text:
             return None
 
-        topic_hint = self._topic_hint_from_file_name(file_path)
+        topic_hint = explicit_topic_hint or self._topic_hint_from_file_name(file_path)
         match = self._best_topic_match(
             topic_hint=topic_hint,
             topics=scope_topics,
@@ -1031,7 +1080,7 @@ Important rules:
         supported_files, skipped_files = self._collect_supported_files(source_root)
         if not supported_files:
             raise AdminCurriculumValidationError(
-                "No supported files found in source_root. Supported extensions: .docx, .txt"
+                "No supported files found in source_root. Supported extensions: .docx, .txt, .json"
             )
 
         version_name = payload.version_name or self._version_name_default(
