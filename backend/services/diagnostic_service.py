@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timezone
+import re
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -16,6 +17,8 @@ from backend.schemas.diagnostic_schema import (
     DiagnosticSubmitIn,
     DiagnosticSubmitOut,
 )
+from backend.schemas.learning_path_schema import PathNextIn
+from backend.services.learning_path_service import LearningPathValidationError, learning_path_service
 
 
 MASTERY_PASS_THRESHOLD = 0.7
@@ -35,8 +38,15 @@ class DiagnosticAlreadySubmittedError(ValueError):
 
 class DiagnosticService:
     @staticmethod
-    def _topic_concept_id(topic_id) -> str:
-        return str(topic_id)
+    def _readable_concept_label(concept_id: str, *, fallback_topic_title: str | None = None) -> str:
+        value = str(concept_id or "").strip()
+        if not value:
+            return str(fallback_topic_title or "Untitled Concept").strip()
+        token = value.rsplit(":", 1)[-1].strip().lower()
+        token = re.sub(r"-(\d+)$", "", token)
+        token = re.sub(r"[_-]+", " ", token)
+        token = re.sub(r"\s+", " ", token).strip()
+        return token.title() if token else str(fallback_topic_title or "Untitled Concept").strip()
 
     @staticmethod
     def _build_options(correct_title: str, other_titles: list[str]) -> list[str]:
@@ -84,24 +94,57 @@ class DiagnosticService:
         if not topics:
             raise DiagnosticValidationError("No approved topics found for the requested scope.")
 
-        titles = [topic.title for topic in topics]
+        concept_rows = repo.get_scope_topic_concept_rows(
+            subject=payload.subject,
+            sss_level=payload.sss_level,
+            term=payload.term,
+        )
+        if not concept_rows:
+            raise DiagnosticValidationError(
+                "No curriculum concept mappings found for this scope. Ingest and approve mapped curriculum first."
+            )
+
+        topic_to_row: dict[str, dict] = {}
+        concept_labels: list[str] = []
+        for row in concept_rows:
+            topic_id = str(row.get("topic_id") or "").strip()
+            concept_id = str(row.get("concept_id") or "").strip()
+            topic_title = str(row.get("topic_title") or "").strip()
+            if not topic_id or not concept_id:
+                continue
+            if topic_id not in topic_to_row:
+                topic_to_row[topic_id] = row
+            label = self._readable_concept_label(concept_id, fallback_topic_title=topic_title)
+            if label and label not in concept_labels:
+                concept_labels.append(label)
+
         questions: list[dict] = []
         for topic in topics:
+            row = topic_to_row.get(str(topic.id))
+            if row is None:
+                continue
             question_id = str(uuid4())
-            concept_id = self._topic_concept_id(topic.id)
+            concept_id = str(row["concept_id"])
+            concept_label = self._readable_concept_label(concept_id, fallback_topic_title=str(topic.title))
             options = self._build_options(
-                correct_title=topic.title,
-                other_titles=titles,
+                correct_title=concept_label,
+                other_titles=concept_labels,
             )
             questions.append(
                 {
                     "question_id": question_id,
                     "concept_id": concept_id,
+                    "concept_label": concept_label,
                     "topic_id": str(topic.id),
-                    "prompt": f"Which option best matches the topic '{topic.title}'?",
+                    "topic_title": str(topic.title),
+                    "prompt": f"For the topic '{topic.title}', which concept should you recognise first?",
                     "options": options,
                     "correct_answer": "A",
                 }
+            )
+        if not questions:
+            raise DiagnosticValidationError(
+                "No mapped concepts are available to build a diagnostic for this scope yet."
             )
 
         concept_targets = [q["concept_id"] for q in questions]
@@ -124,6 +167,9 @@ class DiagnosticService:
                 DiagnosticQuestionOut(
                     question_id=q["question_id"],
                     concept_id=q["concept_id"],
+                    concept_label=q.get("concept_label"),
+                    topic_id=q.get("topic_id"),
+                    topic_title=q.get("topic_title"),
                     prompt=q["prompt"],
                     options=q["options"],
                 )
@@ -222,15 +268,24 @@ class DiagnosticService:
             term=diagnostic.term,
         )
         recommended_start_topic_id: str | None = None
+        recommended_start_topic_title: str | None = None
+        scope_warning: str | None = None
         if topics:
-            for topic in topics:
-                concept_id = self._topic_concept_id(topic.id)
-                if existing_mastery.get(concept_id, 0.0) < MASTERY_PASS_THRESHOLD:
-                    recommended_start_topic_id = str(topic.id)
-                    break
-            if recommended_start_topic_id is None:
-                weakest = min(topics, key=lambda t: existing_mastery.get(self._topic_concept_id(t.id), 1.0))
-                recommended_start_topic_id = str(weakest.id)
+            try:
+                next_step = learning_path_service.calculate_next_step(
+                    db=db,
+                    payload=PathNextIn(
+                        student_id=payload.student_id,
+                        subject=diagnostic.subject,  # type: ignore[arg-type]
+                        sss_level=diagnostic.sss_level,  # type: ignore[arg-type]
+                        term=diagnostic.term,
+                    ),
+                )
+                recommended_start_topic_id = next_step.recommended_topic_id
+                recommended_start_topic_title = next_step.recommended_topic_title
+                scope_warning = next_step.scope_warning
+            except LearningPathValidationError:
+                recommended_start_topic_id = None
 
         total_questions = len(expected_by_id)
         score = round((correct_count / total_questions) * 100.0, 2) if total_questions > 0 else 0.0
@@ -249,6 +304,8 @@ class DiagnosticService:
         return DiagnosticSubmitOut(
             baseline_mastery_updates=baseline_updates,
             recommended_start_topic_id=recommended_start_topic_id,
+            recommended_start_topic_title=recommended_start_topic_title,
+            scope_warning=scope_warning,
         )
 
 

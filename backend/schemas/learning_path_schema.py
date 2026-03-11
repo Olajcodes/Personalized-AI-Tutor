@@ -19,14 +19,16 @@ class PathNextOut(BaseModel):
     reason: str
     prereq_gaps: list[str]
     prereq_gap_labels: list[str] = Field(default_factory=list)
+    scope_warning: str | None = None
+    unmapped_topic_titles: list[str] = Field(default_factory=list)
 
 
 class LearningMapNodeOut(BaseModel):
     topic_id: str
-    concept_id: str
+    concept_id: str | None = None
     title: str
     details: str | None = None
-    status: Literal["mastered", "current", "locked", "ready"]
+    status: Literal["mastered", "current", "locked", "ready", "unmapped"]
     mastery_score: float
     concept_label: str | None = None
     kind: Literal["topic", "concept"] = "topic"

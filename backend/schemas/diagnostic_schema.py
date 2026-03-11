@@ -7,6 +7,9 @@ from pydantic import BaseModel, Field
 class DiagnosticQuestionOut(BaseModel):
     question_id: str
     concept_id: str
+    concept_label: str | None = None
+    topic_id: str | None = None
+    topic_title: str | None = None
     prompt: str
     options: list[str]
 
@@ -45,3 +48,5 @@ class BaselineMasteryUpdateOut(BaseModel):
 class DiagnosticSubmitOut(BaseModel):
     baseline_mastery_updates: list[BaselineMasteryUpdateOut]
     recommended_start_topic_id: str | None
+    recommended_start_topic_title: str | None = None
+    scope_warning: str | None = None

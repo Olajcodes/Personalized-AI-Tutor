@@ -95,17 +95,6 @@ class DiagnosticRepository:
                     }
                 )
 
-            if not seen_concepts:
-                # Fallback topic-as-concept when curriculum map is not available yet.
-                rows.append(
-                    {
-                        "topic_id": str(topic.id),
-                        "topic_title": str(topic.title),
-                        "concept_id": str(topic.id),
-                        "prereq_concept_ids": [],
-                    }
-                )
-
         return rows
 
     def create_diagnostic(

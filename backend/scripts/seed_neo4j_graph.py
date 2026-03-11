@@ -44,6 +44,7 @@ class TopicSeedEntry(TypedDict):
 class ScopeSeedPayload(TypedDict):
     topics: dict[str, TopicSeedEntry]
     prereq_edges: set[tuple[str, str]]
+    unmapped_topics: list[str]
 
 
 def _is_truthy(value: str | None) -> bool:
@@ -95,7 +96,7 @@ def _build_scope_graph_payload(db: Session) -> dict[tuple[str, str, int], ScopeS
         .all()
     )
     grouped: dict[tuple[str, str, int], ScopeSeedPayload] = defaultdict(
-        lambda: {"topics": {}, "prereq_edges": set()}
+        lambda: {"topics": {}, "prereq_edges": set(), "unmapped_topics": []}
     )
     for topic, subject_slug in rows:
         scope_key = (str(subject_slug), str(topic.sss_level), int(topic.term))
@@ -131,10 +132,7 @@ def _build_scope_graph_payload(db: Session) -> dict[tuple[str, str, int], ScopeS
                     if prereq_id and prereq_id != concept_id:
                         prereq_edges.add((prereq_id, concept_id))
         else:
-            # Fallback: treat topic as a single concept when no explicit mappings exist.
-            if topic_id not in topic_entry["concept_ids"]:
-                topic_entry["concept_ids"].append(topic_id)
-            topic_entry["concept_labels"][topic_id] = str(topic.title).strip().lower()
+            payload["unmapped_topics"].append(str(topic.title))
 
     return grouped
 
@@ -154,6 +152,7 @@ def run() -> None:
     seeded_topics = 0
     seeded_concepts = 0
     seeded_prereq_edges = 0
+    skipped_unmapped_topics = 0
     try:
         if _is_truthy(os.getenv("NEO4J_RESET_GRAPH")):
             neo.reset_curriculum_subgraph()
@@ -165,8 +164,12 @@ def run() -> None:
         for (subject, sss_level, term), scope_payload in grouped.items():
             topics_map = scope_payload["topics"]
             prereq_edges = scope_payload["prereq_edges"]
+            unmapped_topics = scope_payload["unmapped_topics"]
+            skipped_unmapped_topics += len(unmapped_topics)
 
             topics = list(topics_map.values())
+            if not topics:
+                continue
             neo.ensure_subject_topics(subject=subject, topics=topics)
 
             flat_concepts: list[str] = []
@@ -206,7 +209,7 @@ def run() -> None:
                 neo.ensure_prerequisite_edges(edges=edges)
                 seeded_prereq_edges += len(edges)
             else:
-                # Fallback to sequential concept chain when explicit prerequisites are unavailable.
+                # Fallback to sequential concept chain only across real mapped concepts.
                 neo.ensure_prerequisite_chain(concept_ids=flat_concepts)
                 seeded_prereq_edges += max(len(flat_concepts) - 1, 0)
 
@@ -236,7 +239,7 @@ def run() -> None:
 
         print(
             "Neo4j seed complete. "
-            f"scopes={seeded_scopes}, topics={seeded_topics}, concepts={seeded_concepts}, prereq_edges={seeded_prereq_edges}"
+            f"scopes={seeded_scopes}, topics={seeded_topics}, concepts={seeded_concepts}, prereq_edges={seeded_prereq_edges}, skipped_unmapped_topics={skipped_unmapped_topics}"
         )
         if seed_student:
             print(f"Seeded demo student mastery for: {seed_student}")

@@ -81,11 +81,12 @@ class LearningPathService:
         topics: list,
         rows: list[dict],
         mastery_map: dict[str, float],
-    ) -> tuple[dict[str, list[dict]], dict[str, tuple[str, str]], dict[str, set[str]]]:
+    ) -> tuple[dict[str, list[dict]], dict[str, tuple[str, str]], dict[str, set[str]], list[tuple[str, str]]]:
         topic_lookup = {str(topic.id): topic for topic in topics}
         topic_rows: dict[str, list[dict]] = {str(topic.id): [] for topic in topics}
         concept_to_topic: dict[str, tuple[str, str]] = {}
         prereqs_by_concept: dict[str, set[str]] = {}
+        unmapped_topics: list[tuple[str, str]] = []
 
         for row in rows:
             topic_id = str(row.get("topic_id") or "").strip()
@@ -115,20 +116,9 @@ class LearningPathService:
             topic_id = str(topic.id)
             if topic_rows[topic_id]:
                 continue
-            concept_id = str(topic.id)
-            topic_rows[topic_id].append(
-                {
-                    "concept_id": concept_id,
-                    "concept_label": str(topic.title),
-                    "topic_title": str(topic.title),
-                    "score": mastery_map.get(concept_id, 0.0),
-                    "prereqs": [],
-                }
-            )
-            concept_to_topic[concept_id] = (topic_id, str(topic.title))
-            prereqs_by_concept.setdefault(concept_id, set())
+            unmapped_topics.append((topic_id, str(topic.title)))
 
-        return topic_rows, concept_to_topic, prereqs_by_concept
+        return topic_rows, concept_to_topic, prereqs_by_concept, unmapped_topics
 
     def calculate_next_step(self, db: Session, payload: PathNextIn) -> PathNextOut:
         topics, rows, mastery_map = self._scope_graph_rows(
@@ -138,11 +128,24 @@ class LearningPathService:
             sss_level=payload.sss_level,
             term=payload.term,
         )
-        topic_rows, concept_to_topic, prereqs_by_concept = self._topic_graph(
+        topic_rows, concept_to_topic, prereqs_by_concept, unmapped_topics = self._topic_graph(
             topics=topics,
             rows=rows,
             mastery_map=mastery_map,
         )
+        mapped_topic_ids = [topic_id for topic_id, concept_rows in topic_rows.items() if concept_rows]
+        if not mapped_topic_ids:
+            raise LearningPathValidationError(
+                "No curriculum concept mappings found for the requested scope. Ingest and approve mapped curriculum first."
+            )
+        scope_warning = None
+        unmapped_topic_titles = [title for _, title in unmapped_topics]
+        if unmapped_topic_titles:
+            scope_warning = (
+                "Some topics are not fully mapped into curriculum concepts yet and are excluded from adaptive sequencing: "
+                + ", ".join(unmapped_topic_titles[:4])
+                + ("." if len(unmapped_topic_titles) <= 4 else ", ...")
+            )
 
         for topic in topics:
             topic_id = str(topic.id)
@@ -176,6 +179,8 @@ class LearningPathService:
                         self._readable_concept_label(item, fallback_topic_title=concept_to_topic.get(item, (None, None))[1])
                         for item in unmet_prereqs
                     ],
+                    scope_warning=scope_warning,
+                    unmapped_topic_titles=unmapped_topic_titles,
                 )
 
             topic_mastery = mean([float(item["score"]) for item in concept_rows]) if concept_rows else 0.0
@@ -189,10 +194,13 @@ class LearningPathService:
                     reason="Recommended next topic based on the weakest concept still below mastery threshold.",
                     prereq_gaps=[],
                     prereq_gap_labels=[],
+                    scope_warning=scope_warning,
+                    unmapped_topic_titles=unmapped_topic_titles,
                 )
 
+        mapped_topics = [topic for topic in topics if topic_rows.get(str(topic.id))]
         weakest_topic = min(
-            topics,
+            mapped_topics,
             key=lambda item: mean(
                 [float(row["score"]) for row in topic_rows.get(str(item.id), [])] or [1.0]
             ),
@@ -207,6 +215,8 @@ class LearningPathService:
             reason="All scoped topics are above threshold; recommending the weakest concept cluster for revision.",
             prereq_gaps=[],
             prereq_gap_labels=[],
+            scope_warning=scope_warning,
+            unmapped_topic_titles=unmapped_topic_titles,
         )
 
     def get_learning_map_visual(
@@ -226,7 +236,11 @@ class LearningPathService:
             sss_level=sss_level,
             term=term,
         )
-        topic_rows, _, prereqs_by_concept = self._topic_graph(topics=topics, rows=rows, mastery_map=mastery_map)
+        topic_rows, _, prereqs_by_concept, unmapped_topics = self._topic_graph(
+            topics=topics,
+            rows=rows,
+            mastery_map=mastery_map,
+        )
         next_step = self.calculate_next_step(
             db=db,
             payload=PathNextIn(
@@ -244,6 +258,22 @@ class LearningPathService:
         for topic in topics:
             topic_id = str(topic.id)
             concept_rows = topic_rows.get(topic_id, [])
+            if not concept_rows:
+                nodes.append(
+                    LearningMapNodeOut(
+                        topic_id=topic_id,
+                        concept_id=None,
+                        title=str(topic.title),
+                        details="Curriculum mapping pending. This topic is visible, but adaptive graph guidance is not available yet.",
+                        status="unmapped",
+                        mastery_score=0.0,
+                        concept_label=None,
+                        kind="topic" if view == "topic" else "concept",
+                    )
+                )
+                if view == "topic":
+                    previous_topic_id = topic_id
+                continue
             topic_mastery = mean([float(item["score"]) for item in concept_rows]) if concept_rows else 0.0
             weakest_concept = min(concept_rows, key=lambda item: float(item["score"])) if concept_rows else None
 

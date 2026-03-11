@@ -1,4 +1,4 @@
-﻿import { ArrowRight, Brain, CheckCircle2, GitBranch, Lock, Sparkles } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Brain, CheckCircle2, GitBranch, Lock, Sparkles } from 'lucide-react';
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
 
@@ -7,6 +7,7 @@ const statusStyles = {
   current: 'border-indigo-300 bg-indigo-50 text-indigo-700',
   ready: 'border-sky-300 bg-sky-50 text-sky-700',
   locked: 'border-slate-200 bg-slate-50 text-slate-500',
+  unmapped: 'border-amber-300 bg-amber-50 text-amber-800',
 };
 
 const statusIcon = {
@@ -14,6 +15,7 @@ const statusIcon = {
   current: Brain,
   ready: Sparkles,
   locked: Lock,
+  unmapped: AlertTriangle,
 };
 
 function MapNode({ node, isLast }) {
@@ -23,7 +25,7 @@ function MapNode({ node, isLast }) {
   return (
     <div className="relative flex min-w-[210px] shrink-0 snap-center flex-col items-center">
       {!isLast && <div className="absolute left-1/2 top-6 h-1 w-full bg-gradient-to-r from-indigo-200 via-slate-200 to-slate-200" />}
-      <div className={`relative z-10 flex h-12 w-12 items-center justify-center rounded-full border-4 bg-white ${node.status === 'current' ? 'border-indigo-600 text-indigo-600 shadow-[0_0_0_6px_rgba(99,102,241,0.12)]' : node.status === 'mastered' ? 'border-emerald-500 text-emerald-600' : node.status === 'ready' ? 'border-sky-500 text-sky-600' : 'border-slate-200 text-slate-400'}`}>
+      <div className={`relative z-10 flex h-12 w-12 items-center justify-center rounded-full border-4 bg-white ${node.status === 'current' ? 'border-indigo-600 text-indigo-600 shadow-[0_0_0_6px_rgba(99,102,241,0.12)]' : node.status === 'mastered' ? 'border-emerald-500 text-emerald-600' : node.status === 'ready' ? 'border-sky-500 text-sky-600' : node.status === 'unmapped' ? 'border-amber-400 text-amber-600' : 'border-slate-200 text-slate-400'}`}>
         <Icon className="h-5 w-5" />
       </div>
       <div className={`mt-4 w-full rounded-2xl border px-4 py-4 text-left shadow-sm ${style}`}>
@@ -35,7 +37,7 @@ function MapNode({ node, isLast }) {
         </div>
         <p className="mt-2 text-xs leading-6 opacity-90">{node.details || 'Graph state unavailable.'}</p>
         <div className="mt-3 flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.16em]">
-          <span>{node.concept_label || 'Concept'}</span>
+          <span>{node.concept_label || (node.status === 'unmapped' ? 'Mapping pending' : 'Concept')}</span>
           <span>{Math.round((node.mastery_score || 0) * 100)}%</span>
         </div>
       </div>
@@ -48,6 +50,8 @@ export default function LearningMap({ classLevel = 'SSS 2', subject = 'Mathemati
   const edges = safeArray(mapData?.edges);
   const nextStep = mapData?.next_step || null;
   const relationCount = edges.length;
+  const scopeWarning = nextStep?.scope_warning || null;
+  const unmappedTopics = safeArray(nextStep?.unmapped_topic_titles);
 
   return (
     <div className="mb-8 rounded-3xl border border-gray-100 bg-white p-8 shadow-sm">
@@ -58,7 +62,7 @@ export default function LearningMap({ classLevel = 'SSS 2', subject = 'Mathemati
             Graph-first path
           </div>
           <h2 className="text-lg font-bold text-gray-900">Your Learning Map</h2>
-          <p className="text-sm text-gray-500">{classLevel} {subject} · {relationCount} prerequisite links are currently shaping your next steps</p>
+          <p className="text-sm text-gray-500">{classLevel} {subject} � {relationCount} prerequisite links are currently shaping your next steps</p>
         </div>
         {nextStep && (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
@@ -92,6 +96,20 @@ export default function LearningMap({ classLevel = 'SSS 2', subject = 'Mathemati
               {safeArray(nextStep.prereq_gap_labels).length ? nextStep.prereq_gap_labels.join(', ') : 'No blocking prerequisite gap detected.'}
             </p>
           </div>
+        </div>
+      )}
+
+      {(scopeWarning || unmappedTopics.length > 0) && (
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
+          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Mapping status</div>
+          <p className="mt-2 leading-6">
+            {scopeWarning || 'Some topics are visible but are still waiting for curriculum concept mapping.'}
+          </p>
+          {unmappedTopics.length > 0 && (
+            <p className="mt-2 text-xs font-semibold text-amber-800">
+              Pending topics: {unmappedTopics.join(', ')}
+            </p>
+          )}
         </div>
       )}
     </div>
