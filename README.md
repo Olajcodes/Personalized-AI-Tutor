@@ -135,7 +135,7 @@ python -m alembic -c backend/alembic.ini upgrade head
 ### 6) One-time reset + ingest + auto-approve curriculum
 
 This is the recommended clean baseline command.
-It reseeds baseline curriculum entities, ingests all detected scopes from `docs/SSS_NOTES_2026`,
+It reseeds baseline curriculum entities, ingests all detected scopes from `docs/Curriculum_in_json` when available (otherwise `docs/SSS_NOTES_2026`),
 auto-approves versions, and (optionally) reseeds Neo4j.
 
 ```powershell
@@ -153,6 +153,8 @@ python -m backend.scripts.reset_and_reseed_curriculum `
 Notes:
 
 - LLM extraction/inference is enabled by default in this flow.
+- The reset script now prefers canonical JSON curriculum under `docs/Curriculum_in_json` automatically when present.
+- Use `--source-root <path>` to force a different corpus.
 - If LLM is unavailable or output is invalid, ingestion falls back safely and logs fallback mode.
 - Use `--disable-llm` only for deterministic fallback-only runs.
 - Add `--full-db-reset` if you want to truncate all public application tables before reseeding.

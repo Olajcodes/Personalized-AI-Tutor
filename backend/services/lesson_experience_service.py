@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import logging
 import time
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from backend.core.database import SessionLocal
 from backend.repositories.tutor_session_repo import TutorSessionRepository
 from backend.schemas.tutor_schema import (
     TutorPendingAssessmentOut,
@@ -18,6 +20,7 @@ from backend.services.tutor_assessment_service import TutorAssessmentService
 
 BOOTSTRAP_CACHE_TTL_SECONDS = 30.0
 _BOOTSTRAP_CACHE: dict[str, tuple[float, TutorSessionBootstrapOut]] = {}
+logger = logging.getLogger(__name__)
 
 
 class LessonExperienceService:
@@ -74,6 +77,54 @@ class LessonExperienceService:
         session_token = f":{session_id}"
         for key in [cache_key for cache_key in list(_BOOTSTRAP_CACHE.keys()) if cache_key.endswith(session_token)]:
             _BOOTSTRAP_CACHE.pop(key, None)
+
+    @staticmethod
+    def prewarm_related_topics(
+        *,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+        topic_ids: list[UUID],
+    ) -> None:
+        if not topic_ids:
+            return
+        db = SessionLocal()
+        try:
+            seen: set[str] = set()
+            for topic_id in topic_ids:
+                topic_token = str(topic_id)
+                if not topic_token or topic_token in seen:
+                    continue
+                seen.add(topic_token)
+                try:
+                    fetch_topic_lesson(db=db, topic_id=topic_id, student_id=student_id)
+                    lesson_graph_service.get_lesson_graph_context(
+                        db,
+                        student_id=student_id,
+                        subject=subject,
+                        sss_level=sss_level,
+                        term=term,
+                        topic_id=topic_id,
+                    )
+                    logger.info(
+                        "lesson.bootstrap.prewarm_success student_id=%s topic_id=%s subject=%s level=%s term=%s",
+                        student_id,
+                        topic_id,
+                        subject,
+                        sss_level,
+                        term,
+                    )
+                except Exception as exc:  # pragma: no cover - best effort prewarm
+                    db.rollback()
+                    logger.warning(
+                        "lesson.bootstrap.prewarm_failed student_id=%s topic_id=%s detail=%s",
+                        student_id,
+                        topic_id,
+                        exc,
+                    )
+        finally:
+            db.close()
 
     @staticmethod
     def _suggested_actions(topic_title: str) -> list[TutorQuickActionOut]:

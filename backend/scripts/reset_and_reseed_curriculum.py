@@ -26,13 +26,24 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from pathlib import Path
 
 from sqlalchemy import text
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CANONICAL_CURRICULUM_ROOT = REPO_ROOT / "docs" / "Curriculum_in_json"
+LEGACY_CURRICULUM_ROOT = REPO_ROOT / "docs" / "SSS_NOTES_2026"
+
+
+def _default_source_root() -> str:
+    if CANONICAL_CURRICULUM_ROOT.exists() and any(CANONICAL_CURRICULUM_ROOT.rglob("*.json")):
+        return str(CANONICAL_CURRICULUM_ROOT)
+    return str(LEGACY_CURRICULUM_ROOT)
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Reset curriculum KB data and reseed end-to-end")
-    parser.add_argument("--source-root", default="docs/SSS_NOTES_2026")
+    parser.add_argument("--source-root", default=_default_source_root())
     parser.add_argument("--full-db-reset", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--seed-lessons", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--seed-reset", action=argparse.BooleanOptionalAction, default=True)
@@ -64,6 +75,8 @@ def _configure_runtime(args: argparse.Namespace) -> None:
 
     if args.disable_neo4j_sync:
         os.environ["USE_NEO4J_GRAPH"] = "false"
+
+    print(f"  - curriculum source root: {args.source_root}")
 
 
 def _run_seed_lessons(args: argparse.Namespace) -> None:

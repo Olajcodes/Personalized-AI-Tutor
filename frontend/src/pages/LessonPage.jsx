@@ -460,7 +460,12 @@ export default function LessonPage() {
           `${out.concept_label}: ${Math.round((out.score || 0) * 100)}%`,
           out.mastery_updated ? `Mastery updated to ${Math.round((out.new_mastery || 0) * 100)}%.` : 'No mastery update was applied.',
         ],
-        next_action: out.is_correct ? 'Push forward to the next unlock or try a harder drill.' : 'Ask for a prerequisite bridge and retry.',
+        prerequisite_warning: out.prerequisite_warning || null,
+        next_action: out.recommended_topic_title
+          ? `Next best focus: ${out.recommended_topic_title}.`
+          : out.is_correct
+            ? 'Push forward to the next unlock or try a harder drill.'
+            : 'Ask for a prerequisite bridge and retry.',
       });
     } catch (err) {
       setMessages((prev) => [...prev, { role: 'assistant', content: err.message || 'Failed to submit checkpoint.' }]);

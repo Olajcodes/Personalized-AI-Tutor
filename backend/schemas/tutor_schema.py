@@ -182,6 +182,10 @@ class TutorAssessmentSubmitOut(BaseModel):
     mastery_updated: bool
     new_mastery: float | None = Field(default=None, ge=0.0, le=1.0)
     actions: list[str] = Field(default_factory=list)
+    prerequisite_warning: str | None = None
+    recommended_topic_id: str | None = None
+    recommended_topic_title: str | None = None
+    recommended_next_concept_label: str | None = None
 
 
 class TutorHintIn(BaseModel):

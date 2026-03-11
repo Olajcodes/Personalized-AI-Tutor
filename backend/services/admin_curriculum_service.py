@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -19,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from backend.core.config import settings
 from backend.repositories.admin_curriculum_repo import AdminCurriculumRepository
+from backend.repositories.lesson_repo import upsert_lesson_with_blocks
 from backend.repositories.neo4j_graph_repo import (
     Neo4jGraphConfig,
     Neo4jGraphRepository,
@@ -670,7 +672,7 @@ Important rules:
         return path.read_text(encoding="utf-8", errors="ignore")
 
     @staticmethod
-    def _read_json_topic_file(path: Path) -> tuple[str, str | None]:
+    def _load_json_topic_payload(path: Path) -> dict:
         raw = path.read_text(encoding="utf-8", errors="ignore")
         try:
             payload = json.loads(raw)
@@ -678,8 +680,29 @@ Important rules:
             raise AdminCurriculumValidationError(f"Invalid JSON curriculum file: {path}") from exc
         if not isinstance(payload, dict):
             raise AdminCurriculumValidationError(f"Curriculum JSON file must be an object: {path}")
+        return payload
 
-        topic_title = str(payload.get("topic_title") or "").strip() or None
+    @classmethod
+    def _normalize_json_topic_payload(cls, path: Path) -> dict:
+        payload = cls._load_json_topic_payload(path)
+
+        subject = str(payload.get("subject") or "").strip().lower()
+        sss_level = str(payload.get("sss_level") or "").strip().upper()
+        topic_title = str(payload.get("topic_title") or "").strip()
+        source_title = str(payload.get("source_title") or "").strip() or None
+        topic_slug = str(payload.get("topic_slug") or "").strip().lower() or None
+
+        try:
+            term = int(payload.get("term"))
+        except (TypeError, ValueError) as exc:
+            raise AdminCurriculumValidationError(f"Curriculum JSON file must include integer term: {path}") from exc
+
+        week_value = payload.get("week")
+        try:
+            week = int(week_value) if week_value is not None else None
+        except (TypeError, ValueError):
+            week = None
+
         learning_objectives = [
             " ".join(str(item).split()).strip()
             for item in list(payload.get("learning_objectives") or [])
@@ -692,6 +715,7 @@ Important rules:
         ]
 
         sections: list[str] = []
+        structured_sections: list[dict[str, str]] = []
         for section in list(payload.get("sections") or []):
             if not isinstance(section, dict):
                 continue
@@ -699,10 +723,37 @@ Important rules:
             content = " ".join(str(section.get("content") or "").split()).strip()
             if not content:
                 continue
+            structured_sections.append({"heading": heading, "content": content})
             if heading:
                 sections.append(f"{heading}\n{content}")
             else:
                 sections.append(content)
+
+        if not topic_title:
+            raise AdminCurriculumValidationError(f"Curriculum JSON file missing topic_title: {path}")
+        if not structured_sections:
+            raise AdminCurriculumValidationError(f"Curriculum JSON file missing usable sections: {path}")
+
+        return {
+            "subject": subject,
+            "sss_level": sss_level,
+            "term": term,
+            "week": week,
+            "topic_title": topic_title,
+            "topic_slug": topic_slug,
+            "source_title": source_title,
+            "learning_objectives": learning_objectives,
+            "keywords": keywords,
+            "sections": structured_sections,
+        }
+
+    @classmethod
+    def _read_json_topic_file(cls, path: Path) -> tuple[str, str | None]:
+        payload = cls._normalize_json_topic_payload(path)
+        topic_title = str(payload["topic_title"]).strip() or None
+        learning_objectives = list(payload["learning_objectives"])
+        keywords = list(payload["keywords"])
+        structured_sections = list(payload["sections"])
 
         preface: list[str] = []
         if topic_title:
@@ -712,8 +763,72 @@ Important rules:
         if keywords:
             preface.append("Keywords: " + ", ".join(keywords))
 
-        text = "\n\n".join([*preface, *sections]).strip()
+        section_texts = [
+            f"{section['heading']}\n{section['content']}".strip()
+            if section.get("heading")
+            else section["content"]
+            for section in structured_sections
+        ]
+        text = "\n\n".join([*preface, *section_texts]).strip()
         return text, topic_title
+
+    @classmethod
+    def _build_structured_lesson_from_json(cls, path: Path) -> dict:
+        payload = cls._normalize_json_topic_payload(path)
+        topic_title = str(payload["topic_title"])
+        learning_objectives = list(payload["learning_objectives"])
+        keywords = list(payload["keywords"])
+        sections = list(payload["sections"])
+
+        summary = None
+        if learning_objectives:
+            summary = "; ".join(learning_objectives[:2]).strip()
+        if not summary and sections:
+            summary = sections[0]["content"][:280].strip()
+        if summary:
+            summary = summary.rstrip(".") + "."
+
+        content_blocks: list[dict] = []
+        if learning_objectives:
+            content_blocks.append(
+                {
+                    "type": "text",
+                    "heading": "Learning Objectives",
+                    "value": "\n".join(f"- {item}" for item in learning_objectives),
+                }
+            )
+
+        for section in sections:
+            content_blocks.append(
+                {
+                    "type": "text",
+                    "heading": section.get("heading") or "",
+                    "value": section["content"],
+                }
+            )
+
+        if keywords:
+            content_blocks.append(
+                {
+                    "type": "text",
+                    "heading": "Key Terms",
+                    "value": ", ".join(keywords),
+                }
+            )
+
+        total_words = sum(
+            len(str(item).split())
+            for item in [*learning_objectives, *keywords, *(section["content"] for section in sections)]
+        )
+        estimated_duration_minutes = max(10, min(35, math.ceil(total_words / 130) + 6))
+
+        return {
+            "title": f"Lesson: {topic_title}",
+            "summary": summary,
+            "estimated_duration_minutes": estimated_duration_minutes,
+            "content_blocks": content_blocks,
+            "topic_description": summary,
+        }
 
     @staticmethod
     def _collect_supported_files(root: Path) -> tuple[list[Path], list[Path]]:
@@ -857,6 +972,17 @@ Important rules:
 
     @classmethod
     def _infer_scope_from_file(cls, *, root: Path, file_path: Path) -> tuple[str, str, int] | None:
+        if file_path.suffix.lower() == ".json":
+            try:
+                payload = cls._normalize_json_topic_payload(file_path)
+                subject = str(payload["subject"]).strip().lower()
+                sss_level = str(payload["sss_level"]).strip().upper()
+                term = int(payload["term"])
+                if subject and sss_level and term:
+                    return (subject, sss_level, term)
+            except AdminCurriculumValidationError:
+                # Fall back to path heuristics for partially cleaned files.
+                pass
         try:
             rel_path = file_path.relative_to(root)
             parts = list(rel_path.parts)
@@ -1135,6 +1261,8 @@ Important rules:
             prereq_edges: set[tuple[str, str]] = set()
             processed_file_count = 0
             processed_chunks = 0
+            structured_lessons_persisted = 0
+            topic_lookup = {topic.id: topic for topic in scope_topics}
 
             for index, file_path in enumerate(supported_files, start=1):
                 parsed = self._extract_document_chunks(
@@ -1216,6 +1344,20 @@ Important rules:
                     topic_id_str,
                     {"title": parsed.topic_title, "concept_ids": [], "concept_labels": {}},
                 )
+                if file_path.suffix.lower() == ".json":
+                    lesson_seed = self._build_structured_lesson_from_json(file_path)
+                    upsert_lesson_with_blocks(
+                        self.db,
+                        topic_id=parsed.topic_id,
+                        title=str(lesson_seed["title"]),
+                        summary=lesson_seed["summary"],
+                        estimated_duration_minutes=int(lesson_seed["estimated_duration_minutes"]),
+                        content_blocks=list(lesson_seed["content_blocks"]),
+                    )
+                    topic_row = topic_lookup.get(parsed.topic_id)
+                    if topic_row is not None and lesson_seed.get("topic_description"):
+                        topic_row.description = str(lesson_seed["topic_description"])[:500]
+                    structured_lessons_persisted += 1
                 for concept in parsed.concept_sections:
                     mapped_concept_ids.add(concept.concept_id)
                     if concept.concept_id not in topic_bundle["concept_ids"]:
@@ -1346,6 +1488,7 @@ Important rules:
                     "processed_files_count": processed_file_count,
                     "processed_chunks_count": processed_chunks,
                     "processed_concepts_count": len(mapped_concept_ids),
+                    "structured_lessons_persisted": structured_lessons_persisted,
                     "indexed_at": datetime.now(timezone.utc).isoformat(),
                     "affected_topics": affected_topics,
                 }

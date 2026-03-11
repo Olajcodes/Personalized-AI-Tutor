@@ -64,12 +64,26 @@ class QuizResultConceptBreakdownItem(ConceptBreakdownItem):
     concept_label: str | None = None
 
 
+class QuizGraphRemediationOut(BaseModel):
+    weakest_concept_id: str | None = None
+    weakest_concept_label: str | None = None
+    blocking_prerequisite_id: str | None = None
+    blocking_prerequisite_label: str | None = None
+    blocking_prerequisite_topic_title: str | None = None
+    recommended_next_concept_id: str | None = None
+    recommended_next_concept_label: str | None = None
+    recommended_next_topic_id: UUID | None = None
+    recommended_next_topic_title: str | None = None
+    recommendation_reason: str | None = None
+
+
 class QuizResultsResponse(BaseModel):
     score: float
     concept_breakdown: list[QuizResultConceptBreakdownItem]
     insights: list[str]
     recommended_revision_topic_id: UUID | None = None
     recommended_revision_topic_title: str | None = None
+    graph_remediation: QuizGraphRemediationOut | None = None
 
 
 class GraphMasteryUpdatePayload(BaseModel):

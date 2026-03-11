@@ -9,8 +9,9 @@ Public endpoints for tutor chat and guided assistance modes:
 
 import json
 import logging
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -65,6 +66,7 @@ def _lesson_experience_service(db: Session) -> LessonExperienceService:
 @router.post("/session/bootstrap", response_model=TutorSessionBootstrapOut, status_code=status.HTTP_200_OK)
 def tutor_session_bootstrap(
     payload: TutorSessionBootstrapIn,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -74,7 +76,32 @@ def tutor_session_bootstrap(
             detail="student_id must match authenticated user id",
         )
     try:
-        return _lesson_experience_service(db).bootstrap(payload)
+        response = _lesson_experience_service(db).bootstrap(payload)
+        warm_topic_ids: list[UUID] = []
+        if response.next_unlock and response.next_unlock.topic_id:
+            try:
+                warm_topic_ids.append(UUID(str(response.next_unlock.topic_id)))
+            except Exception:
+                pass
+        weak_prereq_topic_id = next(
+            (item.topic_id for item in response.graph_context.prerequisite_concepts if item.topic_id),
+            None,
+        )
+        if weak_prereq_topic_id:
+            try:
+                warm_topic_ids.append(UUID(str(weak_prereq_topic_id)))
+            except Exception:
+                pass
+        if warm_topic_ids:
+            background_tasks.add_task(
+                LessonExperienceService.prewarm_related_topics,
+                student_id=payload.student_id,
+                subject=payload.subject,
+                sss_level=payload.sss_level,
+                term=int(payload.term),
+                topic_ids=warm_topic_ids,
+            )
+        return response
     except TutorProviderUnavailableError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
     except ValueError as exc:

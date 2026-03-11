@@ -8,7 +8,13 @@ from sqlalchemy.orm import Session
 
 from backend.core.ai_core_client import generate_quiz_insights
 from backend.repositories.quiz_repo import QuizRepository
-from backend.schemas.quiz_schema import QuizResultConceptBreakdownItem, QuizResultsResponse
+from backend.schemas.learning_path_schema import PathNextIn
+from backend.schemas.quiz_schema import (
+    QuizGraphRemediationOut,
+    QuizResultConceptBreakdownItem,
+    QuizResultsResponse,
+)
+from backend.services.learning_path_service import learning_path_service
 
 
 class QuizResultsService:
@@ -102,6 +108,7 @@ class QuizResultsService:
 
         recommended_topic = None
         recommended_topic_title = None
+        graph_remediation = None
         if weakest_concept is not None:
             recommended_topic = await self._get_topic_for_concept(
                 weakest_concept,
@@ -109,6 +116,11 @@ class QuizResultsService:
                 fallback_topic_id=quiz.topic_id,
             )
             recommended_topic_title = self.repo.get_topic_title(recommended_topic)
+            graph_remediation = self._build_graph_remediation(
+                weakest_concept=weakest_concept,
+                quiz=quiz,
+                fallback_topic_id=quiz.topic_id,
+            )
 
         return QuizResultsResponse(
             score=float(attempt.score or 0.0),
@@ -116,6 +128,82 @@ class QuizResultsService:
             insights=insights,
             recommended_revision_topic_id=recommended_topic,
             recommended_revision_topic_title=recommended_topic_title,
+            graph_remediation=graph_remediation,
+        )
+
+    def _build_graph_remediation(
+        self,
+        *,
+        weakest_concept: str,
+        quiz,
+        fallback_topic_id: UUID | None,
+    ) -> QuizGraphRemediationOut | None:
+        def _parse_uuid(value: str | None) -> UUID | None:
+            if not value:
+                return None
+            try:
+                return UUID(str(value))
+            except (TypeError, ValueError):
+                return None
+
+        subject = str(getattr(quiz, "subject", "")).strip().lower()
+        sss_level = str(getattr(quiz, "sss_level", "")).strip()
+        term = int(getattr(quiz, "term", 0) or 0)
+        try:
+            next_step = learning_path_service.calculate_next_step(
+                db=self.repo.db,
+                payload=PathNextIn(
+                    student_id=quiz.student_id,
+                    subject=subject,  # type: ignore[arg-type]
+                    sss_level=sss_level,  # type: ignore[arg-type]
+                    term=term,
+                ),
+            )
+        except Exception:
+            next_step = None
+
+        blocking_prerequisite_id = next_step.prereq_gaps[0] if next_step and next_step.prereq_gaps else None
+        blocking_prerequisite_topic_title = (
+            self.repo.find_topic_title_for_concept(
+                concept_id=blocking_prerequisite_id,
+                subject=subject,
+                sss_level=sss_level,
+                term=term,
+            )
+            if blocking_prerequisite_id
+            else None
+        )
+
+        return QuizGraphRemediationOut(
+            weakest_concept_id=weakest_concept,
+            weakest_concept_label=self._readable_concept_label(
+                weakest_concept,
+                fallback_topic_title=self.repo.find_topic_title_for_concept(
+                    concept_id=weakest_concept,
+                    subject=subject,
+                    sss_level=sss_level,
+                    term=term,
+                ) or self.repo.get_topic_title(fallback_topic_id),
+            ),
+            blocking_prerequisite_id=blocking_prerequisite_id,
+            blocking_prerequisite_label=(
+                self._readable_concept_label(
+                    blocking_prerequisite_id,
+                    fallback_topic_title=blocking_prerequisite_topic_title,
+                )
+                if blocking_prerequisite_id
+                else None
+            ),
+            blocking_prerequisite_topic_title=blocking_prerequisite_topic_title,
+            recommended_next_concept_id=(next_step.recommended_concept_id if next_step else None),
+            recommended_next_concept_label=(next_step.recommended_concept_label if next_step else None),
+            recommended_next_topic_id=_parse_uuid(next_step.recommended_topic_id) if next_step else fallback_topic_id,
+            recommended_next_topic_title=(
+                next_step.recommended_topic_title
+                if next_step and next_step.recommended_topic_title
+                else self.repo.get_topic_title(fallback_topic_id)
+            ),
+            recommendation_reason=(next_step.reason if next_step else None),
         )
 
     async def _get_topic_for_concept(

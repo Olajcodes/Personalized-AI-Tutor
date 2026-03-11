@@ -161,7 +161,8 @@ class RagRetriever:
                 )
                 response = list(getattr(query_response, "points", []) or [])
         except Exception as exc:
-            raise RagRetrieverError(f"Qdrant retrieval failed: {exc}") from exc
+            logger.warning("rag.retrieve scoped query failed; returning empty result set: %s", exc)
+            return []
 
         chunks = []
         for item in response:

@@ -33,6 +33,7 @@ class InternalLessonContextOut(BaseModel):
     topic_id: UUID
     title: str
     summary: str | None = None
+    context_source: Literal["personalized", "structured"] = "personalized"
     content_blocks: list[dict] = Field(default_factory=list)
     source_chunk_ids: list[str] = Field(default_factory=list)
     covered_concept_ids: list[str] = Field(default_factory=list)

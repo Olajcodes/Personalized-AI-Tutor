@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from backend.repositories.diagnostic_repo import DiagnosticRepository
 from backend.repositories.graph_repo import GraphRepository
 from backend.schemas.learning_path_schema import (
+    LearningMapEdgeOut,
     LearningMapNodeOut,
     LearningMapVisualOut,
     PathNextIn,
@@ -171,6 +172,10 @@ class LearningPathService:
                     ),
                     reason="A prerequisite concept is still weak; revisit the blocking foundation before proceeding.",
                     prereq_gaps=unmet_prereqs,
+                    prereq_gap_labels=[
+                        self._readable_concept_label(item, fallback_topic_title=concept_to_topic.get(item, (None, None))[1])
+                        for item in unmet_prereqs
+                    ],
                 )
 
             topic_mastery = mean([float(item["score"]) for item in concept_rows]) if concept_rows else 0.0
@@ -183,6 +188,7 @@ class LearningPathService:
                     recommended_concept_label=str(weakest_concept["concept_label"]),
                     reason="Recommended next topic based on the weakest concept still below mastery threshold.",
                     prereq_gaps=[],
+                    prereq_gap_labels=[],
                 )
 
         weakest_topic = min(
@@ -200,6 +206,7 @@ class LearningPathService:
             recommended_concept_label=str(weakest_concept["concept_label"]) if weakest_concept else None,
             reason="All scoped topics are above threshold; recommending the weakest concept cluster for revision.",
             prereq_gaps=[],
+            prereq_gap_labels=[],
         )
 
     def get_learning_map_visual(
@@ -220,9 +227,20 @@ class LearningPathService:
             term=term,
         )
         topic_rows, _, prereqs_by_concept = self._topic_graph(topics=topics, rows=rows, mastery_map=mastery_map)
+        next_step = self.calculate_next_step(
+            db=db,
+            payload=PathNextIn(
+                student_id=student_id,
+                subject=subject,  # type: ignore[arg-type]
+                sss_level=sss_level,  # type: ignore[arg-type]
+                term=term,
+            ),
+        )
 
         nodes: list[LearningMapNodeOut] = []
+        edges: list[LearningMapEdgeOut] = []
         current_assigned = False
+        previous_topic_id: str | None = None
         for topic in topics:
             topic_id = str(topic.id)
             concept_rows = topic_rows.get(topic_id, [])
@@ -267,6 +285,36 @@ class LearningPathService:
                     kind="topic" if view == "topic" else "concept",
                 )
             )
+            if view == "topic":
+                if previous_topic_id is not None:
+                    edges.append(
+                        LearningMapEdgeOut(
+                            source_id=previous_topic_id,
+                            target_id=topic_id,
+                            relation="NEXT",
+                        )
+                    )
+                previous_topic_id = topic_id
+
+        if view == "concept":
+            concept_ids = {
+                str(row["concept_id"])
+                for concept_rows in topic_rows.values()
+                for row in concept_rows
+            }
+            for concept_id, prereq_ids in prereqs_by_concept.items():
+                if concept_id not in concept_ids:
+                    continue
+                for prereq_id in prereq_ids:
+                    if prereq_id not in concept_ids:
+                        continue
+                    edges.append(
+                        LearningMapEdgeOut(
+                            source_id=str(prereq_id),
+                            target_id=str(concept_id),
+                            relation="PREREQ_OF",
+                        )
+                    )
 
         return LearningMapVisualOut(
             student_id=student_id,
@@ -275,6 +323,8 @@ class LearningPathService:
             term=term,
             view=view,
             nodes=nodes,
+            edges=edges,
+            next_step=next_step,
         )
 
 

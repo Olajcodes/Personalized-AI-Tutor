@@ -191,6 +191,70 @@ async def test_generate_quiz_questions_fails_without_context(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_generate_quiz_questions_uses_structured_lesson_when_rag_empty(monkeypatch):
+    topic_id = uuid.uuid4()
+    student_id = uuid.uuid4()
+
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.quiz_engine._internal_lesson_context",
+        lambda **kwargs: {
+            "student_id": str(student_id),
+            "topic_id": str(topic_id),
+            "title": "Lesson: Our Values",
+            "summary": "Define values and explain why values matter.",
+            "context_source": "structured",
+            "content_blocks": [
+                {"type": "text", "value": "Meaning of Values\n\nValues are things that are important to us."},
+                {"type": "text", "value": "Importance of Values\n\nValues guide behaviour and choices."},
+            ],
+            "covered_concept_ids": ["civic:sss1:t1:our-values"],
+            "covered_concept_labels": {"civic:sss1:t1:our-values": "Our Values"},
+        },
+    )
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.quiz_engine._internal_rag_context",
+        lambda **kwargs: [],
+    )
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.quiz_engine._llm_generate",
+        lambda prompt: """
+        {
+          "questions": [
+            {
+              "text": "What best describes values in civic education?",
+              "options": [
+                "Things that are important to us and guide our behaviour",
+                "Rules for solving equations",
+                "Objects found only in government offices",
+                "Feelings with no influence on choices"
+              ],
+              "correct_answer": "A",
+              "concept_id": "civic:sss1:t1:our-values",
+              "difficulty": "medium",
+              "explanation": "The lesson states that values are things that are important to us and guide behaviour."
+            }
+          ]
+        }
+        """,
+    )
+
+    questions = await generate_quiz_questions(
+        student_id=student_id,
+        subject="civic",
+        sss_level="SSS1",
+        term=1,
+        topic_id=topic_id,
+        purpose="practice",
+        difficulty="medium",
+        num_questions=1,
+    )
+
+    assert len(questions) == 1
+    assert questions[0]["concept_id"] == "civic:sss1:t1:our-values"
+    assert questions[0]["explanation"]
+
+
+@pytest.mark.anyio
 async def test_generate_quiz_insights_returns_list():
     quiz_id = uuid.uuid4()
     attempt_id = uuid.uuid4()

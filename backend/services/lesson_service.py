@@ -140,15 +140,59 @@ def _map_legacy_lesson_blocks(lesson: Any) -> list[dict]:
             continue
 
         value: Any = payload
+        heading_applied = False
         if isinstance(payload, dict):
+            heading = _normalize_text(str(payload.get("heading") or ""))
             value = payload.get("text")
             if value is None and "value" in payload:
                 value = payload.get("value")
-        if isinstance(value, str):
+            if isinstance(value, str):
+                value = _normalize_text(value)
+                if heading and value:
+                    value = f"{heading}\n\n{value}"
+                    heading_applied = True
+        if isinstance(value, str) and not heading_applied:
             value = _normalize_text(value)
         if value:
             normalized.append({"type": block_type, "value": value})
     return normalized
+
+
+def _lesson_response_from_blocks(
+    *,
+    topic: Any,
+    title: str,
+    summary: str | None,
+    estimated_duration_minutes: int | None,
+    content_blocks: list[dict],
+    graph_context: Any,
+    covered_concepts: list[dict] | None = None,
+) -> dict:
+    if covered_concepts is None:
+        covered_concepts = []
+        for node in list(getattr(graph_context, "current_concepts", []) or []):
+            covered_concepts.append(
+                {
+                    "concept_id": str(node.concept_id),
+                    "label": str(node.label),
+                    "mastery_score": node.mastery_score,
+                    "mastery_state": node.mastery_state,
+                }
+            )
+
+    return {
+        "topic_id": str(topic.id),
+        "title": title,
+        "summary": summary,
+        "estimated_duration_minutes": estimated_duration_minutes,
+        "content_blocks": content_blocks,
+        "covered_concepts": covered_concepts,
+        "prerequisites": list(getattr(graph_context, "prerequisite_concepts", []) or []),
+        "weakest_concepts": list(getattr(graph_context, "weakest_concepts", []) or []),
+        "next_unlock": getattr(graph_context, "next_unlock", None),
+        "why_this_matters": getattr(graph_context, "why_this_matters", None),
+        "assessment_ready": bool(getattr(graph_context, "current_concepts", []) or []),
+    }
 
 
 def _extract_block_texts(blocks: list[dict]) -> list[str]:
@@ -623,17 +667,19 @@ def fetch_topic_lesson(db: Session, topic_id: uuid.UUID, student_id: uuid.UUID) 
     if not student_enrolled_in_subject(db, student_profile.id, topic.subject_id):
         raise ForbiddenLessonAccess("Student is not enrolled in this subject.")
 
+    legacy_lesson = get_lesson_with_blocks(db, topic.id)
+    legacy_blocks = _map_legacy_lesson_blocks(legacy_lesson) if legacy_lesson is not None else []
+
     # Legacy path for static lesson content when curriculum-backed generation has not been linked yet.
     if not getattr(topic, "curriculum_version_id", None):
-        lesson = get_lesson_with_blocks(db, topic.id)
-        if lesson is None:
+        if legacy_lesson is None:
             raise LessonNotFound("Lesson not found")
         return {
             "topic_id": str(topic.id),
-            "title": str(getattr(lesson, "title", topic.title)),
-            "summary": None,
-            "estimated_duration_minutes": None,
-            "content_blocks": _map_legacy_lesson_blocks(lesson),
+            "title": str(getattr(legacy_lesson, "title", topic.title)),
+            "summary": getattr(legacy_lesson, "summary", None),
+            "estimated_duration_minutes": getattr(legacy_lesson, "estimated_duration_minutes", None),
+            "content_blocks": legacy_blocks,
             "covered_concepts": [],
             "prerequisites": [],
             "weakest_concepts": [],
@@ -702,19 +748,31 @@ def fetch_topic_lesson(db: Session, topic_id: uuid.UUID, student_id: uuid.UUID) 
                             "mastery_state": node.mastery_state if node else None,
                         }
                     )
-            return {
-                "topic_id": str(topic.id),
-                "title": cached.title,
-                "summary": cached.summary,
-                "estimated_duration_minutes": cached.estimated_duration_minutes,
-                "content_blocks": list(cached.content_blocks),
-                "covered_concepts": covered_concepts,
-                "prerequisites": list(getattr(graph_context, "prerequisite_concepts", []) or []),
-                "weakest_concepts": list(getattr(graph_context, "weakest_concepts", []) or []),
-                "next_unlock": getattr(graph_context, "next_unlock", None),
-                "why_this_matters": getattr(graph_context, "why_this_matters", None),
-                "assessment_ready": bool(getattr(graph_context, "current_concepts", []) or []),
-            }
+            return _lesson_response_from_blocks(
+                topic=topic,
+                title=cached.title,
+                summary=cached.summary,
+                estimated_duration_minutes=cached.estimated_duration_minutes,
+                content_blocks=list(cached.content_blocks),
+                graph_context=graph_context,
+                covered_concepts=covered_concepts,
+            )
+
+    if legacy_lesson is not None and legacy_blocks:
+        logger.info(
+            "lesson.fetch.structured_curriculum topic_id=%s student_id=%s curriculum_version_id=%s",
+            topic.id,
+            student_id,
+            curriculum_version_id,
+        )
+        return _lesson_response_from_blocks(
+            topic=topic,
+            title=str(getattr(legacy_lesson, "title", topic.title)),
+            summary=getattr(legacy_lesson, "summary", None),
+            estimated_duration_minutes=getattr(legacy_lesson, "estimated_duration_minutes", None),
+            content_blocks=legacy_blocks,
+            graph_context=graph_context,
+        )
 
     generated = _generate_personalized_lesson(
         topic_id=topic.id,
@@ -775,16 +833,12 @@ def fetch_topic_lesson(db: Session, topic_id: uuid.UUID, student_id: uuid.UUID) 
                 }
             )
 
-    return {
-        "topic_id": str(topic.id),
-        "title": str(generated["title"]),
-        "summary": generated["summary"],
-        "estimated_duration_minutes": int(generated["estimated_duration_minutes"]),
-        "content_blocks": list(generated["content_blocks"]),
-        "covered_concepts": covered_concepts,
-        "prerequisites": list(getattr(graph_context, "prerequisite_concepts", []) or []),
-        "weakest_concepts": list(getattr(graph_context, "weakest_concepts", []) or []),
-        "next_unlock": getattr(graph_context, "next_unlock", None),
-        "why_this_matters": getattr(graph_context, "why_this_matters", None),
-        "assessment_ready": bool(getattr(graph_context, "current_concepts", []) or []),
-    }
+    return _lesson_response_from_blocks(
+        topic=topic,
+        title=str(generated["title"]),
+        summary=generated["summary"],
+        estimated_duration_minutes=int(generated["estimated_duration_minutes"]),
+        content_blocks=list(generated["content_blocks"]),
+        graph_context=graph_context,
+        covered_concepts=covered_concepts,
+    )

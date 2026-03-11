@@ -18,6 +18,7 @@ class PathNextOut(BaseModel):
     recommended_concept_label: str | None = None
     reason: str
     prereq_gaps: list[str]
+    prereq_gap_labels: list[str] = Field(default_factory=list)
 
 
 class LearningMapNodeOut(BaseModel):
@@ -31,6 +32,12 @@ class LearningMapNodeOut(BaseModel):
     kind: Literal["topic", "concept"] = "topic"
 
 
+class LearningMapEdgeOut(BaseModel):
+    source_id: str
+    target_id: str
+    relation: Literal["PREREQ_OF", "NEXT"]
+
+
 class LearningMapVisualOut(BaseModel):
     student_id: UUID
     subject: Literal["math", "english", "civic"]
@@ -38,3 +45,5 @@ class LearningMapVisualOut(BaseModel):
     term: int = Field(ge=1, le=3)
     view: Literal["topic", "concept"]
     nodes: list[LearningMapNodeOut]
+    edges: list[LearningMapEdgeOut] = Field(default_factory=list)
+    next_step: PathNextOut | None = None

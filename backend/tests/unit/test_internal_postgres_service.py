@@ -127,6 +127,34 @@ def test_get_lesson_context_success_maps_payload():
     assert out.source_chunk_ids == ["chunk-1"]
     assert out.covered_concept_ids == ["math:sss2:t2:matrices"]
     assert out.covered_concept_labels["math:sss2:t2:matrices"] == "matrices"
+    assert out.context_source == "personalized"
+
+
+def test_get_lesson_context_maps_structured_source_payload():
+    repo = FakeInternalPostgresRepo()
+    service = InternalPostgresService(repo)
+    student_id = uuid4()
+    topic_id = uuid4()
+    repo.lesson_context = {
+        "student_id": student_id,
+        "topic_id": topic_id,
+        "title": "Lesson: Our Values",
+        "summary": "Define values; State the importance of values.",
+        "context_source": "structured",
+        "content_blocks": [{"type": "text", "value": "Meaning of Values\n\nValues are important to us."}],
+        "source_chunk_ids": [],
+        "generation_metadata": {
+            "generator_version": "structured_curriculum_v1",
+            "covered_concept_ids": ["civic:sss1:t1:our-values"],
+            "covered_concept_labels": {"civic:sss1:t1:our-values": "Our Values"},
+        },
+    }
+
+    out = service.get_lesson_context(student_id=student_id, topic_id=topic_id)
+
+    assert out.context_source == "structured"
+    assert out.covered_concept_ids == ["civic:sss1:t1:our-values"]
+    assert out.covered_concept_labels["civic:sss1:t1:our-values"] == "Our Values"
 
 
 def test_store_quiz_attempt_success_and_serialization():

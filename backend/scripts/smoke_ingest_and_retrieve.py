@@ -2,7 +2,7 @@
 
 Usage:
   python -m backend.scripts.smoke_ingest_and_retrieve \
-    --source_root docs/SSS_NOTES_2026 \
+    --source_root docs/Curriculum_in_json \
     --subject math \
     --sss_level SSS1 \
     --term 1 \

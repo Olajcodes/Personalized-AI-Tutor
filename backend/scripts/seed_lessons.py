@@ -11,6 +11,7 @@ Optional env:
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import uuid
@@ -34,7 +35,9 @@ from backend.models.topic import Topic
 from backend.models.user import User
 
 SEED_PASSWORD_HASH = "$2b$12$5JY6jsA5q9ODaW6fNfcohOx5l6v3PK2hQd1qi97V6S9bxR5D8Qqbi"
-DOCS_ROOT = Path(__file__).resolve().parents[2] / "docs" / "SSS_NOTES_2026"
+REPO_DOCS_ROOT = Path(__file__).resolve().parents[2] / "docs"
+CANONICAL_CURRICULUM_ROOT = REPO_DOCS_ROOT / "Curriculum_in_json"
+LEGACY_DOCS_ROOT = REPO_DOCS_ROOT / "SSS_NOTES_2026"
 SUBJECT_SLUGS = ("math", "english", "civic")
 SSS_LEVELS = ("SSS1", "SSS2", "SSS3")
 TERMS = (1, 2, 3)
@@ -379,6 +382,16 @@ def _candidate_text(topic_title: str, source_text: str, subject: str, sss_level:
     )
 
 
+def _root_has_json_topics(root: Path) -> bool:
+    return root.exists() and any(root.rglob("*.json"))
+
+
+def _default_curriculum_root() -> Path:
+    if _root_has_json_topics(CANONICAL_CURRICULUM_ROOT):
+        return CANONICAL_CURRICULUM_ROOT
+    return LEGACY_DOCS_ROOT
+
+
 def _build_doc_candidates(root: Path) -> list[ScopeTopicCandidate]:
     if not root.exists():
         return []
@@ -430,6 +443,75 @@ def _build_doc_candidates(root: Path) -> list[ScopeTopicCandidate]:
                     source_file=source_name,
                 )
             )
+
+    return candidates
+
+
+def _build_json_candidates(root: Path) -> list[ScopeTopicCandidate]:
+    if not root.exists():
+        return []
+
+    candidates: list[ScopeTopicCandidate] = []
+    used_titles_per_scope: dict[tuple[str, str, int], set[str]] = {}
+
+    for file_path in sorted(root.rglob("*.json")):
+        try:
+            payload = json.loads(file_path.read_text(encoding="utf-8", errors="ignore"))
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+
+        subject = _normalize_space(str(payload.get("subject") or "")).lower()
+        sss_level = _normalize_space(str(payload.get("sss_level") or "")).upper()
+        topic_title = _normalize_space(str(payload.get("topic_title") or ""))
+        if not subject or subject not in SUBJECT_SLUGS:
+            continue
+        if sss_level not in SSS_LEVELS:
+            continue
+        try:
+            term = int(payload.get("term"))
+        except (TypeError, ValueError):
+            continue
+        if term not in TERMS or not topic_title:
+            continue
+
+        learning_objectives = [
+            _normalize_space(str(item))
+            for item in list(payload.get("learning_objectives") or [])
+            if _normalize_space(str(item))
+        ]
+        section_parts: list[str] = []
+        for section in list(payload.get("sections") or []):
+            if not isinstance(section, dict):
+                continue
+            heading = _normalize_space(str(section.get("heading") or ""))
+            content = _normalize_space(str(section.get("content") or ""))
+            if not content:
+                continue
+            section_parts.append(f"{heading}: {content}" if heading else content)
+
+        candidate_body = " ".join([*learning_objectives, *section_parts]).strip()
+        scope_key = (subject, sss_level, term)
+        used_titles_per_scope.setdefault(scope_key, set())
+
+        dedupe_title = topic_title
+        serial = 2
+        while dedupe_title.lower() in used_titles_per_scope[scope_key]:
+            dedupe_title = f"{topic_title} ({serial})"
+            serial += 1
+        used_titles_per_scope[scope_key].add(dedupe_title.lower())
+
+        candidates.append(
+            ScopeTopicCandidate(
+                subject=subject,
+                sss_level=sss_level,
+                term=term,
+                title=dedupe_title[:240],
+                text=_candidate_text(dedupe_title, candidate_body, subject, sss_level, term),
+                source_file=file_path.name,
+            )
+        )
 
     return candidates
 
@@ -507,6 +589,19 @@ def _best_doc_candidate_for_title(
 
 def _build_seed_candidates(root: Path) -> list[ScopeTopicCandidate]:
     """Build clean canonical scope topics and attach best available document text."""
+    if _root_has_json_topics(root):
+        json_candidates = _build_json_candidates(root)
+        supplements = _fallback_candidates(json_candidates)
+        combined = [*json_candidates]
+        seen = {(item.subject, item.sss_level, item.term, item.title.lower()) for item in combined}
+        for item in supplements:
+            key = (item.subject, item.sss_level, item.term, item.title.lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            combined.append(item)
+        return combined
+
     doc_candidates = _build_doc_candidates(root)
     by_scope: dict[tuple[str, str, int], list[ScopeTopicCandidate]] = {}
     for candidate in doc_candidates:
@@ -832,7 +927,8 @@ def run() -> None:
             db.query(StudentConceptMastery).delete(synchronize_session=False)
             db.commit()
 
-        candidates = _build_seed_candidates(DOCS_ROOT)
+        docs_root = _default_curriculum_root()
+        candidates = _build_seed_candidates(docs_root)
 
         created_topics = 0
         updated_topics = 0
@@ -873,6 +969,7 @@ def run() -> None:
         db.commit()
 
         print("Seed complete.")
+        print(f"Curriculum source root: {docs_root}")
         if include_demo_learners and seed_student_id is not None:
             print(f"Primary student_id: {seed_student_id}")
         else:

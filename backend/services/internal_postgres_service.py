@@ -66,6 +66,7 @@ class InternalPostgresService:
             topic_id=row["topic_id"],
             title=row["title"],
             summary=row.get("summary"),
+            context_source=str(row.get("context_source") or "personalized"),
             content_blocks=list(row.get("content_blocks") or []),
             source_chunk_ids=[str(value) for value in (row.get("source_chunk_ids") or [])],
             covered_concept_ids=[str(value) for value in (dict(row.get("generation_metadata") or {}).get("covered_concept_ids") or [])],

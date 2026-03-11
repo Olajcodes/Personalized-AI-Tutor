@@ -71,6 +71,61 @@ def test_extract_document_chunks_builds_scoped_concepts(tmp_path: Path):
     assert all(section.chunks for section in parsed.concept_sections)
 
 
+def test_build_structured_lesson_from_json(tmp_path: Path):
+    json_file = tmp_path / "our-values.json"
+    json_file.write_text(
+        """
+        {
+          "subject": "civic",
+          "sss_level": "SSS1",
+          "term": 1,
+          "week": 2,
+          "topic_title": "Our Values",
+          "topic_slug": "our-values",
+          "source_title": "First Term SS1 Civic Education",
+          "learning_objectives": ["Define values", "State the importance of values"],
+          "sections": [
+            {"heading": "Meaning of Values", "content": "Values are things that are important to us."},
+            {"heading": "Importance of Values", "content": "Values guide behaviour and choices."}
+          ],
+          "keywords": ["values", "importance"]
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    lesson = AdminCurriculumService._build_structured_lesson_from_json(json_file)
+
+    assert lesson["title"] == "Lesson: Our Values"
+    assert lesson["summary"] == "Define values; State the importance of values."
+    assert lesson["content_blocks"][0]["heading"] == "Learning Objectives"
+    assert lesson["content_blocks"][1]["heading"] == "Meaning of Values"
+    assert lesson["content_blocks"][-1]["heading"] == "Key Terms"
+    assert lesson["estimated_duration_minutes"] >= 10
+
+
+def test_infer_scope_from_json_payload_even_when_path_is_unhelpful(tmp_path: Path):
+    json_file = tmp_path / "incoming" / "topic.json"
+    json_file.parent.mkdir(parents=True, exist_ok=True)
+    json_file.write_text(
+        """
+        {
+          "subject": "math",
+          "sss_level": "SSS2",
+          "term": 3,
+          "week": 1,
+          "topic_title": "Trigonometric Ratios",
+          "sections": [{"heading": "Intro", "content": "Angles and ratios."}]
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    inferred = AdminCurriculumService._infer_scope_from_file(root=tmp_path, file_path=json_file)
+
+    assert inferred == ("math", "SSS2", 3)
+
+
 def test_get_ingestion_status_maps_repository_rows(monkeypatch):
     service = AdminCurriculumService(db=object())
     now = datetime.now(timezone.utc)

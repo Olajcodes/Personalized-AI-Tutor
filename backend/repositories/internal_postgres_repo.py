@@ -20,6 +20,21 @@ class InternalPostgresRepository:
             return False
         return any(col["name"] == column_name for col in inspector.get_columns(table_name))
 
+    @staticmethod
+    def _readable_concept_label(concept_id: str) -> str:
+        value = str(concept_id or "").strip()
+        if not value:
+            return "Unknown Concept"
+        try:
+            uuid.UUID(value)
+            return value
+        except ValueError:
+            pass
+        token = value.rsplit(":", 1)[-1].strip().lower()
+        token = token.replace("_", " ").replace("-", " ")
+        token = " ".join(token.split())
+        return token.title() if token else value
+
     def get_profile_context(self, *, student_id: UUID) -> dict:
         row = self.db.execute(
             text(
@@ -94,6 +109,7 @@ class InternalPostgresRepository:
                     topic_id,
                     title,
                     summary,
+                    'personalized' AS context_source,
                     content_blocks,
                     source_chunk_ids,
                     generation_metadata
@@ -104,7 +120,100 @@ class InternalPostgresRepository:
             ),
             {"student_id": student_id, "topic_id": topic_id},
         ).mappings().first()
-        return dict(row) if row else {}
+        if row:
+            return dict(row)
+
+        lesson_row = self.db.execute(
+            text(
+                """
+                SELECT
+                    l.id AS lesson_id,
+                    l.topic_id,
+                    l.title,
+                    l.summary,
+                    t.curriculum_version_id
+                FROM lessons l
+                JOIN topics t ON t.id = l.topic_id
+                WHERE l.topic_id = :topic_id
+                LIMIT 1
+                """
+            ),
+            {"topic_id": topic_id},
+        ).mappings().first()
+        if not lesson_row:
+            return {}
+
+        block_rows = self.db.execute(
+            text(
+                """
+                SELECT block_type, content, order_index
+                FROM lesson_blocks
+                WHERE lesson_id = :lesson_id
+                ORDER BY order_index ASC
+                """
+            ),
+            {"lesson_id": lesson_row["lesson_id"]},
+        ).mappings().all()
+
+        content_blocks: list[dict] = []
+        for block_row in block_rows:
+            block_type = str(block_row.get("block_type") or "").strip().lower()
+            content = dict(block_row.get("content") or {})
+            if block_type in {"video", "image"}:
+                url = str(content.get("url") or "").strip()
+                if url:
+                    content_blocks.append({"type": block_type, "url": url})
+                continue
+
+            text_value = str(content.get("text") or content.get("value") or "").strip()
+            if not text_value:
+                continue
+            heading = str(content.get("heading") or "").strip()
+            if heading:
+                text_value = f"{heading}\n\n{text_value}"
+            content_blocks.append({"type": block_type or "text", "value": text_value})
+
+        concept_rows = self.db.execute(
+            text(
+                """
+                SELECT concept_id
+                FROM curriculum_topic_maps
+                WHERE topic_id = :topic_id
+                  AND (:version_id IS NULL OR version_id = :version_id)
+                ORDER BY confidence DESC, updated_at DESC, concept_id ASC
+                """
+            ),
+            {"topic_id": topic_id, "version_id": lesson_row.get("curriculum_version_id")},
+        ).mappings().all()
+
+        covered_concept_ids: list[str] = []
+        covered_concept_labels: dict[str, str] = {}
+        seen: set[str] = set()
+        for concept_row in concept_rows:
+            concept_id = str(concept_row.get("concept_id") or "").strip()
+            if not concept_id or concept_id in seen:
+                continue
+            seen.add(concept_id)
+            covered_concept_ids.append(concept_id)
+            covered_concept_labels[concept_id] = self._readable_concept_label(concept_id)
+
+        generation_metadata = {
+            "generator_version": "structured_curriculum_v1",
+            "context_source": "structured",
+            "covered_concept_ids": covered_concept_ids,
+            "covered_concept_labels": covered_concept_labels,
+        }
+
+        return {
+            "student_id": student_id,
+            "topic_id": lesson_row["topic_id"],
+            "title": lesson_row["title"],
+            "summary": lesson_row.get("summary"),
+            "context_source": "structured",
+            "content_blocks": content_blocks,
+            "source_chunk_ids": [],
+            "generation_metadata": generation_metadata,
+        }
 
     def save_quiz_attempt(self, payload: dict) -> dict:
         if not self._table_exists("internal_quiz_attempts"):

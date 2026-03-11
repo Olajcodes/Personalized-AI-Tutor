@@ -101,3 +101,64 @@ def test_fetch_topic_lesson_not_found_when_lesson_missing(monkeypatch):
 
     with pytest.raises(svc.LessonNotFound, match="Lesson not found"):
         svc.fetch_topic_lesson(db=None, topic_id=topic_id, student_id=uuid.uuid4())
+
+
+def test_fetch_topic_lesson_uses_structured_curriculum_lesson_before_rag(monkeypatch):
+    student_profile_id = uuid.uuid4()
+    student_id = uuid.uuid4()
+    topic_id = uuid.uuid4()
+    subject_id = uuid.uuid4()
+
+    monkeypatch.setattr(
+        svc,
+        "get_student_profile",
+        lambda db, sid: _obj(id=student_profile_id, student_id=sid, sss_level="SSS1", active_term=1),
+    )
+    monkeypatch.setattr(
+        svc,
+        "get_topic_with_subject",
+        lambda db, tid: (
+            _obj(
+                id=tid,
+                subject_id=subject_id,
+                is_approved=True,
+                sss_level="SSS1",
+                term=1,
+                title="Our Values",
+                curriculum_version_id=uuid.uuid4(),
+            ),
+            _obj(slug="civic"),
+        ),
+    )
+    monkeypatch.setattr(svc, "student_enrolled_in_subject", lambda db, spid, sid: True)
+    monkeypatch.setattr(
+        svc,
+        "get_lesson_with_blocks",
+        lambda db, tid: _obj(
+            id=uuid.uuid4(),
+            title="Lesson: Our Values",
+            summary="Define values; State the importance of values.",
+            estimated_duration_minutes=14,
+            blocks=[
+                _obj(block_type="text", content={"heading": "Learning Objectives", "text": "- Define values"}, order_index=1),
+                _obj(block_type="text", content={"heading": "Meaning of Values", "text": "Values are important."}, order_index=2),
+            ],
+        ),
+    )
+    monkeypatch.setattr(svc, "ensure_personalized_lessons_table", lambda db: None)
+    monkeypatch.setattr(svc, "_get_mastery_rows", lambda *args, **kwargs: [])
+    monkeypatch.setattr(svc, "_mastery_signature", lambda rows: "sig")
+    monkeypatch.setattr(svc, "get_personalized_lesson", lambda *args, **kwargs: None)
+
+    def _should_not_generate(**kwargs):
+        raise AssertionError("Structured curriculum lesson should be served before RAG generation.")
+
+    monkeypatch.setattr(svc, "_generate_personalized_lesson", _should_not_generate)
+
+    response = svc.fetch_topic_lesson(db=None, topic_id=topic_id, student_id=student_id)
+
+    assert response["title"] == "Lesson: Our Values"
+    assert response["summary"] == "Define values; State the importance of values."
+    assert response["estimated_duration_minutes"] == 14
+    assert response["content_blocks"][0]["value"] == "Learning Objectives\n\n- Define values"
+    assert response["content_blocks"][1]["value"] == "Meaning of Values\n\nValues are important."

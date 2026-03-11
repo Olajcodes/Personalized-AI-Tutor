@@ -221,6 +221,14 @@ def _lesson_body_lines(lesson_context: dict | None, *, max_blocks: int = 6) -> l
     return rendered
 
 
+def _lesson_context_has_substance(lesson_context: dict | None) -> bool:
+    if not lesson_context:
+        return False
+    if _normalize_text(str(lesson_context.get("summary") or "")):
+        return True
+    return bool(_lesson_body_lines(lesson_context))
+
+
 def _collect_concepts(*, lesson_context: dict | None, rag_chunks: list[dict]) -> list[dict[str, str]]:
     concepts: list[dict[str, str]] = []
     seen: set[str] = set()
@@ -290,8 +298,10 @@ def _build_quiz_prompt(
     lesson_summary = _normalize_text(str((lesson_context or {}).get("summary") or ""))
     lesson_body = "\n".join(_lesson_body_lines(lesson_context)) or "- No persisted lesson body."
     evidence_block = "\n".join(_context_lines(rag_chunks))
-    if not evidence_block:
+    if not evidence_block and not _lesson_context_has_substance(lesson_context):
         raise QuizGenerationError("Curriculum context is too sparse for grounded quiz generation.")
+    if not evidence_block:
+        evidence_block = "- No extra retrieval evidence. Use the structured lesson body as the primary source."
 
     concepts_json = json.dumps(concept_pool, ensure_ascii=True)
     return (
@@ -472,14 +482,18 @@ async def generate_quiz_questions(
         logger.warning("quiz.lesson_context unavailable topic_id=%s error=%s", topic_id, exc)
         lesson_context = None
 
-    rag_chunks = _internal_rag_context(
-        subject=subject,
-        sss_level=sss_level,
-        term=term,
-        topic_id=topic_id,
-        topic_title=_topic_title(lesson_context=lesson_context, rag_chunks=[], topic_id=topic_id),
-    )
-    if not rag_chunks and not lesson_context:
+    try:
+        rag_chunks = _internal_rag_context(
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+            topic_id=topic_id,
+            topic_title=_topic_title(lesson_context=lesson_context, rag_chunks=[], topic_id=topic_id),
+        )
+    except Exception as exc:
+        logger.warning("quiz.rag_context unavailable topic_id=%s error=%s", topic_id, exc)
+        rag_chunks = []
+    if not rag_chunks and not _lesson_context_has_substance(lesson_context):
         raise QuizGenerationError("No approved curriculum context found for grounded quiz generation.")
 
     topic_title = _topic_title(lesson_context=lesson_context, rag_chunks=rag_chunks, topic_id=topic_id)

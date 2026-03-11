@@ -11,6 +11,7 @@ from backend.repositories.activity_repo import ActivityRepository
 from backend.repositories.tutor_session_repo import TutorSessionRepository
 from backend.schemas.activity_schema import ActivityLogCreate
 from backend.schemas.internal_graph_schema import ConceptUpdateIn, InternalGraphUpdateIn
+from backend.schemas.learning_path_schema import PathNextIn
 from backend.schemas.tutor_schema import (
     TutorAssessmentStartIn,
     TutorAssessmentStartOut,
@@ -19,6 +20,7 @@ from backend.schemas.tutor_schema import (
 )
 from backend.services.activity_service import ActivityService
 from backend.services.graph_client_service import GraphClientValidationError, graph_client_service
+from backend.services.learning_path_service import learning_path_service
 from backend.services.tutor_orchestration_service import (
     TutorOrchestrationService,
     TutorProviderUnavailableError,
@@ -80,6 +82,32 @@ class TutorAssessmentService:
         if score >= 0.55:
             return True, 0.05
         return False, 0.04
+
+    def _graph_follow_up(self, *, payload: TutorAssessmentSubmitIn) -> tuple[str | None, str | None, str | None]:
+        try:
+            next_step = learning_path_service.calculate_next_step(
+                db=self.db,
+                payload=PathNextIn(
+                    student_id=payload.student_id,
+                    subject=payload.subject,
+                    sss_level=payload.sss_level,
+                    term=payload.term,
+                ),
+            )
+        except Exception:
+            return None, None, None
+
+        prerequisite_warning = None
+        if next_step.prereq_gaps:
+            blocking_label = next_step.recommended_concept_label or "a blocking prerequisite"
+            prerequisite_warning = (
+                f"You are still blocked by {blocking_label}. Strengthen that prerequisite before pushing further."
+            )
+        return (
+            prerequisite_warning,
+            next_step.recommended_topic_id,
+            next_step.recommended_topic_title or next_step.recommended_concept_label,
+        )
 
     async def start_assessment(self, payload: TutorAssessmentStartIn) -> TutorAssessmentStartOut:
         ai_out = await self.orchestration.assessment_start(payload)
@@ -180,11 +208,16 @@ class TutorAssessmentService:
         )
         self.repo.update_message_content(message_id=message_id, content=self._encode_state(resolved_state))
         self.repo.add_message(session_id=payload.session_id, role="assistant", content=ai_out.feedback)
+        prerequisite_warning, recommended_topic_id, recommended_topic_title = self._graph_follow_up(payload=payload)
         return ai_out.model_copy(
             update={
                 "assessment_id": payload.assessment_id,
                 "mastery_updated": mastery_updated,
                 "new_mastery": new_mastery,
                 "actions": list(ai_out.actions) + ["MASTERED_CHECK_RECORDED" if mastery_updated else "MASTERED_CHECK_SKIPPED"],
+                "prerequisite_warning": prerequisite_warning,
+                "recommended_topic_id": recommended_topic_id,
+                "recommended_topic_title": recommended_topic_title,
+                "recommended_next_concept_label": recommended_topic_title,
             }
         )

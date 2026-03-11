@@ -40,6 +40,7 @@ def test_run_tutor_chat_contract(monkeypatch):
             "topic_id": request.topic_id,
             "title": "Lesson: Algebra Basics",
             "summary": "Focus on variables and simple equations.",
+            "context_source": "structured",
             "content_blocks": [{"type": "text", "value": "A variable represents an unknown quantity."}],
             "source_chunk_ids": ["chunk-1"],
             "generation_metadata": {"generator_version": "rag_mastery_v1"},
@@ -82,6 +83,7 @@ def test_run_tutor_chat_contract(monkeypatch):
     assert isinstance(out.actions, list)
     assert isinstance(out.recommendations, list)
     assert "USED_LESSON_CONTEXT" in out.actions
+    assert "USED_STRUCTURED_LESSON_CONTEXT" in out.actions
     assert "NO_MASTERY_WRITE_NO_EVIDENCE" in out.actions
 
 

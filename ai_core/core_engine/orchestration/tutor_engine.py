@@ -323,6 +323,13 @@ def _lesson_context_available(lesson_context: dict | None) -> bool:
     return isinstance(blocks, list) and bool(blocks)
 
 
+def _lesson_context_source(lesson_context: dict | None) -> str | None:
+    if not lesson_context:
+        return None
+    source = str(lesson_context.get("context_source") or "").strip().lower()
+    return source or None
+
+
 def _lesson_covered_concept_ids(lesson_context: dict | None) -> list[str]:
     if not lesson_context:
         return []
@@ -961,7 +968,15 @@ def _collect_tutor_context(request: TutorChatRequest) -> tuple[list[Citation], d
             logger.warning("tutor.context lesson-context fetch failed: %s", exc)
             actions.append("LESSON_CONTEXT_FAILED")
         else:
-            actions.append("USED_LESSON_CONTEXT" if _lesson_context_available(lesson_context) else "LESSON_CONTEXT_EMPTY")
+            if _lesson_context_available(lesson_context):
+                actions.append("USED_LESSON_CONTEXT")
+                source = _lesson_context_source(lesson_context)
+                if source == "structured":
+                    actions.append("USED_STRUCTURED_LESSON_CONTEXT")
+                elif source == "personalized":
+                    actions.append("USED_PERSONALIZED_LESSON_CONTEXT")
+            else:
+                actions.append("LESSON_CONTEXT_EMPTY")
 
     actions.append("CALLED_TOOL:internal_graph.context")
     try:
@@ -1051,13 +1066,14 @@ def _run_structured_tutor_mode(
             lesson_context=lesson_context,
         )
     logger.info(
-        "tutor.mode success mode=%s subject=%s level=%s term=%s topic_id=%s lesson_context=%s covered_concepts=%s citations=%s",
+        "tutor.mode success mode=%s subject=%s level=%s term=%s topic_id=%s lesson_context=%s context_source=%s covered_concepts=%s citations=%s",
         mode,
         request.subject,
         request.sss_level,
         request.term,
         request.topic_id,
         _lesson_context_available(lesson_context),
+        _lesson_context_source(lesson_context) or "none",
         len(_lesson_covered_concept_ids(lesson_context)),
         len(citations),
     )

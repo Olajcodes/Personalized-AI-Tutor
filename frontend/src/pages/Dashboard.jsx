@@ -23,7 +23,7 @@ export default function Dashboard() {
     const enrolledSubjects = studentData?.subjects || [];
 
     const [activeSubject, setActiveSubject] = useState(null);
-    const [mapNodes, setMapNodes] = useState([]);
+    const [mapData, setMapData] = useState({ nodes: [], edges: [], next_step: null });
     const [isLoadingMap, setIsLoadingMap] = useState(false);
     const [mapError, setMapError] = useState('');
 
@@ -66,10 +66,14 @@ export default function Dashboard() {
                 }
 
                 const data = await response.json();
-                setMapNodes(data.nodes || data || []);
+                setMapData({
+                    nodes: Array.isArray(data?.nodes) ? data.nodes : [],
+                    edges: Array.isArray(data?.edges) ? data.edges : [],
+                    next_step: data?.next_step || null,
+                });
             } catch (err) {
                 console.error('Map fetch error:', err);
-                setMapNodes([]);
+                setMapData({ nodes: [], edges: [], next_step: null });
                 setMapError(err.message || 'Learning map unavailable.');
             } finally {
                 setIsLoadingMap(false);
@@ -122,7 +126,7 @@ export default function Dashboard() {
                         <p className="mx-auto max-w-md text-lg text-slate-500">{mapError}</p>
                     </div>
                 ) : (
-                    <LearningMap classLevel={currentLevel} subject={activeSubject} nodes={mapNodes} />
+                    <LearningMap classLevel={currentLevel} subject={activeSubject} mapData={mapData} />
                 )}
 
                 <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">

@@ -1,6 +1,6 @@
 import { Map } from 'lucide-react';
 
-export default function PathProgress({ nextTopic }) {
+export default function PathProgress({ nextTopic, reason, blockingPrerequisite }) {
   return (
     <div className="bg-[#1c2438] rounded-2xl p-6 border border-slate-700 mt-6">
       <div className="flex items-center gap-2 text-white font-bold mb-6">
@@ -22,6 +22,12 @@ export default function PathProgress({ nextTopic }) {
       <div className="text-center">
         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Next Topic:</div>
         <div className="text-sm font-bold text-white uppercase">{nextTopic}</div>
+        {reason && <p className="mt-3 text-xs leading-6 text-slate-300">{reason}</p>}
+        {blockingPrerequisite && (
+          <div className="mt-3 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-100">
+            Blocking prerequisite: {blockingPrerequisite}
+          </div>
+        )}
       </div>
     </div>
   );

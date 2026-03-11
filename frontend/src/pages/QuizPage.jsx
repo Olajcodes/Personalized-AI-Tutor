@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
@@ -11,6 +11,17 @@ import ConceptCard from "../components/ConceptCard";
 import AITutorInsights from "../components/AITutorInsights";
 import PathProgress from "../components/PathProgress";
 import FooterActions from "../components/FooterActions";
+
+const humanizeConceptId = (conceptId, fallback = 'Concept') => {
+  const value = String(conceptId || '').trim();
+  if (!value) return fallback;
+  const token = value.split(':').pop()?.trim() || value;
+  return token
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase()) || fallback;
+};
 
 const QuizPage = () => {
   const { topicId } = useParams();
@@ -121,7 +132,7 @@ const QuizPage = () => {
       const resultsJson = await resultsRes.json();
 
       // ==========================================================
-      // 👇 THE FIX: Smart math for Score and Accuracy 👇
+      // ðŸ‘‡ THE FIX: Smart math for Score and Accuracy ðŸ‘‡
       // ==========================================================
       const totalQs = quizData.questions.length;
       const rawScore = resultsJson.score || 0;
@@ -172,9 +183,17 @@ const QuizPage = () => {
             greeting: `Hi ${userData?.first_name || 'there'}! Here is my analysis:`,
             strugglePoints: wrongConcepts.length > 0 ? wrongConcepts : ["None! Perfect execution."],
             keyInsight: resultsJson.insights?.[0] || "Keep up the consistent practice to solidify these topics!",
-            prerequisite: resultsJson.insights?.[1] || "Review the foundational rules before moving forward."
+            prerequisite: resultsJson.graph_remediation?.blocking_prerequisite_label
+              || resultsJson.insights?.[1]
+              || "Review the foundational rules before moving forward."
         },
-        nextTopic: resultsJson.recommended_revision_topic_title || "Next Module"
+        nextTopic: resultsJson.recommended_revision_topic_title || "Next Module",
+        remediation: {
+          weakestConcept: resultsJson.graph_remediation?.weakest_concept_label || null,
+          blockingPrerequisite: resultsJson.graph_remediation?.blocking_prerequisite_label || null,
+          recommendationReason: resultsJson.graph_remediation?.recommendation_reason || null,
+          nextConcept: resultsJson.graph_remediation?.recommended_next_concept_label || null,
+        },
       };
 
       setFormattedResults(mappedApiData);
@@ -189,7 +208,7 @@ const QuizPage = () => {
   // ======================================================================
   // ACTIVE QUIZ HANDLERS
   // ======================================================================
-  // 👇 Now takes the Letter (A, B, C, D) instead of the long string
+  // ðŸ‘‡ Now takes the Letter (A, B, C, D) instead of the long string
   const handleSelectOption = (optionLetter) => setSelectedOption(optionLetter);
 
   const handleNextOrSubmit = () => {
@@ -288,7 +307,7 @@ const QuizPage = () => {
 
         <main className="flex-grow flex flex-col items-center justify-center px-4 mt-8">
           <div className="bg-indigo-50 text-[#6b46c1] px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest mb-6 border border-indigo-100/50">
-            {currentSubject} • {currentQuestion.concept_id || 'CONCEPT'}
+            {currentSubject} - {humanizeConceptId(currentQuestion.concept_id, 'Concept')}
           </div>
 
           <h1 className="text-2xl md:text-3xl font-black text-slate-800 mb-8 text-center max-w-2xl leading-relaxed">
@@ -302,7 +321,7 @@ const QuizPage = () => {
                 const optionLetter = String.fromCharCode(65 + i); 
                 // Safely grab the text from your JSON structure
                 const optText = typeof option === 'string' ? option : option.text || option.value;
-                // 👇 Now comparing the selected 'A'/'B' against this specific tile's letter
+                // ðŸ‘‡ Now comparing the selected 'A'/'B' against this specific tile's letter
                 const isSelected = selectedOption === optionLetter;
                 
                 return (
@@ -368,8 +387,23 @@ const QuizPage = () => {
                 <div className="lg:col-span-1 flex flex-col">
                     <AITutorInsights insights={formattedResults.aiInsights} />
                     <div className="mt-6">
-                       <PathProgress nextTopic={formattedResults.nextTopic} />
+                       <PathProgress
+                         nextTopic={formattedResults.nextTopic}
+                         reason={formattedResults.remediation?.recommendationReason}
+                         blockingPrerequisite={formattedResults.remediation?.blockingPrerequisite}
+                       />
                     </div>
+                    {formattedResults.remediation?.weakestConcept && (
+                      <div className="mt-6 rounded-2xl border border-rose-200 bg-rose-50 p-5">
+                        <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-rose-500">Weakest concept</div>
+                        <div className="mt-2 text-sm font-bold text-rose-900">{formattedResults.remediation.weakestConcept}</div>
+                        {formattedResults.remediation.nextConcept && (
+                          <p className="mt-2 text-xs leading-6 text-rose-800">
+                            Best next focus: {formattedResults.remediation.nextConcept}
+                          </p>
+                        )}
+                      </div>
+                    )}
                 </div>
             </div>
 
@@ -385,3 +419,4 @@ const QuizPage = () => {
 };
 
 export default QuizPage;
+

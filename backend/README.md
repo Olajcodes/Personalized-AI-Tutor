@@ -87,7 +87,7 @@ This one command:
 - seeds baseline curriculum entities,
 - clears old curriculum ingestion/version rows,
 - clears Qdrant curriculum vectors,
-- ingests all discovered scopes from `docs/SSS_NOTES_2026`,
+- ingests all discovered scopes from `docs/Curriculum_in_json` when available, otherwise falls back to `docs/SSS_NOTES_2026`,
 - auto-approves ingested versions,
 - optionally reseeds Neo4j topic/concept graph.
 
@@ -104,6 +104,8 @@ python -m backend.scripts.reset_and_reseed_curriculum `
 Important:
 
 - LLM-first extraction/inference is enabled by default in this script.
+- Curriculum reset now prefers canonical topic JSON from `docs/Curriculum_in_json` automatically when that folder contains `.json` files.
+- Override with `--source-root <path>` if you want to ingest a different source corpus explicitly.
 - If LLM fails or returns invalid output, ingestion falls back automatically and logs fallback mode.
 - Add `--disable-llm` for deterministic fallback-only ingestion.
 - Add `--seed-demo-learners` only if you explicitly want demo learner rows.

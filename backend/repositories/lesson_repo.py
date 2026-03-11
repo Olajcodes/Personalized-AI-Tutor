@@ -1,14 +1,16 @@
 """Lesson repository (DB queries only)."""
 
 import uuid
-from sqlalchemy.orm import Session
-from sqlalchemy import select
+from typing import Any
 
-from backend.models.topic import Topic
-from backend.models.lesson import Lesson
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from backend.models.lesson import Lesson, LessonBlock
 from backend.models.personalized_lesson import PersonalizedLesson
 from backend.models.student import StudentProfile, StudentSubject
 from backend.models.subject import Subject
+from backend.models.topic import Topic
 
 def get_student_profile(db: Session, student_id: uuid.UUID) -> StudentProfile | None:
     stmt = select(StudentProfile).where(StudentProfile.student_id == student_id)
@@ -31,6 +33,70 @@ def get_topic_with_subject(db: Session, topic_id: uuid.UUID) -> tuple[Topic, Sub
 def get_lesson_with_blocks(db: Session, topic_id: uuid.UUID) -> Lesson | None:
     stmt = select(Lesson).where(Lesson.topic_id == topic_id)
     return db.execute(stmt).scalar_one_or_none()
+
+
+def upsert_lesson_with_blocks(
+    db: Session,
+    *,
+    topic_id: uuid.UUID,
+    title: str,
+    summary: str | None,
+    estimated_duration_minutes: int | None,
+    content_blocks: list[dict[str, Any]],
+) -> Lesson:
+    row = get_lesson_with_blocks(db, topic_id)
+    if row is None:
+        row = Lesson(
+            topic_id=topic_id,
+            title=title,
+            summary=summary,
+            estimated_duration_minutes=estimated_duration_minutes,
+        )
+        db.add(row)
+        db.flush()
+    else:
+        row.title = title
+        row.summary = summary
+        row.estimated_duration_minutes = estimated_duration_minutes
+
+    row.blocks.clear()
+    db.flush()
+
+    for order_index, block in enumerate(content_blocks):
+        block_type = str(block.get("type") or "").strip().lower()
+        if block_type not in {"text", "video", "image", "example", "exercise"}:
+            continue
+
+        content: dict[str, Any]
+        if block_type in {"video", "image"}:
+            url = str(block.get("url") or "").strip()
+            if not url:
+                continue
+            content = {"url": url}
+        else:
+            value = block.get("value")
+            if isinstance(value, dict):
+                content = dict(value)
+            else:
+                text_value = str(value or "").strip()
+                if not text_value:
+                    continue
+                content = {"text": text_value}
+
+            heading = str(block.get("heading") or "").strip()
+            if heading:
+                content["heading"] = heading
+
+        row.blocks.append(
+            LessonBlock(
+                block_type=block_type,
+                content=content,
+                order_index=order_index,
+            )
+        )
+
+    db.flush()
+    return row
 
 
 def ensure_personalized_lessons_table(db: Session) -> None:
