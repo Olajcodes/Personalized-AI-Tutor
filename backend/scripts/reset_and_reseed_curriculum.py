@@ -44,6 +44,7 @@ def _default_source_root() -> str:
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Reset curriculum KB data and reseed end-to-end")
     parser.add_argument("--source-root", default=_default_source_root())
+    parser.add_argument("--skip-json-validation", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--full-db-reset", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--seed-lessons", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--seed-reset", action=argparse.BooleanOptionalAction, default=True)
@@ -77,6 +78,34 @@ def _configure_runtime(args: argparse.Namespace) -> None:
         os.environ["USE_NEO4J_GRAPH"] = "false"
 
     print(f"  - curriculum source root: {args.source_root}")
+
+
+def _validate_canonical_json_if_present(args: argparse.Namespace) -> None:
+    source_root = Path(args.source_root).expanduser().resolve()
+    if args.skip_json_validation:
+        return
+    if not source_root.exists() or not source_root.is_dir():
+        return
+    if not any(source_root.rglob("*.json")):
+        return
+
+    print("[preflight] Validating canonical curriculum JSON...")
+    from backend.scripts.validate_curriculum_json import validate_curriculum_json_root
+
+    result = validate_curriculum_json_root(source_root)
+    print(
+        "  - validation summary: "
+        f"files={result['file_count']}, errors={result['error_count']}, warnings={result['warning_count']}"
+    )
+    if result["warnings"]:
+        for entry in list(result["warnings"])[:10]:
+            print(f"    warning: {entry}")
+        if len(result["warnings"]) > 10:
+            print(f"    ... {len(result['warnings']) - 10} more warning(s)")
+    if result["errors"]:
+        for entry in result["errors"]:
+            print(f"    error: {entry}")
+        raise RuntimeError("Canonical curriculum JSON validation failed. Fix errors or use --skip-json-validation.")
 
 
 def _run_seed_lessons(args: argparse.Namespace) -> None:
@@ -377,6 +406,7 @@ def main() -> int:
     _configure_runtime(args)
 
     try:
+        _validate_canonical_json_if_present(args)
         if args.full_db_reset:
             _full_postgres_reset()
         _run_seed_lessons(args)
