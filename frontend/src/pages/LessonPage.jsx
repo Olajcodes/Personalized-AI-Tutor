@@ -481,6 +481,38 @@ export default function LessonPage() {
       setPendingAssessment(out);
       setAssessmentAnswer('');
       setLastAssessmentReview(null);
+      saveGraphIntervention({
+        studentId: activeId,
+        subject: currentSubject,
+        sssLevel: currentLevel,
+        term: currentTerm,
+        payload: {
+          source: 'pending_assessment',
+          next_step: {
+            recommended_topic_id: topicId,
+            recommended_topic_title: lesson?.title || bootstrap?.lesson?.title || 'Current lesson',
+            recommended_concept_label: out.concept_label || null,
+            prereq_gaps: [],
+            prereq_gap_labels: [],
+            reason: `Resume the live checkpoint on ${out.concept_label || 'this lesson'} before moving on.`,
+          },
+          recent_evidence: out.hint
+            ? {
+                summary: `Checkpoint ready: ${out.hint}`,
+                strongest_gain_concept_label: null,
+                strongest_drop_concept_label: out.concept_label || null,
+              }
+            : null,
+          recommendation_story: {
+            status: 'resume_checkpoint',
+            headline: `Resume your checkpoint on ${out.concept_label || lesson?.title || 'this lesson'}`,
+            supporting_reason: 'A live tutor checkpoint is waiting in your current lesson.',
+            evidence_summary: out.hint ? `Hint ready: ${out.hint}` : 'Your next mastery checkpoint is already prepared.',
+            next_concept_label: out.concept_label || null,
+            action_label: 'Resume checkpoint',
+          },
+        },
+      });
       appendAssistant({
         assistant_message: `Checkpoint: ${out.question}`,
         key_points: [
