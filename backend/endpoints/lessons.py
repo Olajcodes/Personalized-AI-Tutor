@@ -11,6 +11,7 @@ from backend.core.auth import get_current_user
 from backend.core.database import get_db
 from backend.schemas.lesson_cockpit_schema import LessonCockpitBootstrapIn, LessonCockpitBootstrapOut
 from backend.schemas.lesson_schema import LessonPrewarmIn, LessonPrewarmOut, TopicLessonResponse
+from backend.services.course_experience_service import CourseExperienceService
 from backend.services.lesson_cockpit_service import LessonCockpitService
 from backend.services.lesson_experience_service import LessonExperienceService
 from backend.services.lesson_service import (
@@ -77,6 +78,11 @@ def prewarm_lessons(
         sss_level=payload.sss_level,
         term=int(payload.term),
         topic_ids=list(payload.topic_ids),
+    )
+    CourseExperienceService.prewarm_scope(
+        student_id=payload.student_id,
+        subject=payload.subject,
+        term=int(payload.term),
     )
     return LessonPrewarmOut(
         requested_topic_ids=[str(topic_id) for topic_id in payload.topic_ids],

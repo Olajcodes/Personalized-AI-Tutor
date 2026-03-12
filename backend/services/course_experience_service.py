@@ -11,6 +11,7 @@ from sqlalchemy import desc
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.core.database import SessionLocal
 from backend.models.mastery_update_event import MasteryUpdateEvent
 from backend.models.personalized_lesson import PersonalizedLesson
 from backend.models.student import StudentProfile, StudentSubject
@@ -266,6 +267,40 @@ class CourseExperienceService:
         prefix = ":".join([str(student_id), subject, sss_level, str(term)])
         for cache_key in [key for key in list(_COURSE_BOOTSTRAP_CACHE.keys()) if key.startswith(prefix)]:
             _COURSE_BOOTSTRAP_CACHE.pop(cache_key, None)
+
+    @classmethod
+    def prewarm_scope(
+        cls,
+        *,
+        student_id: UUID,
+        subject: str,
+        term: int,
+    ) -> bool:
+        db = SessionLocal()
+        try:
+            cls(db).bootstrap(
+                student_id=student_id,
+                subject=subject,
+                term=term,
+            )
+            logger.info(
+                "course.bootstrap.prewarm_scope_success student_id=%s subject=%s term=%s",
+                student_id,
+                subject,
+                term,
+            )
+            return True
+        except Exception as exc:  # pragma: no cover - best effort prewarm
+            logger.warning(
+                "course.bootstrap.prewarm_scope_failed student_id=%s subject=%s term=%s detail=%s",
+                student_id,
+                subject,
+                term,
+                exc,
+            )
+            return False
+        finally:
+            db.close()
 
     def bootstrap(
         self,
