@@ -84,8 +84,17 @@ const prewarmTopics = async ({ token, studentId, subject, sssLevel, term, topicI
   }
 };
 
-function MessageCard({ item, onOpenRecommendation }) {
+function MessageCard({
+  item,
+  onOpenRecommendation,
+  onStartCheckpoint,
+  onOpenPrereqBridge,
+  onStartDrill,
+}) {
   const isStudent = item.role === 'student';
+  const showCheckpointAction = !isStudent && Boolean(item.recommended_assessment);
+  const showPrereqAction = !isStudent && Boolean(item.prerequisite_warning);
+  const showDrillAction = !isStudent && safeArray(item.concept_focus).length > 0;
   return (
     <div className={`flex ${isStudent ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[92%] rounded-3xl p-4 text-sm ${isStudent ? 'bg-indigo-600 text-white' : 'border border-slate-200 bg-white text-slate-700'}`}>
@@ -157,6 +166,40 @@ function MessageCard({ item, onOpenRecommendation }) {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+            {(showCheckpointAction || showPrereqAction || showDrillAction) && (
+              <div className="flex flex-wrap gap-2">
+                {showCheckpointAction && (
+                  <button
+                    type="button"
+                    onClick={onStartCheckpoint}
+                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-white hover:bg-emerald-700"
+                  >
+                    <Target size={14} />
+                    Check understanding
+                  </button>
+                )}
+                {showPrereqAction && (
+                  <button
+                    type="button"
+                    onClick={onOpenPrereqBridge}
+                    className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-amber-700 hover:bg-amber-50"
+                  >
+                    <Route size={14} />
+                    Bridge prerequisite
+                  </button>
+                )}
+                {showDrillAction && (
+                  <button
+                    type="button"
+                    onClick={onStartDrill}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-700 hover:bg-slate-50"
+                  >
+                    <Zap size={14} />
+                    1-minute drill
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -322,6 +365,7 @@ export default function LessonPage() {
         concept_focus: payload.concept_focus || [],
         citations: payload.citations || [],
         recommendations: payload.recommendations || [],
+        actions: payload.actions || [],
         next_action: payload.next_action || null,
         prerequisite_warning: payload.prerequisite_warning || null,
         recommended_assessment: payload.recommended_assessment || null,
@@ -452,45 +496,53 @@ export default function LessonPage() {
     }
   };
 
+  const handleRecap = async () => {
+    setIsBusy(true);
+    try {
+      appendAssistant(await postJson('/tutor/recap', {
+        student_id: activeId,
+        session_id: sessionId,
+        subject: currentSubject,
+        sss_level: currentLevel,
+        term: currentTerm,
+        topic_id: topicId,
+      }));
+    } catch (err) {
+      setMessages((prev) => [...prev, { role: 'assistant', content: err.message || 'Recap unavailable.' }]);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handlePrereqBridge = async () => {
+    setIsBusy(true);
+    try {
+      appendAssistant(await postJson('/tutor/prereq-bridge', {
+        student_id: activeId,
+        session_id: sessionId,
+        subject: currentSubject,
+        sss_level: currentLevel,
+        term: currentTerm,
+        topic_id: topicId,
+      }));
+    } catch (err) {
+      setMessages((prev) => [...prev, { role: 'assistant', content: err.message || 'Prerequisite bridge unavailable.' }]);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   const handleQuickAction = async (action) => {
     if (action.intent === 'assessment_start') {
       await startAssessment();
       return;
     }
     if (action.id === 'recap') {
-      setIsBusy(true);
-      try {
-        appendAssistant(await postJson('/tutor/recap', {
-          student_id: activeId,
-          session_id: sessionId,
-          subject: currentSubject,
-          sss_level: currentLevel,
-          term: currentTerm,
-          topic_id: topicId,
-        }));
-      } catch (err) {
-        setMessages((prev) => [...prev, { role: 'assistant', content: err.message || 'Recap unavailable.' }]);
-      } finally {
-        setIsBusy(false);
-      }
+      await handleRecap();
       return;
     }
     if (action.id === 'prereq-bridge') {
-      setIsBusy(true);
-      try {
-        appendAssistant(await postJson('/tutor/prereq-bridge', {
-          student_id: activeId,
-          session_id: sessionId,
-          subject: currentSubject,
-          sss_level: currentLevel,
-          term: currentTerm,
-          topic_id: topicId,
-        }));
-      } catch (err) {
-        setMessages((prev) => [...prev, { role: 'assistant', content: err.message || 'Prerequisite bridge unavailable.' }]);
-      } finally {
-        setIsBusy(false);
-      }
+      await handlePrereqBridge();
       return;
     }
     sendChat(action.prompt);
@@ -946,6 +998,9 @@ export default function LessonPage() {
                       key={`${item.role}-${index}`}
                       item={item}
                       onOpenRecommendation={openRecommendedLesson}
+                      onStartCheckpoint={() => startAssessment()}
+                      onOpenPrereqBridge={handlePrereqBridge}
+                      onStartDrill={handleDrill}
                     />
                   ))}
                   {isBusy && (

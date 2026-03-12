@@ -46,6 +46,20 @@ const prewarmTopics = async ({ apiUrl, token, studentId, subject, sssLevel, term
   }
 };
 
+const resolveOptionText = (question, answerLetter) => {
+  const normalized = String(answerLetter || '').trim();
+  if (!normalized) return '';
+  if (normalized === 'SKIPPED') return 'Skipped this question';
+
+  const optionIndex = normalized.charCodeAt(0) - 65;
+  const option = Array.isArray(question?.options) ? question.options[optionIndex] : null;
+  if (typeof option === 'string') return option;
+  if (option && typeof option === 'object') {
+    return option.text || option.value || normalized;
+  }
+  return normalized;
+};
+
 const QuizPage = () => {
   const { topicId } = useParams();
   const { token } = useAuth();
@@ -185,6 +199,19 @@ const QuizPage = () => {
         .filter(c => !c.is_correct)
         .map(c => c.concept_label || humanizeConceptId(c.concept_id));
 
+      const firstWrongQuestion = quizData.questions.find((question) => {
+        const submitted = finalAnswers[question.id];
+        return Boolean(submitted) && submitted !== question.correct_answer;
+      });
+      const explainState = firstWrongQuestion
+        ? {
+            question: firstWrongQuestion.text,
+            studentAnswer: resolveOptionText(firstWrongQuestion, finalAnswers[firstWrongQuestion.id]),
+            correctAnswer: resolveOptionText(firstWrongQuestion, firstWrongQuestion.correct_answer),
+            topicId,
+          }
+        : null;
+
       const recommendedTopicId = resultsJson.recommended_revision_topic_id
         || resultsJson.graph_remediation?.recommended_next_topic_id
         || null;
@@ -232,6 +259,7 @@ const QuizPage = () => {
           recommendationReason: resultsJson.graph_remediation?.recommendation_reason || null,
           nextConcept: resultsJson.graph_remediation?.recommended_next_concept_label || null,
         },
+        explainState,
       };
 
       setFormattedResults(mappedApiData);
@@ -451,6 +479,7 @@ const QuizPage = () => {
               <FooterActions
                 recommendedTopicId={formattedResults.nextTopicId}
                 recommendedTopicTitle={formattedResults.nextTopic}
+                explainState={formattedResults.explainState}
               />
             </div>
         </div>
