@@ -26,6 +26,7 @@ BOOTSTRAP_CACHE_TTL_SECONDS = 30.0
 _BOOTSTRAP_CACHE: dict[str, tuple[float, TutorSessionBootstrapOut]] = {}
 TOPIC_SNAPSHOT_CACHE_TTL_SECONDS = 180.0
 _TOPIC_SNAPSHOT_CACHE: dict[str, tuple[float, "_TopicSnapshot"]] = {}
+_PREVIEW_SESSION_ID = UUID("00000000-0000-0000-0000-000000000000")
 logger = logging.getLogger(__name__)
 
 
@@ -69,6 +70,26 @@ class LessonExperienceService:
                 str(payload.term),
                 str(payload.topic_id),
                 str(session_id),
+            ]
+        )
+
+    @staticmethod
+    def _preview_cache_key(
+        *,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+        topic_id: UUID,
+    ) -> str:
+        return ":".join(
+            [
+                str(student_id),
+                subject,
+                sss_level,
+                str(term),
+                str(topic_id),
+                "preview",
             ]
         )
 
@@ -279,6 +300,110 @@ class LessonExperienceService:
             db.close()
         return result
 
+    @classmethod
+    def prewarm_bootstrap_preview(
+        cls,
+        *,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+        topic_ids: list[UUID],
+    ) -> dict[str, list[str]]:
+        result = {
+            "warmed_topic_ids": [],
+            "cache_hit_topic_ids": [],
+            "failed_topic_ids": [],
+        }
+        if not topic_ids:
+            return result
+        db = SessionLocal()
+        try:
+            seen: set[str] = set()
+            service = cls(db)
+            for topic_id in topic_ids:
+                topic_token = str(topic_id)
+                if not topic_token or topic_token in seen:
+                    continue
+                seen.add(topic_token)
+                preview_key = cls._preview_cache_key(
+                    student_id=student_id,
+                    subject=subject,
+                    sss_level=sss_level,
+                    term=term,
+                    topic_id=topic_id,
+                )
+                cached = cls._read_cached_bootstrap(cache_key=preview_key)
+                if cached is not None:
+                    result["cache_hit_topic_ids"].append(topic_token)
+                    continue
+                try:
+                    snapshot, _ = cls._build_topic_snapshot(
+                        db=db,
+                        student_id=student_id,
+                        subject=subject,
+                        sss_level=sss_level,
+                        term=term,
+                        topic_id=topic_id,
+                    )
+                    bootstrap = service._build_bootstrap_payload(
+                        payload=TutorSessionBootstrapIn(
+                            student_id=student_id,
+                            subject=subject,
+                            sss_level=sss_level,
+                            term=term,
+                            topic_id=topic_id,
+                            session_id=None,
+                        ),
+                        session_id=_PREVIEW_SESSION_ID,
+                        session_started=False,
+                        snapshot=snapshot,
+                        pending_assessment=None,
+                    )
+                    cls._write_cached_bootstrap(cache_key=preview_key, payload=bootstrap)
+                    result["warmed_topic_ids"].append(topic_token)
+                except Exception as exc:  # pragma: no cover - best effort prewarm
+                    db.rollback()
+                    logger.warning(
+                        "lesson.bootstrap.prewarm_preview_failed student_id=%s topic_id=%s detail=%s",
+                        student_id,
+                        topic_id,
+                        exc,
+                    )
+                    result["failed_topic_ids"].append(topic_token)
+        finally:
+            db.close()
+        return result
+
+    @classmethod
+    def prewarm_related_topics(
+        cls,
+        *,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+        topic_ids: list[UUID],
+    ) -> dict[str, list[str]]:
+        result = cls.prewarm_topics(
+            student_id=student_id,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+            topic_ids=topic_ids,
+        )
+        preview = cls.prewarm_bootstrap_preview(
+            student_id=student_id,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+            topic_ids=topic_ids,
+        )
+        for key in ("warmed_topic_ids", "cache_hit_topic_ids", "failed_topic_ids"):
+            merged = list(dict.fromkeys(list(result[key]) + list(preview[key])))
+            result[key] = merged
+        return result
+
     @staticmethod
     def _suggested_actions(topic_title: str) -> list[TutorQuickActionOut]:
         return [
@@ -340,43 +465,23 @@ class LessonExperienceService:
             ),
         ]
 
-    def bootstrap(self, payload: TutorSessionBootstrapIn) -> TutorSessionBootstrapOut:
-        session_id, session_started = self._get_or_create_session(payload=payload)
-        cache_key = self._cache_key(payload=payload, session_id=session_id)
-        cached = self._read_cached_bootstrap(cache_key=cache_key)
-        if cached is not None:
-            if session_started:
-                return cached.model_copy(update={"session_started": True, "session_id": session_id})
-            return cached
-
-        snapshot, _ = self._build_topic_snapshot(
-            db=self.db,
-            student_id=payload.student_id,
-            subject=payload.subject,
-            sss_level=payload.sss_level,
-            term=int(payload.term),
-            topic_id=payload.topic_id,
-        )
-        lesson = snapshot.lesson
+    def _build_bootstrap_payload(
+        self,
+        *,
+        payload: TutorSessionBootstrapIn,
+        session_id: UUID,
+        session_started: bool,
+        snapshot: _TopicSnapshot,
+        pending_assessment: TutorPendingAssessmentOut | None,
+    ) -> TutorSessionBootstrapOut:
         graph_context = snapshot.graph_context
-        pending_state = self.assessment_service.get_pending_assessment(session_id=session_id)
-        pending_assessment = None
-        if pending_state is not None:
-            pending_assessment = TutorPendingAssessmentOut(
-                assessment_id=UUID(str(pending_state["assessment_id"])),
-                question=str(pending_state.get("question") or ""),
-                concept_id=str(pending_state.get("concept_id") or ""),
-                concept_label=str(pending_state.get("concept_label") or ""),
-                hint=str(pending_state.get("hint") or "").strip() or None,
-                difficulty=str(pending_state.get("difficulty") or "").strip() or None,
-            )
-
+        lesson = snapshot.lesson
         greeting = (
             f"You are in {lesson.get('title')}. "
             f"Your weakest focus here is {graph_context.weakest_concepts[0].label if graph_context.weakest_concepts else 'the current lesson core idea'}, "
             "and the graph is showing what unlocks next."
         )
-        bootstrap = TutorSessionBootstrapOut(
+        return TutorSessionBootstrapOut(
             session_id=session_id,
             session_started=session_started,
             greeting=greeting,
@@ -390,6 +495,66 @@ class LessonExperienceService:
             graph_nodes=snapshot.graph_nodes,
             graph_edges=snapshot.graph_edges,
             assessment_ready=bool(graph_context.current_concepts),
+        )
+
+    def bootstrap(self, payload: TutorSessionBootstrapIn) -> TutorSessionBootstrapOut:
+        preview = None
+        if payload.session_id is None:
+            preview = self._read_cached_bootstrap(
+                cache_key=self._preview_cache_key(
+                    student_id=payload.student_id,
+                    subject=payload.subject,
+                    sss_level=payload.sss_level,
+                    term=int(payload.term),
+                    topic_id=payload.topic_id,
+                )
+            )
+
+        session_id, session_started = self._get_or_create_session(payload=payload)
+        cache_key = self._cache_key(payload=payload, session_id=session_id)
+        cached = self._read_cached_bootstrap(cache_key=cache_key)
+        if cached is not None:
+            if session_started:
+                return cached.model_copy(update={"session_started": True, "session_id": session_id})
+            return cached
+
+        pending_state = self.assessment_service.get_pending_assessment(session_id=session_id)
+        pending_assessment = None
+        if pending_state is not None:
+            pending_assessment = TutorPendingAssessmentOut(
+                assessment_id=UUID(str(pending_state["assessment_id"])),
+                question=str(pending_state.get("question") or ""),
+                concept_id=str(pending_state.get("concept_id") or ""),
+                concept_label=str(pending_state.get("concept_label") or ""),
+                hint=str(pending_state.get("hint") or "").strip() or None,
+                difficulty=str(pending_state.get("difficulty") or "").strip() or None,
+            )
+
+        if preview is not None:
+            bootstrap = preview.model_copy(
+                update={
+                    "session_id": session_id,
+                    "session_started": session_started,
+                    "pending_assessment": pending_assessment,
+                }
+            )
+            return self._write_cached_bootstrap(cache_key=cache_key, payload=bootstrap)
+
+        snapshot, _ = self._build_topic_snapshot(
+            db=self.db,
+            student_id=payload.student_id,
+            subject=payload.subject,
+            sss_level=payload.sss_level,
+            term=int(payload.term),
+            topic_id=payload.topic_id,
+        )
+
+        bootstrap = self._build_bootstrap_payload(
+            payload=payload,
+            session_id=session_id,
+            session_started=session_started,
+            snapshot=snapshot,
+            pending_assessment=pending_assessment,
         )
         return self._write_cached_bootstrap(cache_key=cache_key, payload=bootstrap)
 

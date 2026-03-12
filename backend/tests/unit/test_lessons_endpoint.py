@@ -39,7 +39,7 @@ def test_lesson_prewarm_endpoint_returns_warm_result(monkeypatch):
     calls = {"course": 0, "dashboard": 0}
 
     monkeypatch.setattr(
-        "backend.endpoints.lessons.LessonExperienceService.prewarm_topics",
+        "backend.endpoints.lessons.LessonExperienceService.prewarm_related_topics",
         lambda **kwargs: {
             "warmed_topic_ids": [str(kwargs["topic_ids"][0])],
             "cache_hit_topic_ids": [],

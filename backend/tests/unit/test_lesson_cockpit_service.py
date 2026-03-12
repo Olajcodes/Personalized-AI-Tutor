@@ -117,7 +117,7 @@ def test_lesson_cockpit_bootstrap_merges_course_and_tutor_context(monkeypatch):
         lambda self, payload: _tutor_bootstrap(student_id, topic_id),
     )
     monkeypatch.setattr(
-        "backend.services.lesson_cockpit_service.LessonExperienceService.prewarm_topics",
+        "backend.services.lesson_cockpit_service.LessonExperienceService.prewarm_related_topics",
         lambda **kwargs: {"warmed_topic_ids": [str(kwargs["topic_ids"][0])], "cache_hit_topic_ids": [], "failed_topic_ids": []},
     )
     monkeypatch.setattr(
@@ -165,7 +165,7 @@ def test_lesson_cockpit_bootstrap_uses_cache_and_can_invalidate(monkeypatch):
 
     monkeypatch.setattr("backend.services.lesson_cockpit_service.CourseExperienceService.bootstrap", _course)
     monkeypatch.setattr("backend.services.lesson_cockpit_service.LessonExperienceService.bootstrap", _lesson)
-    monkeypatch.setattr("backend.services.lesson_cockpit_service.LessonExperienceService.prewarm_topics", _prewarm)
+    monkeypatch.setattr("backend.services.lesson_cockpit_service.LessonExperienceService.prewarm_related_topics", _prewarm)
     monkeypatch.setattr(
         "backend.services.lesson_cockpit_service.GraphRepository.get_mastery_map",
         lambda self, **kwargs: {},

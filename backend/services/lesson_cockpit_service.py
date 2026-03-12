@@ -206,7 +206,7 @@ class LessonCockpitService:
         )
         _append_topic(weakest_prereq_topic_id)
 
-        prewarm = LessonExperienceService.prewarm_topics(
+        prewarm = LessonExperienceService.prewarm_related_topics(
             student_id=payload.student_id,
             subject=payload.subject,
             sss_level=payload.sss_level,

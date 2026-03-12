@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowRight, Brain, GitBranch, PlayCircle, Route, ShieldAlert, Sparkles } from 'lucide-react';
 
@@ -104,6 +104,7 @@ export default function LessonKnowledgeGraph({
   onExplainConcept = null,
   onBridgeConcept = null,
   onDrillConcept = null,
+  onSelectConcept = null,
 }) {
   const { grouped, nodes, renderedEdges } = useMemo(() => buildLayout(graphContext), [graphContext]);
   const [selectedConceptId, setSelectedConceptId] = useState(null);
@@ -125,6 +126,12 @@ export default function LessonKnowledgeGraph({
     }
     return null;
   }, [selectedNode]);
+
+  useEffect(() => {
+    if (typeof onSelectConcept === 'function') {
+      onSelectConcept(selectedNode || null);
+    }
+  }, [onSelectConcept, selectedNode]);
 
   return (
     <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">

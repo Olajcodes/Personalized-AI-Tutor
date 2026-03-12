@@ -175,3 +175,57 @@ def test_prewarm_topics_reports_cache_hits_and_failures(monkeypatch):
 
     assert result["cache_hit_topic_ids"] == [str(topic_a)]
     assert result["failed_topic_ids"] == [str(topic_b)]
+
+
+def test_bootstrap_uses_preview_cache_before_rebuilding_snapshot(monkeypatch):
+    payload = _payload(session_id=None)
+    build_calls = {"count": 0}
+
+    monkeypatch.setattr("backend.services.lesson_experience_service.TutorSessionRepository", _FakeRepo)
+    monkeypatch.setattr("backend.services.lesson_experience_service.TutorAssessmentService", _FakeAssessmentService)
+
+    def _build_snapshot(cls, **kwargs):
+        build_calls["count"] += 1
+        graph_context = _graph_context(payload.topic_id, topic_title="Electoral Process")
+        return (
+            _TopicSnapshot(
+                lesson={
+                    "topic_id": str(payload.topic_id),
+                    "title": "Lesson: Electoral Process",
+                    "summary": "Understand lawful participation and fair voting.",
+                    "estimated_duration_minutes": 16,
+                    "content_blocks": [{"type": "text", "value": "Intro"}],
+                    "covered_concepts": [],
+                    "prerequisites": [],
+                    "weakest_concepts": [],
+                    "next_unlock": None,
+                    "why_this_matters": None,
+                    "assessment_ready": True,
+                },
+                graph_context=graph_context,
+                why_this_topic="This supports responsible civic participation.",
+                next_unlock=graph_context.next_unlock,
+                graph_nodes=[],
+                graph_edges=[],
+            ),
+            "fresh",
+        )
+
+    monkeypatch.setattr(LessonExperienceService, "_build_topic_snapshot", classmethod(_build_snapshot))
+
+    preview = LessonExperienceService.prewarm_bootstrap_preview(
+        student_id=payload.student_id,
+        subject=payload.subject,
+        sss_level=payload.sss_level,
+        term=int(payload.term),
+        topic_ids=[payload.topic_id],
+    )
+
+    assert preview["warmed_topic_ids"] == [str(payload.topic_id)]
+
+    service = LessonExperienceService(db=object())
+    out = service.bootstrap(payload)
+
+    assert build_calls["count"] == 1
+    assert out.session_started is True
+    assert out.lesson.title == "Lesson: Electoral Process"

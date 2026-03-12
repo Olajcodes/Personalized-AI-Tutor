@@ -73,7 +73,7 @@ def prewarm_lessons(
     if payload.student_id != current_user.id:
         raise HTTPException(status_code=403, detail="student_id must match authenticated user id")
 
-    result = LessonExperienceService.prewarm_topics(
+    result = LessonExperienceService.prewarm_related_topics(
         student_id=payload.student_id,
         subject=payload.subject,
         sss_level=payload.sss_level,

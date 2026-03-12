@@ -542,7 +542,7 @@ class CourseExperienceService:
         failed_topic_ids: list[str] = []
         prewarm_topic_ids = self._candidate_prewarm_topic_ids(topics=topics, next_step=next_step)
         if prewarm_topic_ids:
-            prewarm = LessonExperienceService.prewarm_topics(
+            prewarm = LessonExperienceService.prewarm_related_topics(
                 student_id=student_id,
                 subject=subject,
                 sss_level=str(student_profile.sss_level),

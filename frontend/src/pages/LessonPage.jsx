@@ -244,6 +244,7 @@ export default function LessonPage() {
   const [assessmentAnswer, setAssessmentAnswer] = useState('');
   const [pendingAssessment, setPendingAssessment] = useState(null);
   const [lastAssessmentReview, setLastAssessmentReview] = useState(null);
+  const [selectedGraphConcept, setSelectedGraphConcept] = useState(null);
   const [isBusy, setIsBusy] = useState(false);
   const [streamPhase, setStreamPhase] = useState('');
   const [status, setStatus] = useState('loading');
@@ -473,6 +474,8 @@ export default function LessonPage() {
 
   const startAssessment = async (difficulty = 'medium', options = {}) => {
     if (!sessionId || isBusy) return;
+    const effectiveFocusConceptId = options.focusConceptId || selectedGraphConcept?.concept_id || null;
+    const effectiveFocusConceptLabel = options.focusConceptLabel || selectedGraphConcept?.label || null;
     setIsBusy(true);
     try {
       const out = await postJson('/tutor/assessment/start', {
@@ -482,8 +485,8 @@ export default function LessonPage() {
         sss_level: currentLevel,
         term: currentTerm,
         topic_id: topicId,
-        focus_concept_id: options.focusConceptId || null,
-        focus_concept_label: options.focusConceptLabel || null,
+        focus_concept_id: effectiveFocusConceptId,
+        focus_concept_label: effectiveFocusConceptLabel,
         difficulty,
       });
       setPendingAssessment(out);
@@ -532,6 +535,9 @@ export default function LessonPage() {
         key_points: [
           `Focus concept: ${out.concept_label}`,
           `Difficulty: ${difficulty}`,
+          effectiveFocusConceptLabel && effectiveFocusConceptLabel !== out.concept_label
+            ? `Requested graph focus: ${effectiveFocusConceptLabel}`
+            : null,
         ],
         next_action: difficulty === 'hard'
           ? 'Push for a sharper answer and justify it clearly.'
@@ -1038,15 +1044,16 @@ export default function LessonPage() {
             transition={{ duration: 0.35, delay: 0.05 }}
             className="space-y-6"
           >
-            <LessonKnowledgeGraph
-              graphContext={graphContext}
-              nextUnlock={bootstrap?.next_unlock}
-              whyTopicDetail={whyTopicDetail}
-              onOpenTopic={openRecommendedLesson}
-              onExplainConcept={handleGraphExplain}
-              onBridgeConcept={handleGraphBridge}
-              onDrillConcept={handleGraphDrill}
-            />
+                <LessonKnowledgeGraph
+                  graphContext={graphContext}
+                  nextUnlock={bootstrap?.next_unlock}
+                  whyTopicDetail={whyTopicDetail}
+                  onOpenTopic={openRecommendedLesson}
+                  onExplainConcept={handleGraphExplain}
+                  onBridgeConcept={handleGraphBridge}
+                  onDrillConcept={handleGraphDrill}
+                  onSelectConcept={setSelectedGraphConcept}
+                />
 
             <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center gap-2">
