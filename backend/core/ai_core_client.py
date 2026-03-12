@@ -120,10 +120,11 @@ async def generate_quiz_questions(
 
 
 async def generate_quiz_insights(quiz_id, attempt_id) -> list[str]:
-    """Fetch insight text from ai-core, falling back to a static response."""
+    """Fetch insight text from ai-core, returning no insights when unavailable."""
     base_url = settings.ai_core_base_url.rstrip("/")
     if not base_url:
-        return ["Review foundational concepts before retrying this topic."]
+        logger.warning("ai-core insights unavailable: AI_CORE_BASE_URL is not configured")
+        return []
 
     try:
         async with httpx.AsyncClient(timeout=settings.ai_core_timeout_seconds) as client:
@@ -131,11 +132,11 @@ async def generate_quiz_insights(quiz_id, attempt_id) -> list[str]:
             response.raise_for_status()
             data = response.json()
     except httpx.HTTPError as exc:
-        logger.warning("ai-core insights call failed, using fallback insight: %s", exc)
-        return ["Review foundational concepts before retrying this topic."]
+        logger.warning("ai-core insights call failed, returning no insights: %s", exc)
+        return []
 
     insights = data.get("insights") if isinstance(data, dict) else None
     if isinstance(insights, list) and insights:
         return [str(item) for item in insights]
 
-    return ["Review foundational concepts before retrying this topic."]
+    return []
