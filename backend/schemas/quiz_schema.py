@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from backend.schemas.course_schema import CourseRecommendationStoryOut
+
 QuizPurpose = Literal["practice", "diagnostic", "exam_prep"]
 Difficulty = Literal["easy", "medium", "hard"]
 SupportedSubject = Literal["math", "english", "civic"]
@@ -84,6 +86,7 @@ class QuizResultsResponse(BaseModel):
     recommended_revision_topic_id: UUID | None = None
     recommended_revision_topic_title: str | None = None
     graph_remediation: QuizGraphRemediationOut | None = None
+    recommendation_story: CourseRecommendationStoryOut | None = None
 
 
 class GraphMasteryUpdatePayload(BaseModel):

@@ -259,6 +259,7 @@ const QuizPage = () => {
           recommendationReason: resultsJson.graph_remediation?.recommendation_reason || null,
           nextConcept: resultsJson.graph_remediation?.recommended_next_concept_label || null,
         },
+        recommendationStory: resultsJson.recommendation_story || null,
         explainState,
       };
 
@@ -459,6 +460,8 @@ const QuizPage = () => {
                          nextConcept={formattedResults.remediation?.nextConcept}
                          reason={formattedResults.remediation?.recommendationReason}
                          blockingPrerequisite={formattedResults.remediation?.blockingPrerequisite}
+                         story={formattedResults.recommendationStory}
+                         actionLabel={formattedResults.recommendationStory?.action_label}
                        />
                     </div>
                     {formattedResults.remediation?.weakestConcept && (
@@ -480,6 +483,7 @@ const QuizPage = () => {
                 recommendedTopicId={formattedResults.nextTopicId}
                 recommendedTopicTitle={formattedResults.nextTopic}
                 explainState={formattedResults.explainState}
+                actionLabel={formattedResults.recommendationStory?.action_label}
               />
             </div>
         </div>

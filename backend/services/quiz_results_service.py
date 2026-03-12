@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from backend.core.ai_core_client import generate_quiz_insights
 from backend.repositories.quiz_repo import QuizRepository
 from backend.schemas.learning_path_schema import PathNextIn
+from backend.schemas.course_schema import CourseRecommendationStoryOut
 from backend.schemas.quiz_schema import (
     QuizGraphRemediationOut,
     QuizResultConceptBreakdownItem,
@@ -109,6 +110,7 @@ class QuizResultsService:
         recommended_topic = None
         recommended_topic_title = None
         graph_remediation = None
+        recommendation_story = None
         if weakest_concept is not None:
             recommended_topic = await self._get_topic_for_concept(
                 weakest_concept,
@@ -121,6 +123,11 @@ class QuizResultsService:
                 quiz=quiz,
                 fallback_topic_id=quiz.topic_id,
             )
+            recommendation_story = self._build_recommendation_story(
+                graph_remediation=graph_remediation,
+                quiz_topic_title=quiz_topic_title,
+                insights=insights,
+            )
 
         return QuizResultsResponse(
             score=float(attempt.score or 0.0),
@@ -129,6 +136,7 @@ class QuizResultsService:
             recommended_revision_topic_id=recommended_topic,
             recommended_revision_topic_title=recommended_topic_title,
             graph_remediation=graph_remediation,
+            recommendation_story=recommendation_story,
         )
 
     def _build_graph_remediation(
@@ -204,6 +212,74 @@ class QuizResultsService:
                 else self.repo.get_topic_title(fallback_topic_id)
             ),
             recommendation_reason=(next_step.reason if next_step else None),
+        )
+
+    @staticmethod
+    def _clean_text(value: str | None) -> str | None:
+        text = str(value or "").strip()
+        return text or None
+
+    def _build_recommendation_story(
+        self,
+        *,
+        graph_remediation: QuizGraphRemediationOut | None,
+        quiz_topic_title: str | None,
+        insights: list[str],
+    ) -> CourseRecommendationStoryOut | None:
+        if graph_remediation is None:
+            return None
+
+        evidence_summary = self._clean_text(insights[0] if insights else None)
+        blocking_label = self._clean_text(graph_remediation.blocking_prerequisite_label)
+        weakest_label = self._clean_text(graph_remediation.weakest_concept_label)
+        next_concept_label = self._clean_text(graph_remediation.recommended_next_concept_label)
+        next_topic_title = self._clean_text(graph_remediation.recommended_next_topic_title)
+        recommendation_reason = self._clean_text(graph_remediation.recommendation_reason)
+        current_topic_title = self._clean_text(quiz_topic_title)
+
+        if blocking_label:
+            supporting_reason = (
+                recommendation_reason
+                or f"You are still blocked by {blocking_label}, so rebuilding it will improve the weak concept faster."
+            )
+            headline = f"Rebuild {blocking_label} before pushing ahead"
+            action_label = f"Open {next_topic_title}" if next_topic_title else "Bridge the prerequisite"
+            return CourseRecommendationStoryOut(
+                status="bridge_prerequisite",
+                headline=headline,
+                supporting_reason=supporting_reason,
+                blocking_prerequisite_label=blocking_label,
+                next_concept_label=next_concept_label or weakest_label,
+                evidence_summary=evidence_summary,
+                action_label=action_label,
+            )
+
+        if next_topic_title and current_topic_title and next_topic_title != current_topic_title:
+            supporting_reason = (
+                recommendation_reason
+                or f"You recovered enough signal on {weakest_label or 'this concept'} to move forward through {next_topic_title}."
+            )
+            return CourseRecommendationStoryOut(
+                status="advance_to_next",
+                headline=f"Advance through {next_topic_title}",
+                supporting_reason=supporting_reason,
+                blocking_prerequisite_label=None,
+                next_concept_label=next_concept_label or weakest_label,
+                evidence_summary=evidence_summary,
+                action_label=f"Open {next_topic_title}",
+            )
+
+        focus_label = weakest_label or next_concept_label or current_topic_title or "this concept"
+        supporting_reason = recommendation_reason or f"Stay on {focus_label} and close the weak spots before moving on."
+        action_label = f"Retry {current_topic_title}" if current_topic_title else "Retry this topic"
+        return CourseRecommendationStoryOut(
+            status="hold_current",
+            headline=f"Stay with {focus_label}",
+            supporting_reason=supporting_reason,
+            blocking_prerequisite_label=None,
+            next_concept_label=next_concept_label or weakest_label,
+            evidence_summary=evidence_summary,
+            action_label=action_label,
         )
 
     async def _get_topic_for_concept(

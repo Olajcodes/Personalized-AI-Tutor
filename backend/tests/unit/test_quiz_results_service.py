@@ -108,6 +108,10 @@ async def test_get_results_returns_readable_labels_and_topic_title(
     assert response.concept_breakdown[0].concept_label == "Constitutional Governance"
     assert response.recommended_revision_topic_id == mapped_topic_id
     assert response.recommended_revision_topic_title == "Electoral Process and Participation"
+    assert response.recommendation_story is not None
+    assert response.recommendation_story.status == "hold_current"
+    assert response.recommendation_story.headline == "Stay with Constitutional Governance"
+    assert response.recommendation_story.evidence_summary == "Review constitutional governance."
 
 
 @pytest.mark.anyio

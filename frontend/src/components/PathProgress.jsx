@@ -1,8 +1,29 @@
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Map, Route } from 'lucide-react';
 
-export default function PathProgress({ nextTopic, nextTopicId, nextConcept, reason, blockingPrerequisite }) {
+const storyStyles = {
+  bridge_prerequisite: 'border-amber-400/30 bg-amber-500/10 text-amber-100',
+  advance_to_next: 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100',
+  hold_current: 'border-indigo-400/30 bg-indigo-500/10 text-indigo-100',
+};
+
+const storyLabels = {
+  bridge_prerequisite: 'Bridge prerequisite',
+  advance_to_next: 'Advance next',
+  hold_current: 'Hold current focus',
+};
+
+export default function PathProgress({
+  nextTopic,
+  nextTopicId,
+  nextConcept,
+  reason,
+  blockingPrerequisite,
+  story = null,
+  actionLabel = null,
+}) {
   const navigate = useNavigate();
+  const storyTone = storyStyles[story?.status] || 'border-slate-500/20 bg-slate-500/10 text-slate-100';
 
   return (
     <div className="bg-[#1c2438] rounded-2xl p-6 border border-slate-700 mt-6">
@@ -23,6 +44,17 @@ export default function PathProgress({ nextTopic, nextTopicId, nextConcept, reas
       </div>
       
       <div className="text-center">
+        {story?.headline && (
+          <div className={`mb-4 rounded-xl border px-4 py-3 text-left ${storyTone}`}>
+            <div className="text-[10px] font-bold uppercase tracking-wider opacity-80">
+              {storyLabels[story.status] || 'Graph guidance'}
+            </div>
+            <div className="mt-2 text-sm font-bold">{story.headline}</div>
+            {story.supporting_reason && (
+              <p className="mt-2 text-xs leading-6 opacity-90">{story.supporting_reason}</p>
+            )}
+          </div>
+        )}
         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Next Topic:</div>
         <div className="text-sm font-bold text-white">{nextTopic}</div>
         {nextConcept && (
@@ -37,13 +69,18 @@ export default function PathProgress({ nextTopic, nextTopicId, nextConcept, reas
             Blocking prerequisite: {blockingPrerequisite}
           </div>
         )}
+        {story?.evidence_summary && (
+          <div className="mt-3 rounded-xl border border-slate-600 bg-slate-800/60 px-3 py-2 text-xs leading-6 text-slate-300">
+            Latest evidence: {story.evidence_summary}
+          </div>
+        )}
         {nextTopicId && (
           <button
             type="button"
             onClick={() => navigate(`/lesson/${nextTopicId}`)}
             className="mt-4 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-indigo-500"
           >
-            Open recommended lesson
+            {actionLabel || 'Open recommended lesson'}
             <ArrowRight className="h-4 w-4" />
           </button>
         )}
