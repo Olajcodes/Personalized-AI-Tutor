@@ -471,7 +471,7 @@ export default function LessonPage() {
     }
   };
 
-  const startAssessment = async (difficulty = 'medium') => {
+  const startAssessment = async (difficulty = 'medium', options = {}) => {
     if (!sessionId || isBusy) return;
     setIsBusy(true);
     try {
@@ -482,6 +482,8 @@ export default function LessonPage() {
         sss_level: currentLevel,
         term: currentTerm,
         topic_id: topicId,
+        focus_concept_id: options.focusConceptId || null,
+        focus_concept_label: options.focusConceptLabel || null,
         difficulty,
       });
       setPendingAssessment(out);
@@ -617,18 +619,18 @@ export default function LessonPage() {
   const handleGraphDrill = async (concept) => {
     if (!concept || isBusy) return;
     const conceptLabel = concept.label || 'this concept';
-    await sendChat(
-      `Give me one short checkpoint question focused only on ${conceptLabel}. Wait for my answer after the question.`,
-      {
-        focusConceptId: concept.concept_id || null,
-        focusConceptLabel: conceptLabel,
-      },
-    );
+    await startAssessment('medium', {
+      focusConceptId: concept.concept_id || null,
+      focusConceptLabel: conceptLabel,
+    });
   };
 
   const handleQuickAction = async (action) => {
     if (action.intent === 'assessment_start') {
-      await startAssessment();
+      await startAssessment('medium', {
+        focusConceptId: action.focus_concept_id || null,
+        focusConceptLabel: action.focus_concept_label || null,
+      });
       return;
     }
     if (action.id === 'recap') {

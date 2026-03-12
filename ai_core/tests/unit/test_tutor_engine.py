@@ -226,6 +226,76 @@ def test_run_tutor_assessment_start_contract(monkeypatch):
     assert "ASSESSMENT_TARGET_CONCEPT" in out.actions
 
 
+def test_run_tutor_assessment_start_prefers_explicit_graph_focus(monkeypatch):
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._internal_profile_context",
+        lambda request: {"preferences": {"pace": "normal"}},
+    )
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._internal_lesson_context",
+        lambda request: {
+            "title": "Lesson: Electoral Process",
+            "summary": "Voting systems and constitutional governance.",
+            "content_blocks": [{"type": "text", "value": "The electoral process depends on lawful participation and institutional rules."}],
+            "covered_concept_ids": [
+                "civic:sss1:t2:constitutional-governance",
+                "civic:sss1:t2:electoral-process",
+            ],
+            "covered_concept_labels": {
+                "civic:sss1:t2:constitutional-governance": "Constitutional Governance",
+                "civic:sss1:t2:electoral-process": "Electoral Process",
+            },
+        },
+    )
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._internal_graph_context",
+        lambda request: {
+            "mastery": [
+                {"concept_id": "civic:sss1:t2:constitutional-governance", "score": 0.1},
+                {"concept_id": "civic:sss1:t2:electoral-process", "score": 0.4},
+            ],
+            "current_concepts": [
+                {"concept_id": "civic:sss1:t2:electoral-process", "label": "Electoral Process"},
+            ],
+            "prerequisite_concepts": [
+                {"concept_id": "civic:sss1:t2:constitutional-governance", "label": "Constitutional Governance"},
+            ],
+            "downstream_concepts": [],
+        },
+    )
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._internal_rag_retrieve_for_prompt",
+        lambda **kwargs: [],
+    )
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._llm_generate",
+        lambda prompt: """
+        {
+          "question": "Explain one way the electoral process supports fair participation.",
+          "ideal_answer": "It sets lawful procedures that help citizens participate fairly in choosing leaders.",
+          "hint": "Think about fairness and lawful participation."
+        }
+        """,
+    )
+
+    out = run_tutor_assessment_start(
+        TutorAssessmentStartRequest(
+            student_id="user-1",
+            session_id="session-1",
+            subject="civic",
+            sss_level="SSS1",
+            term=2,
+            topic_id="topic-1",
+            focus_concept_id="civic:sss1:t2:electoral-process",
+            focus_concept_label="Electoral Process",
+            difficulty="medium",
+        )
+    )
+    assert out.concept_id == "civic:sss1:t2:electoral-process"
+    assert out.concept_label == "Electoral Process"
+    assert "USED_GRAPH_SELECTED_FOCUS" in out.actions
+
+
 def test_run_tutor_assessment_submit_contract(monkeypatch):
     monkeypatch.setattr(
         "ai_core.core_engine.orchestration.tutor_engine._internal_lesson_context",

@@ -185,6 +185,8 @@ class TutorAssessmentService:
             "topic_id": str(payload.topic_id),
             "concept_id": ai_out.concept_id,
             "concept_label": ai_out.concept_label,
+            "requested_focus_concept_id": payload.focus_concept_id,
+            "requested_focus_concept_label": payload.focus_concept_label,
             "question": ai_out.question,
             "ideal_answer": ai_out.ideal_answer,
             "hint": ai_out.hint,

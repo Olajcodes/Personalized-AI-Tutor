@@ -72,8 +72,8 @@ class TutorOrchestrationService:
                 f"Briefly explain one key idea you have learned in {payload.subject.upper()} "
                 f"({payload.sss_level} term {payload.term})."
             ),
-            concept_id=str(payload.topic_id),
-            concept_label="current lesson concept",
+            concept_id=payload.focus_concept_id or str(payload.topic_id),
+            concept_label=payload.focus_concept_label or "current lesson concept",
             ideal_answer="State the rule clearly and give one correct example from the lesson.",
             hint="State the main rule first, then give one example.",
             citations=[],
@@ -182,6 +182,8 @@ class TutorOrchestrationService:
             "sss_level": payload.sss_level,
             "term": payload.term,
             "topic_id": str(payload.topic_id),
+            "focus_concept_id": payload.focus_concept_id,
+            "focus_concept_label": payload.focus_concept_label,
             "difficulty": payload.difficulty,
         }
 

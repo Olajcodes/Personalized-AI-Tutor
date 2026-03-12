@@ -493,14 +493,55 @@ def _assessment_target_concept(
     lesson_context: dict | None,
     graph_context: dict | None,
     citations: list[Citation],
+    requested_focus_concept_id: str | None = None,
+    requested_focus_concept_label: str | None = None,
 ) -> tuple[str, str] | None:
     concept_labels = _lesson_concept_label_map(lesson_context)
     covered_ids = _lesson_covered_concept_ids(lesson_context)
+    graph_nodes = []
+    for key in ("current_concepts", "prerequisite_concepts", "downstream_concepts"):
+        graph_nodes.extend(list((graph_context or {}).get(key) or []))
+    graph_label_map = {
+        str(row.get("concept_id") or "").strip(): str(row.get("label") or "").strip()
+        for row in graph_nodes
+        if isinstance(row, dict) and str(row.get("concept_id") or "").strip()
+    }
     mastery_map = {
         str(row.get("concept_id") or ""): _clamp_score(row.get("score"))
         for row in list((graph_context or {}).get("mastery") or [])
         if isinstance(row, dict) and str(row.get("concept_id") or "").strip()
     }
+    requested_focus_id = str(requested_focus_concept_id or "").strip()
+    requested_focus_label = " ".join(str(requested_focus_concept_label or "").split()).strip()
+
+    if requested_focus_id:
+        if (
+            requested_focus_id in concept_labels
+            or requested_focus_id in graph_label_map
+            or any(str(citation.metadata.get("concept_id") or "").strip() == requested_focus_id for citation in citations)
+        ):
+            return (
+                requested_focus_id,
+                concept_labels.get(requested_focus_id)
+                or graph_label_map.get(requested_focus_id)
+                or requested_focus_label
+                or _readable_concept_label(requested_focus_id),
+            )
+
+    if requested_focus_label:
+        normalized_requested = requested_focus_label.casefold()
+        for concept_id, label in {**graph_label_map, **concept_labels}.items():
+            if str(label).strip().casefold() == normalized_requested:
+                return concept_id, str(label).strip()
+        for citation in citations:
+            citation_label = str(
+                citation.metadata.get("citation_concept_label")
+                or citation.metadata.get("concept_label")
+                or ""
+            ).strip()
+            citation_concept_id = str(citation.metadata.get("concept_id") or "").strip()
+            if citation_concept_id and citation_label.casefold() == normalized_requested:
+                return citation_concept_id, citation_label
 
     ranked_covered = [
         (concept_id, mastery_map.get(concept_id, 0.0))
@@ -1334,7 +1375,10 @@ def run_tutor_assessment_start(request: TutorAssessmentStartRequest) -> TutorAss
             sss_level=request.sss_level,
             term=int(request.term),
             topic_id=request.topic_id,
-            message=f"{request.subject} {request.sss_level} term {request.term} {request.topic_id} assessment question",
+            message=(
+                f"{request.subject} {request.sss_level} term {request.term} "
+                f"{request.focus_concept_label or request.topic_id} assessment question"
+            ),
         )
     except Exception as exc:
         logger.warning("tutor.run_tutor_assessment_start retrieval failed: %s", exc)
@@ -1349,6 +1393,8 @@ def run_tutor_assessment_start(request: TutorAssessmentStartRequest) -> TutorAss
         lesson_context=lesson_context,
         graph_context=graph_context,
         citations=citations,
+        requested_focus_concept_id=request.focus_concept_id,
+        requested_focus_concept_label=request.focus_concept_label,
     )
     if target is None:
         raise RuntimeError("No valid target concept found for tutor assessment.")
@@ -1380,6 +1426,8 @@ def run_tutor_assessment_start(request: TutorAssessmentStartRequest) -> TutorAss
     if graph_context:
         actions.append("USED_GRAPH_CONTEXT")
     actions.append("ASSESSMENT_TARGET_CONCEPT")
+    if request.focus_concept_id or request.focus_concept_label:
+        actions.append("USED_GRAPH_SELECTED_FOCUS")
     return out.model_copy(update={"actions": actions})
 
 

@@ -148,6 +148,8 @@ class TutorAssessmentStartIn(BaseModel):
     sss_level: Literal["SSS1", "SSS2", "SSS3"]
     term: Literal[1, 2, 3]
     topic_id: UUID
+    focus_concept_id: str | None = None
+    focus_concept_label: str | None = None
     difficulty: Literal["easy", "medium", "hard"] = "medium"
 
 
