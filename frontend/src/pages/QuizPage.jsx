@@ -270,6 +270,12 @@ const QuizPage = () => {
           term: currentTerm,
           payload: {
             source: 'quiz',
+            analytics: {
+              source_label: 'Quiz result',
+              outcome: finalScorePercentage >= 70 ? 'Advance from strength' : 'Repair weak concept',
+              focus_concept: nextConceptLabel || weakestConceptLabel || firstCorrectConcept?.concept_label || null,
+              blocking_prerequisite: resultsJson.graph_remediation?.blocking_prerequisite_label || null,
+            },
             next_step: nextStep,
             recent_evidence: recentEvidence,
             recommendation_story: recommendationStory,

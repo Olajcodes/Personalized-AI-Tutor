@@ -488,6 +488,12 @@ export default function LessonPage() {
         term: currentTerm,
         payload: {
           source: 'pending_assessment',
+          analytics: {
+            source_label: 'Tutor checkpoint',
+            outcome: 'Resume checkpoint',
+            focus_concept: out.concept_label || null,
+            blocking_prerequisite: null,
+          },
           next_step: {
             recommended_topic_id: topicId,
             recommended_topic_title: lesson?.title || bootstrap?.lesson?.title || 'Current lesson',
@@ -721,6 +727,12 @@ export default function LessonPage() {
         term: currentTerm,
         payload: {
           source: 'tutor_assessment',
+          analytics: {
+            source_label: 'Tutor assessment',
+            outcome: out.is_correct ? 'Advance from checkpoint' : 'Repair prerequisite',
+            focus_concept: out.concept_label || out.graph_remediation?.recommended_next_concept_label || null,
+            blocking_prerequisite: out.graph_remediation?.blocking_prerequisite_label || null,
+          },
           next_step: nextStep,
           recent_evidence: recentEvidence,
           recommendation_story: recommendationStory,

@@ -84,6 +84,7 @@ const CoursePage = () => {
   const effectiveNextStep = graphIntervention?.next_step || nextStep || null;
   const effectiveRecentEvidence = graphIntervention?.recent_evidence || recentEvidence || null;
   const effectiveRecommendationStory = graphIntervention?.recommendation_story || recommendationStory || null;
+  const effectiveAnalytics = graphIntervention?.analytics || null;
 
   useEffect(() => {
     if (!interventionScope) {
@@ -168,6 +169,34 @@ const CoursePage = () => {
             <h1 className="text-4xl font-black text-slate-900 mb-3 capitalize">{subject} Learning Path</h1>
             <p className="text-slate-500 text-lg">Follow this AI-curated syllabus to achieve mastery in {currentLevel} {subject}.</p>
           </div>
+
+          {effectiveAnalytics && (
+            <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                <GitBranch className="h-3.5 w-3.5 text-indigo-500" />
+                Live intervention state
+                {effectiveAnalytics.source_label && (
+                  <span className="rounded-full bg-indigo-50 px-2 py-1 text-[10px] text-indigo-700">
+                    {effectiveAnalytics.source_label}
+                  </span>
+                )}
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                <div className="rounded-2xl bg-slate-50 p-3">
+                  <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Focus concept</div>
+                  <p className="mt-1 text-sm font-bold text-slate-800">{effectiveAnalytics.focus_concept || 'Current course focus'}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-3">
+                  <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Blocking prerequisite</div>
+                  <p className="mt-1 text-sm font-bold text-slate-800">{effectiveAnalytics.blocking_prerequisite || 'No active prerequisite block'}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-3">
+                  <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Best action</div>
+                  <p className="mt-1 text-sm font-bold text-slate-800">{effectiveAnalytics.outcome || effectiveRecommendationStory?.action_label || 'Keep learning'}</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {effectiveNextStep && (
             <div className="mb-6 rounded-3xl border border-indigo-200 bg-gradient-to-r from-indigo-50 via-white to-sky-50 p-6 shadow-sm">

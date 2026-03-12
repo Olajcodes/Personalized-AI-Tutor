@@ -168,6 +168,21 @@ export default function Dashboard() {
         navigate(`/lesson/${topicId}`);
     };
 
+    const resumeLatestIntervention = async () => {
+        const topicId = latestIntervention?.payload?.next_step?.recommended_topic_id;
+        if (!topicId) return;
+        await prewarmTopics({
+            apiUrl,
+            token,
+            studentId: activeId,
+            subject: latestIntervention.subject,
+            sssLevel: latestIntervention.sssLevel || currentLevel,
+            term: Number(latestIntervention.term || currentTerm),
+            topicIds: [topicId],
+        });
+        navigate(`/lesson/${topicId}`);
+    };
+
     const apiLeaderboardData = [
         { id: 'u1', rank: 1, name: 'Sarah Jenkins', points: '4,250' },
         { id: 'u2', rank: 2, name: 'Marcus Thorne', points: '3,900' },
@@ -183,6 +198,8 @@ export default function Dashboard() {
                         activeSubject={activeSubject}
                         onSelectSubject={setActiveSubject}
                         hasStartedLearning={false}
+                        latestIntervention={latestIntervention}
+                        onResumeIntervention={latestIntervention?.payload?.next_step?.recommended_topic_id ? resumeLatestIntervention : null}
                     />
                     <AIRecommendation
                         activeSubject={activeSubject}
