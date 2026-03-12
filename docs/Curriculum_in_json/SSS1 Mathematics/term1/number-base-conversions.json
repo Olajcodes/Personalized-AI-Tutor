@@ -1,0 +1,44 @@
+{
+  "subject": "math",
+  "sss_level": "SSS1",
+  "term": 1,
+  "week": 2,
+  "topic_title": "Number Base Conversions",
+  "topic_slug": "number-base-conversions",
+  "source_title": "New General Mathematics SSS 1 by M.F. Macrae et al",
+  "learning_objectives": [
+    "Expand numbers in any base using powers of that base",
+    "Convert numbers from any base to base ten (denary scale)",
+    "Convert numbers from base ten to any other base",
+    "Convert decimal fractions (bicimals) in base 2 to base 10",
+    "Convert numbers from one base to another base via base ten",
+    "Determine unknown base numbers using simultaneous equations"
+  ],
+  "sections": [
+    {
+      "heading": "Number Base Systems",
+      "content": "The most commonly used number system is base ten (denary), using digits 0-9, where each digit's place value is a power of 10. For example, 395 in base 10 = 3 × 10² + 9 × 10¹ + 5 × 10⁰ = 300 + 90 + 5. Other bases follow the same principle: 645₇ = 6 × 7² + 4 × 7¹ + 5 × 7⁰, and 101101₂ = 1 × 2⁵ + 0 × 2⁴ + 1 × 2³ + 1 × 2² + 0 × 2¹ + 1 × 2⁰."
+    },
+    {
+      "heading": "Conversion to Base Ten (Denary Scale)",
+      "content": "To convert a number from any base to base ten, expand it using powers of its base and sum the results. For example: 27₈ = 2 × 8 + 7 × 1 = 16 + 7 = 23. And 11011₂ = 16 + 8 + 0 + 2 + 1 = 27."
+    },
+    {
+      "heading": "Conversion from Base Ten to Other Bases",
+      "content": "To convert from base ten to another base: (1) divide the number by the new base, (2) record the remainder, (3) keep dividing the quotient until it reaches zero, (4) read remainders from bottom to top. Example: 68₁₀ to base 5 — 68 ÷ 5 = 13 R 3; 13 ÷ 5 = 2 R 3; 2 ÷ 5 = 0 R 2 — result: 233₅."
+    },
+    {
+      "heading": "Bicimals — Base Two Decimal Fractions",
+      "content": "Bicimals are base-two fractions using negative powers of 2. To convert a bicimal to a decimal, expand each digit as a power of 2 and sum. For example: 1.101₂ = 1 × 2⁰ + 1 × 2⁻¹ + 0 × 2⁻² + 1 × 2⁻³ = 1 + 0.5 + 0 + 0.125 = 1.625₁₀. And 10.011₂ = 2 + 0 + 0.25 + 0.125 = 2.375₁₀."
+    },
+    {
+      "heading": "Conversion Between Non-Decimal Bases (via Base Ten)",
+      "content": "To convert from base A to base B, first convert from base A to base 10, then convert from base 10 to base B. Example: 1534₆ to base 8 — first, 1534₆ = 1×216 + 5×36 + 3×6 + 4 = 418₁₀; then 418₁₀ = 642₈."
+    },
+    {
+      "heading": "Finding Unknown Bases from Equations",
+      "content": "When base values are unknown, convert expressions to base 10 to form simultaneous equations and solve. Example: given 32ₓ – 12ᵧ = 9 and 23ₓ – 21ᵧ = 4, converting gives 3x – y = 9 and x – y = 1. Subtracting: 2x = 8, so x = 4 and y = 3."
+    }
+  ],
+  "keywords": ["number bases", "base ten", "denary", "binary", "bicimal", "base conversion", "octal", "hexadecimal", "powers of base", "simultaneous equations", "number systems"]
+}
