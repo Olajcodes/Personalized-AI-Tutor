@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session
 
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
+from backend.schemas.lesson_cockpit_schema import LessonCockpitBootstrapIn, LessonCockpitBootstrapOut
 from backend.schemas.lesson_schema import LessonPrewarmIn, LessonPrewarmOut, TopicLessonResponse
+from backend.services.lesson_cockpit_service import LessonCockpitService
 from backend.services.lesson_experience_service import LessonExperienceService
 from backend.services.lesson_service import (
     fetch_topic_lesson,
@@ -19,6 +21,21 @@ from backend.services.lesson_service import (
 )
 
 router = APIRouter(prefix="/learning", tags=["Lessons"])
+
+
+@router.post("/lesson/cockpit", response_model=LessonCockpitBootstrapOut)
+def get_lesson_cockpit(
+    payload: LessonCockpitBootstrapIn,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if payload.student_id != current_user.id:
+        raise HTTPException(status_code=403, detail="student_id must match authenticated user id")
+
+    try:
+        return LessonCockpitService(db).bootstrap(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 @router.get("/topics/{topic_id}/lesson", response_model=TopicLessonResponse)
 def get_topic_lesson(

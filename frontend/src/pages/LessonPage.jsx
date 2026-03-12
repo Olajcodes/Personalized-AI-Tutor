@@ -84,7 +84,7 @@ const prewarmTopics = async ({ token, studentId, subject, sssLevel, term, topicI
   }
 };
 
-function MessageCard({ item }) {
+function MessageCard({ item, onOpenRecommendation }) {
   const isStudent = item.role === 'student';
   return (
     <div className={`flex ${isStudent ? 'justify-end' : 'justify-start'}`}>
@@ -109,6 +109,54 @@ function MessageCard({ item }) {
                 {item.prerequisite_warning && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{item.prerequisite_warning}</div>}
                 {item.next_action && <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-800">{item.next_action}</div>}
                 {item.recommended_assessment && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">{item.recommended_assessment}</div>}
+              </div>
+            )}
+            {safeArray(item.concept_focus).length > 0 && (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Concept Focus</p>
+                <div className="flex flex-wrap gap-2">
+                  {item.concept_focus.map((label, index) => (
+                    <span key={`${label}-${index}`} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-bold text-slate-600">
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {safeArray(item.citations).length > 0 && (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Evidence</p>
+                <div className="grid gap-2">
+                  {item.citations.map((citation, index) => (
+                    <div key={`${citation.chunk_id || citation.source_id}-${index}`} className="rounded-2xl border border-slate-200 bg-white p-3 text-xs leading-6 text-slate-600">
+                      <p className="font-black uppercase tracking-[0.16em] text-slate-400">{citation.source_id || 'Curriculum source'}</p>
+                      <p className="mt-1">{citation.snippet}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {safeArray(item.recommendations).length > 0 && (
+              <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-3">
+                <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500">Graph Recommendation</p>
+                <div className="grid gap-2">
+                  {item.recommendations.map((recommendation, index) => (
+                    <div key={`${recommendation.topic_id || recommendation.type}-${index}`} className="rounded-2xl bg-white p-3">
+                      <p className="text-xs font-bold text-slate-800">{recommendation.topic_title || recommendation.type}</p>
+                      <p className="mt-1 text-xs leading-6 text-slate-600">{recommendation.reason}</p>
+                      {recommendation.topic_id && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenRecommendation?.(recommendation.topic_id)}
+                          className="mt-3 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-white hover:bg-indigo-700"
+                        >
+                          Open lesson
+                          <ArrowRight size={14} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -200,29 +248,25 @@ export default function LessonPage() {
         setStatus('ready');
       }
       try {
-        const params = new URLSearchParams({ student_id: activeId, subject: currentSubject, term: String(currentTerm) });
-        const [topicsRes, bootstrapRes] = await Promise.all([
-          fetch(`${API_URL}/learning/topics?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${API_URL}/tutor/session/bootstrap`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              student_id: activeId,
-              subject: currentSubject,
-              sss_level: currentLevel,
-              term: currentTerm,
-              topic_id: topicId,
-            }),
+        const response = await fetch(`${API_URL}/learning/lesson/cockpit`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            student_id: activeId,
+            subject: currentSubject,
+            sss_level: currentLevel,
+            term: currentTerm,
+            topic_id: topicId,
           }),
-        ]);
-        const topicsJson = topicsRes.ok ? await topicsRes.json() : [];
-        if (!bootstrapRes.ok) {
-          const err = await bootstrapRes.json().catch(() => null);
+        });
+        if (!response.ok) {
+          const err = await response.json().catch(() => null);
           throw new Error(err?.detail || 'Failed to load lesson cockpit.');
         }
-        const bootstrapJson = await bootstrapRes.json();
+        const cockpitJson = await response.json();
         if (cancelled) return;
-        setSidebarTopics(safeArray(topicsJson));
+        const bootstrapJson = cockpitJson.tutor_bootstrap;
+        setSidebarTopics(safeArray(cockpitJson.topics));
         setBootstrap(bootstrapJson);
         writeBootstrapCache(activeCacheKey, bootstrapJson);
         setPendingAssessment(bootstrapJson.pending_assessment || null);
@@ -250,44 +294,6 @@ export default function LessonPage() {
     writeBootstrapCache(activeCacheKey, bootstrap);
   }, [activeCacheKey, bootstrap]);
 
-  useEffect(() => {
-    if (!activeId || !token || !topicId || !sidebarTopics.length) return;
-
-    const currentIndex = sidebarTopics.findIndex((item) => String(item.topic_id) === String(topicId));
-    if (currentIndex < 0) return;
-
-    const candidateIds = [
-      sidebarTopics[currentIndex + 1]?.topic_id,
-      sidebarTopics[currentIndex - 1]?.topic_id,
-      bootstrap?.next_unlock?.topic_id,
-    ]
-      .filter(Boolean)
-      .filter((value, index, arr) => arr.indexOf(value) === index)
-      .slice(0, 3);
-
-    if (!candidateIds.length) return;
-
-    const prewarm = async () => {
-      try {
-        await fetch(`${API_URL}/learning/lesson/prewarm`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            student_id: activeId,
-            subject: currentSubject,
-            sss_level: currentLevel,
-            term: currentTerm,
-            topic_ids: candidateIds,
-          }),
-        });
-      } catch (err) {
-        console.warn('Lesson prewarm skipped:', err);
-      }
-    };
-
-    prewarm();
-  }, [activeId, bootstrap, currentLevel, currentSubject, currentTerm, sidebarTopics, token, topicId]);
-
   const masteryPulse = useMemo(() => {
     const currentConcepts = safeArray(graphContext?.current_concepts);
     if (!currentConcepts.length) return null;
@@ -302,11 +308,27 @@ export default function LessonPage() {
         role: 'assistant',
         content: payload.assistant_message || payload.message || 'Tutor response unavailable.',
         key_points: payload.key_points || [],
+        concept_focus: payload.concept_focus || [],
+        citations: payload.citations || [],
+        recommendations: payload.recommendations || [],
         next_action: payload.next_action || null,
         prerequisite_warning: payload.prerequisite_warning || null,
         recommended_assessment: payload.recommended_assessment || null,
       },
     ]);
+  };
+
+  const openRecommendedLesson = async (recommendedTopicId) => {
+    if (!recommendedTopicId || !activeId || !token) return;
+    await prewarmTopics({
+      token,
+      studentId: activeId,
+      subject: currentSubject,
+      sssLevel: currentLevel,
+      term: currentTerm,
+      topicIds: [recommendedTopicId],
+    });
+    navigate(`/lesson/${recommendedTopicId}`);
   };
 
   const topicWarmSummary = useMemo(() => {
@@ -799,7 +821,13 @@ export default function LessonPage() {
                   </div>
                 )}
                 <div ref={scrollRef} className="max-h-[480px] space-y-4 overflow-y-auto rounded-[1.5rem] bg-slate-50 p-4">
-                  {messages.map((item, index) => <MessageCard key={`${item.role}-${index}`} item={item} />)}
+                  {messages.map((item, index) => (
+                    <MessageCard
+                      key={`${item.role}-${index}`}
+                      item={item}
+                      onOpenRecommendation={openRecommendedLesson}
+                    />
+                  ))}
                   {isBusy && (
                     <div className="rounded-3xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
                       <div className="flex items-center gap-3">
