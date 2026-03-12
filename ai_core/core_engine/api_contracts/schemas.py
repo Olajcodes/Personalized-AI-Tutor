@@ -42,6 +42,8 @@ class TutorChatRequest(BaseModel):
     sss_level: Literal["SSS1", "SSS2", "SSS3"]
     term: Literal[1, 2, 3]
     topic_id: Optional[str] = None
+    focus_concept_id: Optional[str] = None
+    focus_concept_label: Optional[str] = None
     message: str
 
 

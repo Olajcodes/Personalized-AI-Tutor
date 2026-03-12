@@ -60,6 +60,7 @@ class TutorOrchestrationService:
             recommendations=[recommendation],
             mode="teach",
             key_points=["Use one worked example before trying a harder question."],
+            concept_focus=[payload.focus_concept_label] if payload.focus_concept_label else [],
             next_action="Try the lesson checkpoint or ask for one simpler example.",
         )
 
@@ -160,6 +161,8 @@ class TutorOrchestrationService:
             "sss_level": payload.sss_level,
             "term": payload.term,
             "topic_id": str(payload.topic_id) if payload.topic_id else None,
+            "focus_concept_id": payload.focus_concept_id,
+            "focus_concept_label": payload.focus_concept_label,
             "message": payload.message,
         }
 

@@ -811,6 +811,11 @@ def _structured_tutor_prompt(
     history_block = "\n".join(_history_context_lines(history_context)) or "- No prior tutor history."
     graph_block = "\n".join(_graph_context_lines(graph_context, lesson_context)) or "- No graph/mastery context available."
     citations_block = _citations_block(citations)
+    focused_node_block = (
+        f"- focus_concept_label: {request.focus_concept_label}\n- focus_concept_id: {request.focus_concept_id}"
+        if request.focus_concept_label or request.focus_concept_id
+        else "- No explicit graph-selected concept focus."
+    )
     mode_guidance = {
         "teach": "Explain clearly, stepwise, and with one concrete example.",
         "socratic": "Ask one guiding question first, then give a short nudge instead of a full lecture.",
@@ -830,9 +835,10 @@ def _structured_tutor_prompt(
         f"Mode guidance: {mode_guidance}\n"
         f"Student goal: {user_goal}\n"
         f"Scope: subject={request.subject}, level={request.sss_level}, term={request.term}\n"
-        f"Current lesson title: {lesson_title}\n"
-        f"Current lesson summary: {lesson_summary}\n\n"
-        f"Lesson covered concepts:\n{covered_concepts_block}\n\n"
+          f"Current lesson title: {lesson_title}\n"
+          f"Current lesson summary: {lesson_summary}\n\n"
+          f"Graph-selected focus:\n{focused_node_block}\n\n"
+          f"Lesson covered concepts:\n{covered_concepts_block}\n\n"
         f"Lesson body:\n{lesson_block}\n\n"
         f"Student profile:\n{profile_block}\n\n"
         f"Recent tutor history:\n{history_block}\n\n"
@@ -847,9 +853,10 @@ def _structured_tutor_prompt(
         '  "next_action": "string",\n'
         '  "recommended_assessment": "string or empty"\n'
         "}\n"
-        "Rules:\n"
-        "- assistant_message must be engaging and concise, not generic.\n"
-        "- key_points should contain 2 to 4 short bullets.\n"
+          "Rules:\n"
+          "- assistant_message must be engaging and concise, not generic.\n"
+          "- If graph-selected focus exists, center the explanation on that concept first.\n"
+          "- key_points should contain 2 to 4 short bullets.\n"
         "- concept_focus should name the most relevant concepts in readable language.\n"
         "- prerequisite_warning should be empty if not needed.\n"
         "- next_action must tell the student exactly what to do next.\n"
@@ -882,7 +889,9 @@ def _validate_structured_tutor_payload(
         for item in list(parsed.get("concept_focus") or [])
         if " ".join(str(item).split()).strip()
     ][:4]
-    if not concept_focus:
+    if request.focus_concept_label:
+        concept_focus = list(dict.fromkeys([request.focus_concept_label] + concept_focus))[:4]
+    elif not concept_focus:
         concept_focus = _weak_concept_labels(graph_context, lesson_context) or _lesson_covered_concept_lines(lesson_context, max_items=3)
     prerequisite_warning = " ".join(str(parsed.get("prerequisite_warning") or "").split()).strip() or None
     next_action = " ".join(str(parsed.get("next_action") or "").split()).strip() or None
@@ -924,7 +933,11 @@ def _plain_text_tutor_payload(
         recommendations=_recommendations_from_graph(request=request, graph_context=graph_context),
         mode=mode,  # type: ignore[arg-type]
         key_points=_weak_concept_labels(graph_context, lesson_context)[:3],
-        concept_focus=_weak_concept_labels(graph_context, lesson_context) or _lesson_covered_concept_lines(lesson_context, max_items=3),
+        concept_focus=(
+            [request.focus_concept_label]
+            if request.focus_concept_label
+            else _weak_concept_labels(graph_context, lesson_context) or _lesson_covered_concept_lines(lesson_context, max_items=3)
+        ),
         prerequisite_warning=None,
         next_action="Use the graph rail or ask for one focused checkpoint next.",
         recommended_assessment="Ask for one quick checkpoint to confirm understanding.",
@@ -1006,6 +1019,8 @@ def _run_structured_tutor_mode(
     user_goal: str,
 ) -> TutorChatResponse:
     citations, profile_context, history_context, lesson_context, graph_context, actions = _collect_tutor_context(request)
+    if request.focus_concept_label or request.focus_concept_id:
+        actions.append("USED_GRAPH_SELECTED_FOCUS")
 
     if not citations and not _lesson_context_available(lesson_context):
         topic_part = f", topic_id={request.topic_id}" if request.topic_id else ""

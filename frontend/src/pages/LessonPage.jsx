@@ -445,7 +445,7 @@ export default function LessonPage() {
     }
   };
 
-  const sendChat = async (message) => {
+  const sendChat = async (message, options = {}) => {
     const trimmed = (message ?? chatInput).trim();
     if (!trimmed || !sessionId || isBusy) return;
     setMessages((prev) => [...prev, { role: 'student', content: trimmed }]);
@@ -459,6 +459,8 @@ export default function LessonPage() {
         sss_level: currentLevel,
         term: currentTerm,
         topic_id: topicId,
+        focus_concept_id: options.focusConceptId || null,
+        focus_concept_label: options.focusConceptLabel || null,
         message: trimmed,
       });
     } catch (err) {
@@ -580,7 +582,13 @@ export default function LessonPage() {
     if (!concept || isBusy) return;
     const conceptLabel = concept.label || 'this concept';
     const contextTitle = concept.topic_title || lesson?.title || 'this lesson';
-    await sendChat(`Explain ${conceptLabel} inside ${contextTitle}. Show how it connects to the current lesson and what students usually miss.`);
+    await sendChat(
+      `Explain ${conceptLabel} inside ${contextTitle}. Show how it connects to the current lesson and what students usually miss.`,
+      {
+        focusConceptId: concept.concept_id || null,
+        focusConceptLabel: conceptLabel,
+      },
+    );
   };
 
   const handleGraphBridge = async (concept) => {
@@ -588,16 +596,34 @@ export default function LessonPage() {
     const conceptLabel = concept.label || 'this concept';
     const blockingLabel = safeArray(concept.blocking_prerequisite_labels)[0];
     if (blockingLabel) {
-      await sendChat(`Bridge ${blockingLabel} into ${conceptLabel} for me. Start from the prerequisite, then connect it to this lesson with one clear example.`);
+      await sendChat(
+        `Bridge ${blockingLabel} into ${conceptLabel} for me. Start from the prerequisite, then connect it to this lesson with one clear example.`,
+        {
+          focusConceptId: concept.concept_id || null,
+          focusConceptLabel: conceptLabel,
+        },
+      );
       return;
     }
-    await sendChat(`Connect the previous concept in this lesson graph to ${conceptLabel} and explain why that bridge matters.`);
+    await sendChat(
+      `Connect the previous concept in this lesson graph to ${conceptLabel} and explain why that bridge matters.`,
+      {
+        focusConceptId: concept.concept_id || null,
+        focusConceptLabel: conceptLabel,
+      },
+    );
   };
 
   const handleGraphDrill = async (concept) => {
     if (!concept || isBusy) return;
     const conceptLabel = concept.label || 'this concept';
-    await sendChat(`Give me one short checkpoint question focused only on ${conceptLabel}. Wait for my answer after the question.`);
+    await sendChat(
+      `Give me one short checkpoint question focused only on ${conceptLabel}. Wait for my answer after the question.`,
+      {
+        focusConceptId: concept.concept_id || null,
+        focusConceptLabel: conceptLabel,
+      },
+    );
   };
 
   const handleQuickAction = async (action) => {

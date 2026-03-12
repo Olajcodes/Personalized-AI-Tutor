@@ -34,6 +34,8 @@ class TutorChatIn(BaseModel):
     sss_level: Literal["SSS1", "SSS2", "SSS3"]
     term: Literal[1, 2, 3]
     topic_id: UUID | None = None
+    focus_concept_id: str | None = None
+    focus_concept_label: str | None = None
     message: str = Field(min_length=1, max_length=4000)
 
 
