@@ -227,13 +227,24 @@ const CoursePage = () => {
                 const isLocked = currentStatus === 'locked';
                 const isRecommended = Boolean(topic.is_recommended);
                 const cardStyle = statusStyles[currentStatus] || statusStyles.pending;
+                const openTopic = async () => {
+                  if (isLocked || !targetId) return;
+                  await prewarmTopics({
+                    apiUrl,
+                    token,
+                    studentId: activeId,
+                    subject,
+                    sssLevel: currentLevel,
+                    term: currentTerm,
+                    topicIds: [targetId],
+                  });
+                  navigate(`/lesson/${targetId}`);
+                };
 
                 return (
                   <div 
                     key={targetId || index} 
-                    onClick={() => {
-                        if (!isLocked && targetId) navigate(`/lesson/${targetId}`);
-                    }}
+                    onClick={openTopic}
                     className={`p-6 rounded-2xl border-2 bg-white transition-all group flex flex-col md:flex-row md:items-center justify-between gap-4 ${
                       isLocked ? 'opacity-75 cursor-not-allowed border-slate-200' : 'cursor-pointer hover:shadow-md'
                     } ${

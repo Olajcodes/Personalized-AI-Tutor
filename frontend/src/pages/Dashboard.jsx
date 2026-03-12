@@ -11,6 +11,29 @@ import Footer from '../components/Footer';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
 
+const prewarmTopics = async ({ apiUrl, token, studentId, subject, sssLevel, term, topicIds }) => {
+    const normalizedIds = Array.from(new Set((topicIds || []).filter(Boolean)));
+    if (!normalizedIds.length) return;
+    try {
+        await fetch(`${apiUrl}/learning/lesson/prewarm`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                student_id: studentId,
+                subject,
+                sss_level: sssLevel,
+                term,
+                topic_ids: normalizedIds,
+            }),
+        });
+    } catch (error) {
+        console.warn('Dashboard lesson prewarm skipped:', error);
+    }
+};
+
 export default function Dashboard() {
     const { token } = useAuth();
     const { userData, studentData } = useUser();
@@ -84,6 +107,20 @@ export default function Dashboard() {
         fetchLearningMap();
     }, [activeId, activeSubject, currentLevel, currentTerm, token, apiUrl]);
 
+    const openTopicFromGraph = async (topicId) => {
+        if (!topicId) return;
+        await prewarmTopics({
+            apiUrl,
+            token,
+            studentId: activeId,
+            subject: activeSubject,
+            sssLevel: currentLevel,
+            term: currentTerm,
+            topicIds: [topicId],
+        });
+        navigate(`/lesson/${topicId}`);
+    };
+
     const apiLeaderboardData = [
         { id: 'u1', rank: 1, name: 'Sarah Jenkins', points: '4,250' },
         { id: 'u2', rank: 2, name: 'Marcus Thorne', points: '3,900' },
@@ -136,7 +173,7 @@ export default function Dashboard() {
                         classLevel={currentLevel}
                         subject={activeSubject}
                         mapData={mapData}
-                        onSelectTopic={(topicId) => navigate(`/lesson/${topicId}`)}
+                        onSelectTopic={openTopicFromGraph}
                     />
                 )}
 
