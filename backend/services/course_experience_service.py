@@ -7,15 +7,17 @@ import re
 import time
 from uuid import UUID
 
+from sqlalchemy import desc
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.models.mastery_update_event import MasteryUpdateEvent
 from backend.models.personalized_lesson import PersonalizedLesson
 from backend.models.student import StudentProfile, StudentSubject
 from backend.models.subject import Subject
 from backend.models.topic import Topic
 from backend.repositories.graph_repo import GraphRepository
-from backend.schemas.course_schema import CourseBootstrapOut, CourseBootstrapTopicOut
+from backend.schemas.course_schema import CourseBootstrapOut, CourseBootstrapTopicOut, CourseRecentEvidenceOut
 from backend.schemas.learning_path_schema import PathNextIn
 from backend.services.learning_path_service import LearningPathValidationError, learning_path_service
 from backend.services.lesson_experience_service import LessonExperienceService
@@ -54,6 +56,79 @@ class CourseExperienceError(ValueError):
 class CourseExperienceService:
     def __init__(self, db: Session):
         self.db = db
+
+    @staticmethod
+    def _readable_concept_label(concept_id: str | None) -> str | None:
+        value = str(concept_id or "").strip()
+        if not value:
+            return None
+        try:
+            UUID(value)
+            return None
+        except ValueError:
+            pass
+        token = value.rsplit(":", 1)[-1].strip()
+        token = re.sub(r"-(\d+)$", "", token)
+        token = re.sub(r"[_-]+", " ", token)
+        token = re.sub(r"\s+", " ", token).strip()
+        return token.title() if token else None
+
+    def _latest_scope_evidence(
+        self,
+        *,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+    ) -> CourseRecentEvidenceOut | None:
+        event = (
+            self.db.query(MasteryUpdateEvent)
+            .filter(
+                MasteryUpdateEvent.student_id == student_id,
+                MasteryUpdateEvent.subject == subject,
+                MasteryUpdateEvent.sss_level == sss_level,
+                MasteryUpdateEvent.term == term,
+            )
+            .order_by(desc(MasteryUpdateEvent.created_at))
+            .first()
+        )
+        if event is None:
+            return None
+
+        strongest_gain = None
+        strongest_drop = None
+        gain_delta = 0.0
+        drop_delta = 0.0
+        for entry in list(event.new_mastery or []):
+            try:
+                delta = float(entry.get("delta", 0.0))
+            except (TypeError, ValueError):
+                continue
+            concept_label = self._readable_concept_label(entry.get("concept_id"))
+            if delta > gain_delta:
+                gain_delta = delta
+                strongest_gain = concept_label
+            if delta < drop_delta:
+                drop_delta = delta
+                strongest_drop = concept_label
+
+        if strongest_gain and strongest_drop:
+            summary = f"Latest {event.source} strengthened {strongest_gain} but exposed a gap in {strongest_drop}."
+        elif strongest_gain:
+            summary = f"Latest {event.source} improved {strongest_gain}."
+        elif strongest_drop:
+            summary = f"Latest {event.source} showed a weaker result in {strongest_drop}."
+        else:
+            summary = f"Latest {event.source} updated your mastery profile."
+
+        created_at = event.created_at.isoformat() if getattr(event, "created_at", None) else ""
+        return CourseRecentEvidenceOut(
+            source=str(event.source),
+            created_at=created_at,
+            strongest_gain_concept_label=strongest_gain,
+            strongest_drop_concept_label=strongest_drop,
+            summary=summary,
+        )
 
     @staticmethod
     def _scope_mastery_signature(
@@ -285,6 +360,12 @@ class CourseExperienceService:
             nodes=list(map_visual.nodes) if map_visual is not None else [],
             edges=list(map_visual.edges) if map_visual is not None else [],
             next_step=next_step,
+            recent_evidence=self._latest_scope_evidence(
+                student_id=student_id,
+                subject=subject,
+                sss_level=str(student_profile.sss_level),
+                term=term,
+            ),
             map_error=map_error,
             warmed_topic_ids=warmed_topic_ids,
             cache_hit_topic_ids=cache_hit_topic_ids,

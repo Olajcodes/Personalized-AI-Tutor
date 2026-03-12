@@ -198,6 +198,7 @@ class LessonCockpitService:
                 term=payload.term,
                 topics=course_topics,
                 next_step=course_bootstrap.next_step,
+                recent_evidence=course_bootstrap.recent_evidence,
                 map_error=course_bootstrap.map_error,
                 tutor_bootstrap=tutor_bootstrap,
                 warmed_topic_ids=prewarm["warmed_topic_ids"],

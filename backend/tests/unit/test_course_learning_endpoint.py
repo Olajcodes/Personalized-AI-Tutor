@@ -73,6 +73,13 @@ def test_course_bootstrap_returns_graph_ready_payload(monkeypatch):
                 "scope_warning": None,
                 "unmapped_topic_titles": [],
             },
+            "recent_evidence": {
+                "source": "practice",
+                "created_at": "2026-03-12T10:00:00Z",
+                "strongest_gain_concept_label": "Arithmetic Progression",
+                "strongest_drop_concept_label": "Simple Interest",
+                "summary": "Latest practice strengthened Arithmetic Progression but exposed a gap in Simple Interest.",
+            },
             "map_error": None,
             "warmed_topic_ids": [],
             "cache_hit_topic_ids": [],
@@ -99,3 +106,4 @@ def test_course_bootstrap_returns_graph_ready_payload(monkeypatch):
     assert body["topics"][0]["status"] == "current"
     assert body["topics"][0]["concept_label"] == "Arithmetic Progression"
     assert body["next_step"]["recommended_concept_label"] == "Arithmetic Progression"
+    assert body["recent_evidence"]["strongest_drop_concept_label"] == "Simple Interest"

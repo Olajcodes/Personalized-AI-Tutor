@@ -212,6 +212,7 @@ export default function LessonPage() {
   const graphContext = bootstrap?.graph_context || null;
   const sessionId = bootstrap?.session_id || null;
   const quickActions = safeArray(bootstrap?.suggested_actions);
+  const recentEvidence = bootstrap?.recent_evidence || null;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -242,7 +243,10 @@ export default function LessonPage() {
           {
             role: 'assistant',
             content: cachedBootstrap.greeting || 'Your lesson cockpit is ready.',
-            key_points: [cachedBootstrap.why_this_topic || 'Use the graph rail to see why this lesson matters.'],
+            key_points: [
+              cachedBootstrap.why_this_topic || 'Use the graph rail to see why this lesson matters.',
+              cachedBootstrap.recent_evidence?.summary || null,
+            ].filter(Boolean),
           },
         ]);
         setStatus('ready');
@@ -265,7 +269,10 @@ export default function LessonPage() {
         }
         const cockpitJson = await response.json();
         if (cancelled) return;
-        const bootstrapJson = cockpitJson.tutor_bootstrap;
+        const bootstrapJson = {
+          ...cockpitJson.tutor_bootstrap,
+          recent_evidence: cockpitJson.recent_evidence || null,
+        };
         setSidebarTopics(safeArray(cockpitJson.topics));
         setBootstrap(bootstrapJson);
         writeBootstrapCache(activeCacheKey, bootstrapJson);
@@ -274,7 +281,10 @@ export default function LessonPage() {
           {
             role: 'assistant',
             content: bootstrapJson.greeting || 'Your lesson cockpit is ready.',
-            key_points: [bootstrapJson.why_this_topic || 'Use the graph rail to see why this lesson matters.'],
+            key_points: [
+              bootstrapJson.why_this_topic || 'Use the graph rail to see why this lesson matters.',
+              cockpitJson.recent_evidence?.summary || null,
+            ].filter(Boolean),
           },
         ]);
         setStatus('ready');
@@ -711,6 +721,18 @@ export default function LessonPage() {
                       <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Weak prerequisite</p>
                       <p className="mt-1 text-sm font-semibold text-slate-800">{graphContext?.prerequisite_concepts?.[0]?.label || 'No blocking prerequisite detected'}</p>
                     </div>
+                    {recentEvidence && (
+                      <div className="rounded-2xl bg-white p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Latest evidence</p>
+                        <p className="mt-1 text-sm font-semibold leading-6 text-slate-800">{recentEvidence.summary}</p>
+                        {(recentEvidence.strongest_gain_concept_label || recentEvidence.strongest_drop_concept_label) && (
+                          <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
+                            {recentEvidence.strongest_gain_concept_label ? `Gain: ${recentEvidence.strongest_gain_concept_label}` : 'No recent gain'}
+                            {recentEvidence.strongest_drop_concept_label ? ` · Gap: ${recentEvidence.strongest_drop_concept_label}` : ''}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

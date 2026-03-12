@@ -24,6 +24,14 @@ class CourseBootstrapTopicOut(BaseModel):
     is_recommended: bool = False
 
 
+class CourseRecentEvidenceOut(BaseModel):
+    source: str
+    created_at: str
+    strongest_gain_concept_label: str | None = None
+    strongest_drop_concept_label: str | None = None
+    summary: str
+
+
 class CourseBootstrapOut(BaseModel):
     student_id: UUID
     subject: Literal["math", "english", "civic"]
@@ -33,6 +41,7 @@ class CourseBootstrapOut(BaseModel):
     nodes: list[LearningMapNodeOut] = Field(default_factory=list)
     edges: list[LearningMapEdgeOut] = Field(default_factory=list)
     next_step: PathNextOut | None = None
+    recent_evidence: CourseRecentEvidenceOut | None = None
     map_error: str | None = None
     warmed_topic_ids: list[str] = Field(default_factory=list)
     cache_hit_topic_ids: list[str] = Field(default_factory=list)

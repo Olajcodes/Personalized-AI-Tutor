@@ -23,7 +23,7 @@ export default function Dashboard() {
     const enrolledSubjects = studentData?.subjects || [];
 
     const [activeSubject, setActiveSubject] = useState(null);
-    const [mapData, setMapData] = useState({ nodes: [], edges: [], next_step: null });
+    const [mapData, setMapData] = useState({ nodes: [], edges: [], next_step: null, recent_evidence: null });
     const [isLoadingMap, setIsLoadingMap] = useState(false);
     const [mapError, setMapError] = useState('');
 
@@ -68,11 +68,12 @@ export default function Dashboard() {
                     nodes: Array.isArray(data?.nodes) ? data.nodes : [],
                     edges: Array.isArray(data?.edges) ? data.edges : [],
                     next_step: data?.next_step || null,
+                    recent_evidence: data?.recent_evidence || null,
                 });
                 setMapError(data?.map_error || '');
             } catch (err) {
                 console.error('Map fetch error:', err);
-                setMapData({ nodes: [], edges: [], next_step: null });
+                setMapData({ nodes: [], edges: [], next_step: null, recent_evidence: null });
                 setMapError(err.message || 'Learning map unavailable.');
             } finally {
                 setIsLoadingMap(false);
@@ -101,6 +102,7 @@ export default function Dashboard() {
                     <AIRecommendation
                         activeSubject={activeSubject}
                         recommendation={activeSubject ? mapData?.next_step : null}
+                        recentEvidence={activeSubject ? mapData?.recent_evidence : null}
                     />
                 </div>
 

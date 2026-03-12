@@ -9,6 +9,7 @@ const safeArray = (value) => (Array.isArray(value) ? value : []);
 export default function AIRecommendation({
   recommendation: recommendationOverride = null,
   activeSubject: activeSubjectProp = null,
+  recentEvidence: recentEvidenceOverride = null,
 }) {
   const navigate = useNavigate();
   const { token } = useAuth();
@@ -24,12 +25,14 @@ export default function AIRecommendation({
 
   // State
   const [recommendation, setRecommendation] = useState(null);
+  const [recentEvidence, setRecentEvidence] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (recommendationOverride) {
       setRecommendation(recommendationOverride);
+      setRecentEvidence(recentEvidenceOverride || null);
       setError("");
       setIsLoading(false);
       return;
@@ -66,6 +69,7 @@ export default function AIRecommendation({
           throw new Error(data?.map_error || "Graph recommendation unavailable.");
         }
         setRecommendation(data.next_step);
+        setRecentEvidence(data.recent_evidence || null);
       } catch (err) {
         setError(err.message);
       } finally {
@@ -74,7 +78,7 @@ export default function AIRecommendation({
     };
 
     fetchNextStep();
-  }, [activeId, currentSubject, currentLevel, currentTerm, token, apiUrl, recommendationOverride]);
+  }, [activeId, currentSubject, currentLevel, currentTerm, token, apiUrl, recommendationOverride, recentEvidenceOverride]);
 
   // Handle Loading State
   if (isLoading) {
@@ -150,6 +154,19 @@ export default function AIRecommendation({
           <div className="mb-4 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
             <div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Blocking concepts</div>
             <p className="mt-2 text-xs font-semibold leading-6 text-amber-900">{blockingLabels.join(', ')}</p>
+          </div>
+        )}
+
+        {recentEvidence && (
+          <div className="mb-4 rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3">
+            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600">Latest evidence</div>
+            <p className="mt-2 text-xs leading-6 text-indigo-900">{recentEvidence.summary}</p>
+            {(recentEvidence.strongest_gain_concept_label || recentEvidence.strongest_drop_concept_label) && (
+              <p className="mt-2 text-[11px] font-semibold leading-5 text-indigo-700">
+                {recentEvidence.strongest_gain_concept_label ? `Gain: ${recentEvidence.strongest_gain_concept_label}` : 'No recent gain'}
+                {recentEvidence.strongest_drop_concept_label ? ` · Gap: ${recentEvidence.strongest_drop_concept_label}` : ''}
+              </p>
+            )}
           </div>
         )}
 

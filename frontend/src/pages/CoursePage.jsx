@@ -38,6 +38,7 @@ const CoursePage = () => {
   const [topics, setTopics] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [nextStep, setNextStep] = useState(null);
+  const [recentEvidence, setRecentEvidence] = useState(null);
   const [mapError, setMapError] = useState('');
 
   const apiUrl = import.meta.env.VITE_API_URL || 'https://mastery-backend-7xe8.onrender.com/api/v1';
@@ -70,12 +71,14 @@ const CoursePage = () => {
         localStorage.setItem('active_subject', subject);
         setTopics(safeArray(data?.topics));
         setNextStep(data?.next_step || null);
+        setRecentEvidence(data?.recent_evidence || null);
         setMapError(data?.map_error || '');
 
       } catch (err) {
         console.error("CoursePage Error:", err);
         setTopics([]);
         setNextStep(null);
+        setRecentEvidence(null);
       } finally {
         setIsLoading(false);
       }
@@ -142,6 +145,19 @@ const CoursePage = () => {
               </div>
               {mapError && (
                 <p className="mt-4 text-xs font-semibold text-slate-500">{mapError}</p>
+              )}
+            </div>
+          )}
+
+          {recentEvidence && (
+            <div className="mb-6 rounded-3xl border border-indigo-100 bg-white p-5 shadow-sm">
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600">Latest evidence</div>
+              <p className="mt-2 text-sm leading-7 text-slate-700">{recentEvidence.summary}</p>
+              {(recentEvidence.strongest_gain_concept_label || recentEvidence.strongest_drop_concept_label) && (
+                <p className="mt-3 text-xs font-semibold text-slate-500">
+                  {recentEvidence.strongest_gain_concept_label ? `Gain: ${recentEvidence.strongest_gain_concept_label}` : 'No recent gain'}
+                  {recentEvidence.strongest_drop_concept_label ? ` · Gap: ${recentEvidence.strongest_drop_concept_label}` : ''}
+                </p>
               )}
             </div>
           )}
