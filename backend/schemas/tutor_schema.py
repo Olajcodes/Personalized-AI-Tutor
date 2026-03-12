@@ -186,6 +186,20 @@ class TutorAssessmentSubmitOut(BaseModel):
     recommended_topic_id: str | None = None
     recommended_topic_title: str | None = None
     recommended_next_concept_label: str | None = None
+    graph_remediation: "TutorGraphRemediationOut | None" = None
+
+
+class TutorGraphRemediationOut(BaseModel):
+    focus_concept_id: str | None = None
+    focus_concept_label: str | None = None
+    blocking_prerequisite_id: str | None = None
+    blocking_prerequisite_label: str | None = None
+    blocking_prerequisite_topic_title: str | None = None
+    recommended_next_concept_id: str | None = None
+    recommended_next_concept_label: str | None = None
+    recommended_next_topic_id: str | None = None
+    recommended_next_topic_title: str | None = None
+    recommendation_reason: str | None = None
 
 
 class TutorHintIn(BaseModel):

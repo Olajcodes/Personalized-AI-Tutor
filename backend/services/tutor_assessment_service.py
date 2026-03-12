@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
@@ -8,6 +9,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.repositories.activity_repo import ActivityRepository
+from backend.repositories.quiz_repo import QuizRepository
 from backend.repositories.tutor_session_repo import TutorSessionRepository
 from backend.schemas.activity_schema import ActivityLogCreate
 from backend.schemas.internal_graph_schema import ConceptUpdateIn, InternalGraphUpdateIn
@@ -15,6 +17,7 @@ from backend.schemas.learning_path_schema import PathNextIn
 from backend.schemas.tutor_schema import (
     TutorAssessmentStartIn,
     TutorAssessmentStartOut,
+    TutorGraphRemediationOut,
     TutorAssessmentSubmitIn,
     TutorAssessmentSubmitOut,
 )
@@ -33,6 +36,7 @@ class TutorAssessmentService:
     def __init__(self, db: Session):
         self.db = db
         self.repo = TutorSessionRepository(db)
+        self.quiz_repo = QuizRepository(db)
         self.orchestration = TutorOrchestrationService()
         self.activity_service = ActivityService(ActivityRepository(db))
 
@@ -83,7 +87,31 @@ class TutorAssessmentService:
             return True, 0.05
         return False, 0.04
 
-    def _graph_follow_up(self, *, payload: TutorAssessmentSubmitIn) -> tuple[str | None, str | None, str | None]:
+    @staticmethod
+    def _readable_concept_label(concept_id: str, *, fallback_topic_title: str | None = None) -> str:
+        value = str(concept_id or "").strip()
+        if not value:
+            return str(fallback_topic_title or "Untitled Concept").strip()
+        try:
+            UUID(value)
+            fallback = str(fallback_topic_title or "").strip()
+            return fallback or "Topic Concept"
+        except ValueError:
+            pass
+
+        token = value.rsplit(":", 1)[-1].strip()
+        token = re.sub(r"-(\d+)$", "", token)
+        token = re.sub(r"[_-]+", " ", token)
+        token = re.sub(r"\s+", " ", token).strip()
+        return token.title() if token else str(fallback_topic_title or "Untitled Concept").strip()
+
+    def _graph_follow_up(
+        self,
+        *,
+        payload: TutorAssessmentSubmitIn,
+        focus_concept_id: str,
+        fallback_topic_id: UUID | None,
+    ) -> tuple[str | None, str | None, str | None, TutorGraphRemediationOut | None]:
         try:
             next_step = learning_path_service.calculate_next_step(
                 db=self.db,
@@ -95,7 +123,7 @@ class TutorAssessmentService:
                 ),
             )
         except Exception:
-            return None, None, None
+            return None, None, None, None
 
         prerequisite_warning = None
         if next_step.prereq_gaps:
@@ -103,10 +131,50 @@ class TutorAssessmentService:
             prerequisite_warning = (
                 f"You are still blocked by {blocking_label}. Strengthen that prerequisite before pushing further."
             )
+        blocking_prerequisite_id = next_step.prereq_gaps[0] if next_step.prereq_gaps else None
+        blocking_prerequisite_topic_title = (
+            self.quiz_repo.find_topic_title_for_concept(
+                concept_id=blocking_prerequisite_id,
+                subject=payload.subject,
+                sss_level=payload.sss_level,
+                term=int(payload.term),
+            )
+            if blocking_prerequisite_id
+            else None
+        )
+        focus_topic_title = self.quiz_repo.find_topic_title_for_concept(
+            concept_id=focus_concept_id,
+            subject=payload.subject,
+            sss_level=payload.sss_level,
+            term=int(payload.term),
+        ) or self.quiz_repo.get_topic_title(fallback_topic_id)
+        remediation = TutorGraphRemediationOut(
+            focus_concept_id=focus_concept_id,
+            focus_concept_label=self._readable_concept_label(
+                focus_concept_id,
+                fallback_topic_title=focus_topic_title,
+            ),
+            blocking_prerequisite_id=blocking_prerequisite_id,
+            blocking_prerequisite_label=(
+                self._readable_concept_label(
+                    blocking_prerequisite_id,
+                    fallback_topic_title=blocking_prerequisite_topic_title,
+                )
+                if blocking_prerequisite_id
+                else None
+            ),
+            blocking_prerequisite_topic_title=blocking_prerequisite_topic_title,
+            recommended_next_concept_id=next_step.recommended_concept_id,
+            recommended_next_concept_label=next_step.recommended_concept_label,
+            recommended_next_topic_id=next_step.recommended_topic_id,
+            recommended_next_topic_title=next_step.recommended_topic_title,
+            recommendation_reason=next_step.reason,
+        )
         return (
             prerequisite_warning,
             next_step.recommended_topic_id,
             next_step.recommended_topic_title or next_step.recommended_concept_label,
+            remediation,
         )
 
     async def start_assessment(self, payload: TutorAssessmentStartIn) -> TutorAssessmentStartOut:
@@ -208,7 +276,27 @@ class TutorAssessmentService:
         )
         self.repo.update_message_content(message_id=message_id, content=self._encode_state(resolved_state))
         self.repo.add_message(session_id=payload.session_id, role="assistant", content=ai_out.feedback)
-        prerequisite_warning, recommended_topic_id, recommended_topic_title = self._graph_follow_up(payload=payload)
+        prerequisite_warning, recommended_topic_id, recommended_topic_title, graph_remediation = self._graph_follow_up(
+            payload=payload,
+            focus_concept_id=ai_out.concept_id,
+            fallback_topic_id=payload.topic_id,
+        )
+        from backend.services.lesson_experience_service import LessonExperienceService
+        from backend.services.course_experience_service import CourseExperienceService
+
+        LessonExperienceService.invalidate_topic_snapshot_cache(
+            student_id=payload.student_id,
+            subject=payload.subject,
+            sss_level=payload.sss_level,
+            term=int(payload.term),
+            topic_id=payload.topic_id,
+        )
+        CourseExperienceService.invalidate_scope_cache(
+            student_id=payload.student_id,
+            subject=payload.subject,
+            sss_level=payload.sss_level,
+            term=int(payload.term),
+        )
         return ai_out.model_copy(
             update={
                 "assessment_id": payload.assessment_id,
@@ -218,6 +306,9 @@ class TutorAssessmentService:
                 "prerequisite_warning": prerequisite_warning,
                 "recommended_topic_id": recommended_topic_id,
                 "recommended_topic_title": recommended_topic_title,
-                "recommended_next_concept_label": recommended_topic_title,
+                "recommended_next_concept_label": (
+                    graph_remediation.recommended_next_concept_label if graph_remediation else recommended_topic_title
+                ),
+                "graph_remediation": graph_remediation,
             }
         )

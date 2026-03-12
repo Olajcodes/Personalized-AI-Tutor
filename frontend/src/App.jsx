@@ -107,6 +107,7 @@ function App() {
 
                 {/* Module Flow */}
                 <Route path="/module-quiz" element={<ModuleQuizPage />} />
+                <Route path="/module-quiz/:topicId" element={<ModuleQuizPage />} />
               </Route>
 
               {/* Teacher Layout */}

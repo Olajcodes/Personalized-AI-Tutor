@@ -143,4 +143,21 @@ class QuizSubmitService:
             concept_breakdown=concept_breakdown,
         )
 
+        from backend.services.lesson_experience_service import LessonExperienceService
+        from backend.services.course_experience_service import CourseExperienceService
+
+        LessonExperienceService.invalidate_topic_snapshot_cache(
+            student_id=request.student_id,
+            subject=quiz.subject,
+            sss_level=quiz.sss_level,
+            term=int(quiz.term),
+            topic_id=quiz.topic_id,
+        )
+        CourseExperienceService.invalidate_scope_cache(
+            student_id=request.student_id,
+            subject=quiz.subject,
+            sss_level=quiz.sss_level,
+            term=int(quiz.term),
+        )
+
         return QuizSubmitResponse(attempt_id=attempt.id, score=score, xp_awarded=xp)

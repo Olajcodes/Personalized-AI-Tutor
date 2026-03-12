@@ -1,0 +1,291 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import re
+import time
+from uuid import UUID
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from backend.models.personalized_lesson import PersonalizedLesson
+from backend.models.student import StudentProfile, StudentSubject
+from backend.models.subject import Subject
+from backend.models.topic import Topic
+from backend.repositories.graph_repo import GraphRepository
+from backend.schemas.course_schema import CourseBootstrapOut, CourseBootstrapTopicOut
+from backend.schemas.learning_path_schema import PathNextIn
+from backend.services.learning_path_service import LearningPathValidationError, learning_path_service
+from backend.services.lesson_experience_service import LessonExperienceService
+from backend.services.rag_retrieve_service import RagRetrieveService, RagRetrieveServiceError
+
+logger = logging.getLogger(__name__)
+CACHE_TTL_SECONDS = 30.0
+_COURSE_BOOTSTRAP_CACHE: dict[str, tuple[float, CourseBootstrapOut]] = {}
+
+_NOISY_DESCRIPTION_MARKERS = (
+    "SECOND TERM E-LEARNING NOTE SUBJECT",
+    "SCHEME OF WORK WEEK TOPIC",
+    "WEEKEND ASSIGNMENT SECTION",
+)
+
+
+def _clean_topic_description(raw: str | None) -> str | None:
+    text = re.sub(r"\s+", " ", str(raw or "")).strip()
+    if not text:
+        return None
+    if any(marker in text.upper() for marker in _NOISY_DESCRIPTION_MARKERS):
+        return None
+    if len(text) > 220:
+        return f"{text[:217].rstrip()}..."
+    return text
+
+
+def _has_cached_personalized_lesson(lesson: PersonalizedLesson | None) -> bool:
+    return bool(lesson and isinstance(lesson.content_blocks, list) and lesson.content_blocks)
+
+
+class CourseExperienceError(ValueError):
+    pass
+
+
+class CourseExperienceService:
+    def __init__(self, db: Session):
+        self.db = db
+
+    @staticmethod
+    def _scope_mastery_signature(
+        *,
+        db: Session,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+    ) -> str:
+        mastery_map = GraphRepository(db).get_mastery_map(
+            student_id=student_id,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+        )
+        if not mastery_map:
+            return "no_mastery"
+        payload = json.dumps(sorted(mastery_map.items()), separators=(",", ":"), ensure_ascii=True)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+    @staticmethod
+    def _cache_key(
+        *,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+        mastery_signature: str,
+    ) -> str:
+        return ":".join([str(student_id), subject, sss_level, str(term), mastery_signature])
+
+    @staticmethod
+    def _read_cached_bootstrap(*, cache_key: str) -> CourseBootstrapOut | None:
+        entry = _COURSE_BOOTSTRAP_CACHE.get(cache_key)
+        if entry is None:
+            return None
+        created_at, payload = entry
+        if (time.time() - created_at) > CACHE_TTL_SECONDS:
+            _COURSE_BOOTSTRAP_CACHE.pop(cache_key, None)
+            return None
+        return payload
+
+    @staticmethod
+    def _write_cached_bootstrap(*, cache_key: str, payload: CourseBootstrapOut) -> CourseBootstrapOut:
+        _COURSE_BOOTSTRAP_CACHE[cache_key] = (time.time(), payload)
+        return payload
+
+    @classmethod
+    def invalidate_scope_cache(
+        cls,
+        *,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+    ) -> None:
+        prefix = ":".join([str(student_id), subject, sss_level, str(term)])
+        for cache_key in [key for key in list(_COURSE_BOOTSTRAP_CACHE.keys()) if key.startswith(prefix)]:
+            _COURSE_BOOTSTRAP_CACHE.pop(cache_key, None)
+
+    def bootstrap(
+        self,
+        *,
+        student_id: UUID,
+        subject: str,
+        term: int,
+    ) -> CourseBootstrapOut:
+        student_profile = self.db.execute(
+            select(StudentProfile).where(StudentProfile.student_id == student_id)
+        ).scalar_one_or_none()
+        if not student_profile:
+            raise CourseExperienceError("Student profile not found.")
+
+        mastery_signature = self._scope_mastery_signature(
+            db=self.db,
+            student_id=student_id,
+            subject=subject,
+            sss_level=str(student_profile.sss_level),
+            term=term,
+        )
+        cache_key = self._cache_key(
+            student_id=student_id,
+            subject=subject,
+            sss_level=str(student_profile.sss_level),
+            term=term,
+            mastery_signature=mastery_signature,
+        )
+        cached = self._read_cached_bootstrap(cache_key=cache_key)
+        if cached is not None:
+            return cached
+
+        enrolled_subject_ids = [
+            row[0]
+            for row in self.db.execute(
+                select(StudentSubject.subject_id).where(StudentSubject.student_profile_id == student_profile.id)
+            ).all()
+        ]
+
+        query = (
+            select(Topic, PersonalizedLesson, Subject.slug)
+            .join(Subject, Subject.id == Topic.subject_id)
+            .outerjoin(
+                PersonalizedLesson,
+                (PersonalizedLesson.topic_id == Topic.id)
+                & (PersonalizedLesson.student_id == student_id),
+            )
+            .where(
+                Topic.is_approved.is_(True),
+                Topic.sss_level == student_profile.sss_level,
+                Topic.term == term,
+                Topic.subject_id.in_(enrolled_subject_ids),
+                Subject.slug == subject.lower(),
+            )
+            .order_by(Topic.created_at.asc(), Topic.title.asc())
+        )
+        rows = self.db.execute(query).all()
+
+        rag_service = RagRetrieveService()
+        map_visual = None
+        map_error = None
+        try:
+            map_visual = learning_path_service.get_learning_map_visual(
+                self.db,
+                student_id=student_id,
+                subject=subject,
+                sss_level=student_profile.sss_level,
+                term=term,
+                view="topic",
+            )
+        except LearningPathValidationError as exc:
+            map_error = str(exc)
+
+        node_map = {
+            str(node.topic_id): node
+            for node in (map_visual.nodes if map_visual is not None else [])
+        }
+        next_step = map_visual.next_step if map_visual is not None else None
+        recommended_topic_id = str(next_step.recommended_topic_id) if next_step and next_step.recommended_topic_id else None
+
+        topics: list[CourseBootstrapTopicOut] = []
+        readiness_failures: list[str] = []
+
+        for topic, personalized_lesson, _subject_slug in rows:
+            topic_id = str(topic.id)
+            lesson_ready = _has_cached_personalized_lesson(personalized_lesson)
+            unavailable_reason = None
+
+            if not lesson_ready:
+                try:
+                    lesson_ready = rag_service.topic_has_chunks(
+                        subject=subject,
+                        sss_level=str(topic.sss_level),
+                        term=int(topic.term),
+                        topic_id=topic.id,
+                        approved_only=True,
+                        curriculum_version_id=topic.curriculum_version_id,
+                    )
+                except RagRetrieveServiceError as exc:
+                    unavailable_reason = str(exc)
+                    readiness_failures.append(topic_id)
+
+            if not lesson_ready and unavailable_reason is None:
+                unavailable_reason = "No approved curriculum chunks found for this topic/scope."
+
+            node = node_map.get(topic_id)
+            status = node.status if node is not None else ("ready" if lesson_ready else "locked")
+
+            topics.append(
+                CourseBootstrapTopicOut(
+                    topic_id=topic_id,
+                    title=str(topic.title),
+                    description=(
+                        personalized_lesson.summary
+                        if personalized_lesson and personalized_lesson.summary
+                        else _clean_topic_description(topic.description)
+                    ),
+                    lesson_title=personalized_lesson.title if personalized_lesson else None,
+                    estimated_duration_minutes=(
+                        personalized_lesson.estimated_duration_minutes if personalized_lesson else None
+                    ),
+                    lesson_ready=lesson_ready,
+                    lesson_unavailable_reason=unavailable_reason,
+                    sss_level=str(topic.sss_level),
+                    term=int(topic.term),
+                    subject_id=str(topic.subject_id),
+                    status=status,
+                    mastery_score=float(node.mastery_score) if node is not None else 0.0,
+                    concept_label=str(node.concept_label) if node and node.concept_label else None,
+                    graph_details=str(node.details) if node and node.details else None,
+                    is_recommended=bool(recommended_topic_id and recommended_topic_id == topic_id),
+                )
+            )
+
+        if not topics and readiness_failures and map_error is None:
+            map_error = "Lesson readiness checks failed for this scope."
+
+        warmed_topic_ids: list[str] = []
+        cache_hit_topic_ids: list[str] = []
+        failed_topic_ids: list[str] = []
+        if recommended_topic_id:
+            prewarm = LessonExperienceService.prewarm_topics(
+                student_id=student_id,
+                subject=subject,
+                sss_level=str(student_profile.sss_level),
+                term=term,
+                topic_ids=[UUID(recommended_topic_id)],
+            )
+            warmed_topic_ids = list(prewarm.get("warmed_topic_ids", []))
+            cache_hit_topic_ids = list(prewarm.get("cache_hit_topic_ids", []))
+            failed_topic_ids = list(prewarm.get("failed_topic_ids", []))
+            logger.info(
+                "course.bootstrap.prewarm student_id=%s subject=%s term=%s recommended_topic_id=%s warmed=%s cache_hits=%s failed=%s",
+                student_id,
+                subject,
+                term,
+                recommended_topic_id,
+                warmed_topic_ids,
+                cache_hit_topic_ids,
+                failed_topic_ids,
+            )
+
+        payload = CourseBootstrapOut(
+            student_id=student_id,
+            subject=subject,  # type: ignore[arg-type]
+            sss_level=str(student_profile.sss_level),  # type: ignore[arg-type]
+            term=term,  # type: ignore[arg-type]
+            topics=topics,
+            next_step=next_step,
+            map_error=map_error,
+            warmed_topic_ids=warmed_topic_ids,
+            cache_hit_topic_ids=cache_hit_topic_ids,
+            failed_topic_ids=failed_topic_ids,
+        )
+        return self._write_cached_bootstrap(cache_key=cache_key, payload=payload)

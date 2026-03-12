@@ -64,6 +64,26 @@ const writeBootstrapCache = (key, payload) => {
   lessonBootstrapCache.set(key, { payload, timestamp: Date.now() });
 };
 
+const prewarmTopics = async ({ token, studentId, subject, sssLevel, term, topicIds }) => {
+  const normalizedIds = Array.from(new Set((topicIds || []).filter(Boolean)));
+  if (!normalizedIds.length) return;
+  try {
+    await fetch(`${API_URL}/learning/lesson/prewarm`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        student_id: studentId,
+        subject,
+        sss_level: sssLevel,
+        term,
+        topic_ids: normalizedIds,
+      }),
+    });
+  } catch (error) {
+    console.warn('Lesson remediation prewarm skipped:', error);
+  }
+};
+
 function MessageCard({ item }) {
   const isStudent = item.role === 'student';
   return (
@@ -229,6 +249,44 @@ export default function LessonPage() {
     if (!bootstrap || !activeCacheKey) return;
     writeBootstrapCache(activeCacheKey, bootstrap);
   }, [activeCacheKey, bootstrap]);
+
+  useEffect(() => {
+    if (!activeId || !token || !topicId || !sidebarTopics.length) return;
+
+    const currentIndex = sidebarTopics.findIndex((item) => String(item.topic_id) === String(topicId));
+    if (currentIndex < 0) return;
+
+    const candidateIds = [
+      sidebarTopics[currentIndex + 1]?.topic_id,
+      sidebarTopics[currentIndex - 1]?.topic_id,
+      bootstrap?.next_unlock?.topic_id,
+    ]
+      .filter(Boolean)
+      .filter((value, index, arr) => arr.indexOf(value) === index)
+      .slice(0, 3);
+
+    if (!candidateIds.length) return;
+
+    const prewarm = async () => {
+      try {
+        await fetch(`${API_URL}/learning/lesson/prewarm`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            student_id: activeId,
+            subject: currentSubject,
+            sss_level: currentLevel,
+            term: currentTerm,
+            topic_ids: candidateIds,
+          }),
+        });
+      } catch (err) {
+        console.warn('Lesson prewarm skipped:', err);
+      }
+    };
+
+    prewarm();
+  }, [activeId, bootstrap, currentLevel, currentSubject, currentTerm, sidebarTopics, token, topicId]);
 
   const masteryPulse = useMemo(() => {
     const currentConcepts = safeArray(graphContext?.current_concepts);
@@ -452,6 +510,15 @@ export default function LessonPage() {
         topic_id: topicId,
         answer: assessmentAnswer,
       });
+      const recommendedTopicId = out.graph_remediation?.recommended_next_topic_id || out.recommended_topic_id || null;
+      await prewarmTopics({
+        token,
+        studentId: activeId,
+        subject: currentSubject,
+        sssLevel: currentLevel,
+        term: currentTerm,
+        topicIds: recommendedTopicId ? [recommendedTopicId] : [],
+      });
       setPendingAssessment(null);
       setAssessmentAnswer('');
       appendAssistant({
@@ -459,14 +526,44 @@ export default function LessonPage() {
         key_points: [
           `${out.concept_label}: ${Math.round((out.score || 0) * 100)}%`,
           out.mastery_updated ? `Mastery updated to ${Math.round((out.new_mastery || 0) * 100)}%.` : 'No mastery update was applied.',
-        ],
-        prerequisite_warning: out.prerequisite_warning || null,
-        next_action: out.recommended_topic_title
-          ? `Next best focus: ${out.recommended_topic_title}.`
-          : out.is_correct
-            ? 'Push forward to the next unlock or try a harder drill.'
-            : 'Ask for a prerequisite bridge and retry.',
+          out.graph_remediation?.blocking_prerequisite_label
+            ? `Blocking prerequisite: ${out.graph_remediation.blocking_prerequisite_label}`
+            : null,
+          out.graph_remediation?.recommended_next_concept_label
+            ? `Best next concept: ${out.graph_remediation.recommended_next_concept_label}`
+            : null,
+          out.graph_remediation?.recommended_next_topic_title
+            ? `Recommended lesson: ${out.graph_remediation.recommended_next_topic_title}`
+            : null,
+          out.graph_remediation?.recommendation_reason || null,
+        ].filter(Boolean),
+        prerequisite_warning: out.graph_remediation?.blocking_prerequisite_label
+          ? `You are still blocked by ${out.graph_remediation.blocking_prerequisite_label}.`
+          : (out.prerequisite_warning || null),
+        next_action: out.graph_remediation?.recommended_next_topic_title
+          ? `Open ${out.graph_remediation.recommended_next_topic_title} next, or ask for a prerequisite bridge before moving on.`
+          : out.recommended_topic_title
+            ? `Next best focus: ${out.recommended_topic_title}.`
+            : out.is_correct
+              ? 'Push forward to the next unlock or try a harder drill.'
+              : 'Ask for a prerequisite bridge and retry.',
+        recommended_assessment: !out.is_correct && out.graph_remediation?.focus_concept_label
+          ? `Recheck ${out.graph_remediation.focus_concept_label} with one more checkpoint after revising the prerequisite.`
+          : null,
       });
+      if (out.graph_remediation?.recommended_next_topic_id && out.graph_remediation?.recommended_next_topic_title) {
+        setBootstrap((prev) => prev ? ({
+          ...prev,
+          next_unlock: {
+            ...(prev.next_unlock || {}),
+            topic_id: out.graph_remediation.recommended_next_topic_id,
+            topic_title: out.graph_remediation.recommended_next_topic_title,
+            concept_id: out.graph_remediation.recommended_next_concept_id || prev.next_unlock?.concept_id || null,
+            concept_label: out.graph_remediation.recommended_next_concept_label || prev.next_unlock?.concept_label || null,
+            reason: out.graph_remediation.recommendation_reason || prev.next_unlock?.reason || 'Recommended from latest assessment.',
+          },
+        }) : prev);
+      }
     } catch (err) {
       setMessages((prev) => [...prev, { role: 'assistant', content: err.message || 'Failed to submit checkpoint.' }]);
     } finally {

@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
-from backend.schemas.lesson_schema import TopicLessonResponse
+from backend.schemas.lesson_schema import LessonPrewarmIn, LessonPrewarmOut, TopicLessonResponse
+from backend.services.lesson_experience_service import LessonExperienceService
 from backend.services.lesson_service import (
     fetch_topic_lesson,
     LessonNotFound,
@@ -43,3 +44,26 @@ def get_topic_lesson(
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unexpected server error: {e}")
+
+
+@router.post("/lesson/prewarm", response_model=LessonPrewarmOut)
+def prewarm_lessons(
+    payload: LessonPrewarmIn,
+    current_user=Depends(get_current_user),
+):
+    if payload.student_id != current_user.id:
+        raise HTTPException(status_code=403, detail="student_id must match authenticated user id")
+
+    result = LessonExperienceService.prewarm_topics(
+        student_id=payload.student_id,
+        subject=payload.subject,
+        sss_level=payload.sss_level,
+        term=int(payload.term),
+        topic_ids=list(payload.topic_ids),
+    )
+    return LessonPrewarmOut(
+        requested_topic_ids=[str(topic_id) for topic_id in payload.topic_ids],
+        warmed_topic_ids=result["warmed_topic_ids"],
+        cache_hit_topic_ids=result["cache_hit_topic_ids"],
+        failed_topic_ids=result["failed_topic_ids"],
+    )

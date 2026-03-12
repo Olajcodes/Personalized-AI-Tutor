@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import time
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from backend.core.database import SessionLocal
+from backend.repositories.graph_repo import GraphRepository
 from backend.repositories.tutor_session_repo import TutorSessionRepository
 from backend.schemas.tutor_schema import (
     TutorPendingAssessmentOut,
@@ -20,7 +24,19 @@ from backend.services.tutor_assessment_service import TutorAssessmentService
 
 BOOTSTRAP_CACHE_TTL_SECONDS = 30.0
 _BOOTSTRAP_CACHE: dict[str, tuple[float, TutorSessionBootstrapOut]] = {}
+TOPIC_SNAPSHOT_CACHE_TTL_SECONDS = 180.0
+_TOPIC_SNAPSHOT_CACHE: dict[str, tuple[float, "_TopicSnapshot"]] = {}
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _TopicSnapshot:
+    lesson: dict
+    graph_context: object
+    why_this_topic: str | None
+    next_unlock: object | None
+    graph_nodes: list
+    graph_edges: list
 
 
 class LessonExperienceService:
@@ -57,6 +73,27 @@ class LessonExperienceService:
         )
 
     @staticmethod
+    def _topic_snapshot_key(
+        *,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+        topic_id: UUID,
+        mastery_signature: str,
+    ) -> str:
+        return ":".join(
+            [
+                str(student_id),
+                subject,
+                sss_level,
+                str(term),
+                str(topic_id),
+                mastery_signature,
+            ]
+        )
+
+    @staticmethod
     def _read_cached_bootstrap(*, cache_key: str) -> TutorSessionBootstrapOut | None:
         entry = _BOOTSTRAP_CACHE.get(cache_key)
         if entry is None:
@@ -73,22 +110,132 @@ class LessonExperienceService:
         return payload
 
     @staticmethod
+    def _read_cached_topic_snapshot(*, cache_key: str) -> _TopicSnapshot | None:
+        entry = _TOPIC_SNAPSHOT_CACHE.get(cache_key)
+        if entry is None:
+            return None
+        created_at, payload = entry
+        if (time.time() - created_at) > TOPIC_SNAPSHOT_CACHE_TTL_SECONDS:
+            _TOPIC_SNAPSHOT_CACHE.pop(cache_key, None)
+            return None
+        return payload
+
+    @staticmethod
+    def _write_cached_topic_snapshot(*, cache_key: str, payload: _TopicSnapshot) -> _TopicSnapshot:
+        _TOPIC_SNAPSHOT_CACHE[cache_key] = (time.time(), payload)
+        return payload
+
+    @staticmethod
+    def _scope_mastery_signature(
+        *,
+        db: Session,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+    ) -> str:
+        mastery_map = GraphRepository(db).get_mastery_map(
+            student_id=student_id,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+        )
+        if not mastery_map:
+            return "no_mastery"
+        payload = json.dumps(sorted(mastery_map.items()), separators=(",", ":"), ensure_ascii=True)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+    @classmethod
+    def invalidate_topic_snapshot_cache(
+        cls,
+        *,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+        topic_id: UUID | None = None,
+    ) -> None:
+        prefix = ":".join([str(student_id), subject, sss_level, str(term)])
+        for key in list(_TOPIC_SNAPSHOT_CACHE.keys()):
+            if not key.startswith(prefix):
+                continue
+            if topic_id is not None and f":{topic_id}:" not in key:
+                continue
+            _TOPIC_SNAPSHOT_CACHE.pop(key, None)
+
+    @staticmethod
     def invalidate_session_cache(*, session_id: UUID) -> None:
         session_token = f":{session_id}"
         for key in [cache_key for cache_key in list(_BOOTSTRAP_CACHE.keys()) if cache_key.endswith(session_token)]:
             _BOOTSTRAP_CACHE.pop(key, None)
 
-    @staticmethod
-    def prewarm_related_topics(
+    @classmethod
+    def _build_topic_snapshot(
+        cls,
+        *,
+        db: Session,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+        topic_id: UUID,
+    ) -> tuple[_TopicSnapshot, str]:
+        mastery_signature = cls._scope_mastery_signature(
+            db=db,
+            student_id=student_id,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+        )
+        cache_key = cls._topic_snapshot_key(
+            student_id=student_id,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+            topic_id=topic_id,
+            mastery_signature=mastery_signature,
+        )
+        cached = cls._read_cached_topic_snapshot(cache_key=cache_key)
+        if cached is not None:
+            return cached, "cache"
+
+        lesson = fetch_topic_lesson(db=db, topic_id=topic_id, student_id=student_id)
+        graph_context = lesson_graph_service.get_lesson_graph_context(
+            db,
+            student_id=student_id,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+            topic_id=topic_id,
+        )
+        snapshot = _TopicSnapshot(
+            lesson=lesson,
+            graph_context=graph_context,
+            why_this_topic=graph_context.why_this_matters,
+            next_unlock=graph_context.next_unlock,
+            graph_nodes=list(graph_context.graph_nodes),
+            graph_edges=list(graph_context.graph_edges),
+        )
+        cls._write_cached_topic_snapshot(cache_key=cache_key, payload=snapshot)
+        return snapshot, "fresh"
+
+    @classmethod
+    def prewarm_topics(
+        cls,
         *,
         student_id: UUID,
         subject: str,
         sss_level: str,
         term: int,
         topic_ids: list[UUID],
-    ) -> None:
+    ) -> dict[str, list[str]]:
+        result = {
+            "warmed_topic_ids": [],
+            "cache_hit_topic_ids": [],
+            "failed_topic_ids": [],
+        }
         if not topic_ids:
-            return
+            return result
         db = SessionLocal()
         try:
             seen: set[str] = set()
@@ -98,9 +245,8 @@ class LessonExperienceService:
                     continue
                 seen.add(topic_token)
                 try:
-                    fetch_topic_lesson(db=db, topic_id=topic_id, student_id=student_id)
-                    lesson_graph_service.get_lesson_graph_context(
-                        db,
+                    _, source = cls._build_topic_snapshot(
+                        db=db,
                         student_id=student_id,
                         subject=subject,
                         sss_level=sss_level,
@@ -108,13 +254,18 @@ class LessonExperienceService:
                         topic_id=topic_id,
                     )
                     logger.info(
-                        "lesson.bootstrap.prewarm_success student_id=%s topic_id=%s subject=%s level=%s term=%s",
+                        "lesson.bootstrap.prewarm_success student_id=%s topic_id=%s subject=%s level=%s term=%s source=%s",
                         student_id,
                         topic_id,
                         subject,
                         sss_level,
                         term,
+                        source,
                     )
+                    if source == "cache":
+                        result["cache_hit_topic_ids"].append(topic_token)
+                    else:
+                        result["warmed_topic_ids"].append(topic_token)
                 except Exception as exc:  # pragma: no cover - best effort prewarm
                     db.rollback()
                     logger.warning(
@@ -123,8 +274,10 @@ class LessonExperienceService:
                         topic_id,
                         exc,
                     )
+                    result["failed_topic_ids"].append(topic_token)
         finally:
             db.close()
+        return result
 
     @staticmethod
     def _suggested_actions(topic_title: str) -> list[TutorQuickActionOut]:
@@ -196,27 +349,16 @@ class LessonExperienceService:
                 return cached.model_copy(update={"session_started": True, "session_id": session_id})
             return cached
 
-        lesson = fetch_topic_lesson(
+        snapshot, _ = self._build_topic_snapshot(
             db=self.db,
-            topic_id=payload.topic_id,
-            student_id=payload.student_id,
-        )
-        graph_context = lesson_graph_service.get_lesson_graph_context(
-            self.db,
             student_id=payload.student_id,
             subject=payload.subject,
             sss_level=payload.sss_level,
             term=int(payload.term),
             topic_id=payload.topic_id,
         )
-        why = lesson_graph_service.explain_why_this_topic(
-            self.db,
-            student_id=payload.student_id,
-            subject=payload.subject,
-            sss_level=payload.sss_level,
-            term=int(payload.term),
-            topic_id=payload.topic_id,
-        )
+        lesson = snapshot.lesson
+        graph_context = snapshot.graph_context
         pending_state = self.assessment_service.get_pending_assessment(session_id=session_id)
         pending_assessment = None
         if pending_state is not None:
@@ -243,10 +385,10 @@ class LessonExperienceService:
             graph_context=graph_context,
             suggested_actions=self._suggested_actions(graph_context.topic_title),
             pending_assessment=pending_assessment,
-            next_unlock=graph_context.next_unlock,
-            why_this_topic=why.explanation,
-            graph_nodes=graph_context.graph_nodes,
-            graph_edges=graph_context.graph_edges,
+            next_unlock=snapshot.next_unlock,
+            why_this_topic=snapshot.why_this_topic,
+            graph_nodes=snapshot.graph_nodes,
+            graph_edges=snapshot.graph_edges,
             assessment_ready=bool(graph_context.current_concepts),
         )
         return self._write_cached_bootstrap(cache_key=cache_key, payload=bootstrap)

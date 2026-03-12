@@ -83,6 +83,36 @@ export default function Dashboard() {
         fetchLearningMap();
     }, [activeId, activeSubject, currentLevel, currentTerm, token, apiUrl]);
 
+    useEffect(() => {
+        const nextTopicId = mapData?.next_step?.recommended_topic_id;
+        if (!activeId || !token || !activeSubject || !nextTopicId) {
+            return;
+        }
+
+        const prewarm = async () => {
+            try {
+                await fetch(`${apiUrl}/learning/lesson/prewarm`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        student_id: activeId,
+                        subject: activeSubject,
+                        sss_level: currentLevel,
+                        term: currentTerm,
+                        topic_ids: [nextTopicId],
+                    }),
+                });
+            } catch (err) {
+                console.warn('Lesson prewarm skipped:', err);
+            }
+        };
+
+        prewarm();
+    }, [activeId, activeSubject, apiUrl, currentLevel, currentTerm, mapData, token]);
+
     const apiLeaderboardData = [
         { id: 'u1', rank: 1, name: 'Sarah Jenkins', points: '4,250' },
         { id: 'u2', rank: 2, name: 'Marcus Thorne', points: '3,900' },
@@ -99,7 +129,10 @@ export default function Dashboard() {
                         onSelectSubject={setActiveSubject}
                         hasStartedLearning={false}
                     />
-                    <AIRecommendation />
+                    <AIRecommendation
+                        activeSubject={activeSubject}
+                        recommendation={activeSubject ? mapData?.next_step : null}
+                    />
                 </div>
 
                 <DashboardStats />
@@ -126,7 +159,12 @@ export default function Dashboard() {
                         <p className="mx-auto max-w-md text-lg text-slate-500">{mapError}</p>
                     </div>
                 ) : (
-                    <LearningMap classLevel={currentLevel} subject={activeSubject} mapData={mapData} />
+                    <LearningMap
+                        classLevel={currentLevel}
+                        subject={activeSubject}
+                        mapData={mapData}
+                        onSelectTopic={(topicId) => navigate(`/lesson/${topicId}`)}
+                    />
                 )}
 
                 <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">

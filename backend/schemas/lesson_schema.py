@@ -6,6 +6,7 @@ Logic:
 """
 
 from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -45,3 +46,18 @@ class TopicLessonResponse(BaseModel):
     next_unlock: LessonNextUnlockOut | None = None
     why_this_matters: str | None = None
     assessment_ready: bool = False
+
+
+class LessonPrewarmIn(BaseModel):
+    student_id: UUID
+    subject: Literal["math", "english", "civic"]
+    sss_level: Literal["SSS1", "SSS2", "SSS3"]
+    term: Literal[1, 2, 3]
+    topic_ids: list[UUID] = Field(min_length=1, max_length=4)
+
+
+class LessonPrewarmOut(BaseModel):
+    requested_topic_ids: list[str] = Field(default_factory=list)
+    warmed_topic_ids: list[str] = Field(default_factory=list)
+    cache_hit_topic_ids: list[str] = Field(default_factory=list)
+    failed_topic_ids: list[str] = Field(default_factory=list)

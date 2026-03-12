@@ -3,7 +3,27 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
 import CourseSidebar from '../components/CourseSidebar';
-import { PlayCircle, Clock, BookOpen } from 'lucide-react';
+import { PlayCircle, Clock, BookOpen, GitBranch, Lock, Sparkles } from 'lucide-react';
+
+const safeArray = (value) => (Array.isArray(value) ? value : []);
+
+const statusStyles = {
+  current: 'border-indigo-300 bg-indigo-50 text-indigo-700',
+  ready: 'border-sky-300 bg-sky-50 text-sky-700',
+  mastered: 'border-emerald-300 bg-emerald-50 text-emerald-700',
+  locked: 'border-slate-200 bg-slate-50 text-slate-500',
+  unmapped: 'border-amber-300 bg-amber-50 text-amber-800',
+  pending: 'border-slate-200 bg-slate-50 text-slate-500',
+};
+
+const statusLabels = {
+  current: 'Current focus',
+  ready: 'Ready',
+  mastered: 'Mastered',
+  locked: 'Locked',
+  unmapped: 'Mapping pending',
+  pending: 'Pending',
+};
 
 const CoursePage = () => {
   const { subject } = useParams(); 
@@ -17,6 +37,8 @@ const CoursePage = () => {
 
   const [topics, setTopics] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [nextStep, setNextStep] = useState(null);
+  const [mapError, setMapError] = useState('');
 
   const apiUrl = import.meta.env.VITE_API_URL || 'https://mastery-backend-7xe8.onrender.com/api/v1';
 
@@ -25,49 +47,42 @@ const CoursePage = () => {
 
     const fetchTopicsList = async () => {
       setIsLoading(true);
+      setMapError('');
 
       try {
-        // Hitting the CORRECT endpoint for the course syllabus
-        const queryParams = new URLSearchParams({
+        const bootstrapParams = new URLSearchParams({
           student_id: activeId,
           subject: subject,
-          term: currentTerm 
+          term: currentTerm,
         });
-
-        const response = await fetch(`${apiUrl}/learning/topics?${queryParams}`, {
+        const response = await fetch(`${apiUrl}/learning/course/bootstrap?${bootstrapParams.toString()}`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
         });
+        if (!response.ok) {
+          throw new Error('Failed to fetch course bootstrap');
+        }
 
-        if (!response.ok) throw new Error("Failed to fetch topics");
-
-        // Inside the fetchTopicsList try block in CoursePage.jsx
-const data = await response.json();
-if (Array.isArray(data)) {
-    setTopics(data);
-    // Add this line:
-    localStorage.setItem('active_subject', subject); 
-}
-        
-        // if (Array.isArray(data)) {
-        //     setTopics(data);
-        // } else {
-        //     setTopics([]);
-        // }
+        const data = await response.json();
+        localStorage.setItem('active_subject', subject);
+        setTopics(safeArray(data?.topics));
+        setNextStep(data?.next_step || null);
+        setMapError(data?.map_error || '');
 
       } catch (err) {
         console.error("CoursePage Error:", err);
         setTopics([]);
+        setNextStep(null);
       } finally {
         setIsLoading(false);
       }
     };
     
     fetchTopicsList();
-  }, [activeId, token, subject, currentTerm, apiUrl]);
+  }, [activeId, token, subject, currentLevel, currentTerm, apiUrl]);
 
   const safeTopics = Array.isArray(topics) ? topics : [];
 
@@ -91,6 +106,52 @@ if (Array.isArray(data)) {
             <p className="text-slate-500 text-lg">Follow this AI-curated syllabus to achieve mastery in {currentLevel} {subject}.</p>
           </div>
 
+          {nextStep && (
+            <div className="mb-6 rounded-3xl border border-indigo-200 bg-gradient-to-r from-indigo-50 via-white to-sky-50 p-6 shadow-sm">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="max-w-2xl">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-700">
+                    <GitBranch className="h-3.5 w-3.5" />
+                    Next best move
+                  </div>
+                  <h2 className="mt-3 text-2xl font-black text-slate-900">
+                    {nextStep.recommended_topic_title || nextStep.recommended_concept_label || 'Continue current focus'}
+                  </h2>
+                  <p className="mt-2 text-sm leading-7 text-slate-600">{nextStep.reason}</p>
+                  {safeArray(nextStep.prereq_gap_labels).length > 0 && (
+                    <p className="mt-3 text-sm font-semibold text-amber-700">
+                      Blocking prerequisites: {nextStep.prereq_gap_labels.join(', ')}
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    if (nextStep.recommended_topic_id) {
+                      navigate(`/lesson/${nextStep.recommended_topic_id}`);
+                    }
+                  }}
+                  disabled={!nextStep.recommended_topic_id}
+                  className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-black transition-colors ${
+                    nextStep.recommended_topic_id
+                      ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                      : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                  }`}
+                >
+                  Open Recommended Lesson <Sparkles className="h-4 w-4" />
+                </button>
+              </div>
+              {mapError && (
+                <p className="mt-4 text-xs font-semibold text-slate-500">{mapError}</p>
+              )}
+            </div>
+          )}
+
+          {mapError && !nextStep && (
+            <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-semibold text-amber-800">
+              {mapError}
+            </div>
+          )}
+
           {isLoading ? (
             <div className="space-y-4 animate-pulse">
                {[1,2,3,4].map(i => (
@@ -100,33 +161,59 @@ if (Array.isArray(data)) {
           ) : safeTopics.length > 0 ? (
             <div className="space-y-4">
               {safeTopics.map((topic, index) => {
-                
-                // FIX IS HERE: We use topic.topic_id so it passes a valid UUID to the backend!
                 const targetId = topic.topic_id || topic.id;
+                const currentStatus = topic.status || 'pending';
+                const isLocked = currentStatus === 'locked';
+                const isRecommended = Boolean(topic.is_recommended);
+                const cardStyle = statusStyles[currentStatus] || statusStyles.pending;
 
                 return (
                   <div 
                     key={targetId || index} 
                     onClick={() => {
-                        if (targetId) navigate(`/lesson/${targetId}`);
+                        if (!isLocked && targetId) navigate(`/lesson/${targetId}`);
                     }}
-                    className="p-6 rounded-2xl border-2 bg-white border-slate-200 cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all group flex flex-col md:flex-row md:items-center justify-between gap-4"
+                    className={`p-6 rounded-2xl border-2 bg-white transition-all group flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                      isLocked ? 'opacity-75 cursor-not-allowed border-slate-200' : 'cursor-pointer hover:shadow-md'
+                    } ${
+                      isRecommended ? 'border-indigo-400 shadow-[0_18px_50px_rgba(99,102,241,0.12)]' : cardStyle.includes('border-') ? cardStyle.split(' ')[0] : 'border-slate-200'
+                    }`}
                   >
                     <div className="flex items-start gap-5">
-                      <div className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold bg-indigo-50 text-indigo-600 flex-shrink-0 mt-1 md:mt-0">
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold flex-shrink-0 mt-1 md:mt-0 ${
+                        currentStatus === 'mastered'
+                          ? 'bg-emerald-50 text-emerald-600'
+                          : currentStatus === 'current'
+                            ? 'bg-indigo-50 text-indigo-600'
+                            : currentStatus === 'ready'
+                              ? 'bg-sky-50 text-sky-600'
+                              : 'bg-slate-100 text-slate-500'
+                      }`}>
                           {index + 1}
                       </div>
                       <div>
-                        {/* Now using the REAL title from the backend */}
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${cardStyle}`}>
+                            {statusLabels[currentStatus] || 'Pending'}
+                          </span>
+                          {isRecommended && (
+                            <span className="rounded-full bg-indigo-600 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white">
+                              Recommended now
+                            </span>
+                          )}
+                        </div>
                         <h3 className="text-lg font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
                             {topic.title || 'Untitled Topic'}
                         </h3>
-                        {/* Using the REAL description */}
                         <p className="text-sm text-slate-500 mt-1 line-clamp-2 max-w-xl">
-                            {topic.description || 'Dive into this module to expand your mastery.'}
+                            {topic.graph_details || topic.description || topic.lesson_unavailable_reason || 'Topic context unavailable.'}
                         </p>
+                        {topic.concept_label && (
+                          <p className="mt-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+                            Concept focus: {topic.concept_label}
+                          </p>
+                        )}
                         
-                        {/* Using the metadata from the backend */}
                         <div className="flex items-center gap-4 mt-3">
                            {topic.estimated_duration_minutes && (
                               <span className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
@@ -140,12 +227,19 @@ if (Array.isArray(data)) {
                                  {topic.lesson_title}
                               </span>
                            )}
+                           <span className="text-xs font-bold text-slate-400">
+                             {Math.round((topic.mastery_score || 0) * 100)}% mastery
+                           </span>
                         </div>
                       </div>
                     </div>
 
-                    <button className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-colors bg-slate-100 text-slate-600 group-hover:bg-indigo-600 group-hover:text-white md:w-auto w-full">
-                        Start Lesson <PlayCircle className="w-4 h-4" />
+                    <button className={`flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-colors md:w-auto w-full ${
+                      isLocked
+                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                        : 'bg-slate-100 text-slate-600 group-hover:bg-indigo-600 group-hover:text-white'
+                    }`}>
+                        {isLocked ? 'Locked in graph' : 'Start Lesson'} {isLocked ? <Lock className="w-4 h-4" /> : <PlayCircle className="w-4 h-4" />}
                     </button>
                   </div>
                 );

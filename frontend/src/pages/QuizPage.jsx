@@ -23,6 +23,29 @@ const humanizeConceptId = (conceptId, fallback = 'Concept') => {
     .replace(/\b\w/g, (char) => char.toUpperCase()) || fallback;
 };
 
+const prewarmTopics = async ({ apiUrl, token, studentId, subject, sssLevel, term, topicIds }) => {
+  const normalizedIds = Array.from(new Set((topicIds || []).filter(Boolean)));
+  if (!normalizedIds.length) return;
+  try {
+    await fetch(`${apiUrl}/learning/lesson/prewarm`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        student_id: studentId,
+        subject,
+        sss_level: sssLevel,
+        term,
+        topic_ids: normalizedIds,
+      }),
+    });
+  } catch (error) {
+    console.warn('Quiz remediation prewarm skipped:', error);
+  }
+};
+
 const QuizPage = () => {
   const { topicId } = useParams();
   const { token } = useAuth();
@@ -160,7 +183,21 @@ const QuizPage = () => {
 
       const wrongConcepts = (resultsJson.concept_breakdown || [])
         .filter(c => !c.is_correct)
-        .map(c => `**${c.concept_label || humanizeConceptId(c.concept_id)}**`);
+        .map(c => c.concept_label || humanizeConceptId(c.concept_id));
+
+      const recommendedTopicId = resultsJson.recommended_revision_topic_id
+        || resultsJson.graph_remediation?.recommended_next_topic_id
+        || null;
+
+      await prewarmTopics({
+        apiUrl,
+        token,
+        studentId: activeId,
+        subject: currentSubject,
+        sssLevel: currentLevel,
+        term: currentTerm,
+        topicIds: recommendedTopicId ? [recommendedTopicId] : [],
+      });
 
       const mappedApiData = {
         paths: { classLevel: currentLevel, topic: currentSubject },
@@ -187,6 +224,7 @@ const QuizPage = () => {
               || resultsJson.insights?.[1]
               || "Review the foundational rules before moving forward."
         },
+        nextTopicId: recommendedTopicId,
         nextTopic: resultsJson.recommended_revision_topic_title || "Next Module",
         remediation: {
           weakestConcept: resultsJson.graph_remediation?.weakest_concept_label || null,
@@ -389,6 +427,8 @@ const QuizPage = () => {
                     <div className="mt-6">
                        <PathProgress
                          nextTopic={formattedResults.nextTopic}
+                         nextTopicId={formattedResults.nextTopicId}
+                         nextConcept={formattedResults.remediation?.nextConcept}
                          reason={formattedResults.remediation?.recommendationReason}
                          blockingPrerequisite={formattedResults.remediation?.blockingPrerequisite}
                        />
@@ -408,7 +448,10 @@ const QuizPage = () => {
             </div>
 
             <div className="mt-8">
-              <FooterActions />
+              <FooterActions
+                recommendedTopicId={formattedResults.nextTopicId}
+                recommendedTopicTitle={formattedResults.nextTopic}
+              />
             </div>
         </div>
       </div>

@@ -2,14 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, ArrowRight, BrainCircuit } from 'lucide-react';
 
-import ContextSidebar from '../components/ContextSidebar';
 import AIExplanationArea from '../components/AIExplanationArea';
-import PracticeSidebar from '../components/PracticeSidebar';
-
-// Keeping mockData as a fallback for the Sidebars while the AI handles the center
-import { mockData } from '../mocks/mockData';
 
 const ExplainMistakePage = () => {
   const location = useLocation();
@@ -25,11 +20,11 @@ const ExplainMistakePage = () => {
   const apiUrl = import.meta.env.VITE_API_URL || 'https://mastery-backend-7xe8.onrender.com/api/v1';
 
   // We expect the previous page to pass these via route state
-  const { 
-    question = "What is the speed of light?", 
-    studentAnswer = "100 km/s", 
-    correctAnswer = "299,792 km/s", 
-    topicId 
+  const {
+    question,
+    studentAnswer,
+    correctAnswer,
+    topicId,
   } = location.state || {};
 
   // --- API STATES ---
@@ -40,7 +35,7 @@ const ExplainMistakePage = () => {
   useEffect(() => {
     // Safety check
     if (!question || !studentAnswer || !correctAnswer) {
-      setError("Missing question details. Please go back and try again.");
+      setError("Missing mistake context. Open this page from a real quiz or tutor remediation flow.");
       setIsLoading(false);
       return;
     }
@@ -61,7 +56,7 @@ const ExplainMistakePage = () => {
             subject: currentSubject,
             sss_level: currentLevel,
             term: currentTerm,
-            topic_id: topicId || "unknown-topic", // Provide a fallback if needed
+            topic_id: topicId || null,
             question: question,
             student_answer: studentAnswer,
             correct_answer: correctAnswer
@@ -96,20 +91,61 @@ const ExplainMistakePage = () => {
   return (
     <div className="min-h-screen bg-slate-50">
       <main className="max-w-7xl mx-auto px-4 py-6">
-        {/* 3-Column Grid Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          
-          {/* Left Column: 3/12 width */}
-          <div className="lg:col-span-3 space-y-6">
-            <ContextSidebar 
-              // Passing the actual question string down instead of mock data
-              questionData={{ ...mockData.originalQuestion, text: question }} 
-              insightData={mockData.topicInsight} 
-            />
-          </div>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <aside className="space-y-6">
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="mb-3 flex items-center gap-2 text-indigo-600">
+                <BrainCircuit className="h-5 w-5" />
+                <p className="text-xs font-black uppercase tracking-[0.2em]">Question context</p>
+              </div>
+              <h3 className="text-lg font-bold text-slate-900">{question || 'Unavailable question'}</h3>
+              <div className="mt-5 space-y-3">
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-500">Your answer</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-700">{studentAnswer || 'Unavailable'}</p>
+                </div>
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500">Correct answer</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-700">{correctAnswer || 'Unavailable'}</p>
+                </div>
+              </div>
+              <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Current scope</p>
+                <p className="mt-2 text-sm font-semibold text-slate-800">
+                  {currentLevel} {String(currentSubject || '').toUpperCase()} Term {currentTerm}
+                </p>
+                {topicId && <p className="mt-1 text-xs text-slate-500">Topic-linked remediation is enabled for this mistake.</p>}
+              </div>
+            </div>
 
-          {/* Middle Column: 6/12 width */}
-          <div className="lg:col-span-6">
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Next move</p>
+              <p className="mt-2 text-sm leading-7 text-slate-600">
+                Use this explanation to repair the misconception, then return to the lesson or ask the tutor for a checkpoint question.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                {topicId && (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/lesson/${topicId}`)}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-700"
+                  >
+                    Back to lesson
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => navigate('/dashboard')}
+                  className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                >
+                  Dashboard
+                </button>
+              </div>
+            </div>
+          </aside>
+
+          <div>
             {isLoading ? (
               <div className="bg-white rounded-2xl border border-slate-200 p-12 flex flex-col items-center justify-center min-h-[400px]">
                  <Loader2 className="w-10 h-10 text-indigo-600 animate-spin mb-4" />
@@ -125,12 +161,6 @@ const ExplainMistakePage = () => {
               <AIExplanationArea explanationData={explanationData} />
             )}
           </div>
-
-          {/* Right Column: 3/12 width */}
-          <div className="lg:col-span-3 space-y-6">
-            <PracticeSidebar practiceData={mockData.practice} />
-          </div>
-
         </div>
       </main>
     </div>
