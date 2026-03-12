@@ -76,6 +76,11 @@ export default function Dashboard() {
     );
 
     const [activeSubject, setActiveSubject] = useState(() => localStorage.getItem('active_subject') || null);
+    const [dashboardBootstrap, setDashboardBootstrap] = useState({
+        warmed_subjects: [],
+        failed_subjects: [],
+        available_subjects: [],
+    });
     const [mapData, setMapData] = useState(EMPTY_MAP_DATA);
     const [isLoadingMap, setIsLoadingMap] = useState(false);
     const [mapError, setMapError] = useState('');
@@ -176,10 +181,20 @@ export default function Dashboard() {
                 if (data?.active_subject && data.active_subject !== activeSubject) {
                     setActiveSubject(data.active_subject);
                 }
+                setDashboardBootstrap({
+                    warmed_subjects: Array.isArray(data?.warmed_subjects) ? data.warmed_subjects : [],
+                    failed_subjects: Array.isArray(data?.failed_subjects) ? data.failed_subjects : [],
+                    available_subjects: Array.isArray(data?.available_subjects) ? data.available_subjects : [],
+                });
                 setMapData(normalizeCourseBootstrap(data?.course_bootstrap || {}));
                 setMapError(data?.course_bootstrap?.map_error || '');
             } catch (err) {
                 console.error('Map fetch error:', err);
+                setDashboardBootstrap({
+                    warmed_subjects: [],
+                    failed_subjects: [],
+                    available_subjects: [],
+                });
                 setMapData(EMPTY_MAP_DATA);
                 setMapError(err.message || 'Learning map unavailable.');
             } finally {
@@ -281,10 +296,11 @@ export default function Dashboard() {
             <main className="max-w-9xl mx-auto px-6 py-8">
                 <div className="mb-8 flex flex-col gap-6 lg:flex-row">
                     <HeroSection
-                        enrolledSubjects={enrolledSubjects}
+                        enrolledSubjects={dashboardBootstrap.available_subjects.length ? dashboardBootstrap.available_subjects : enrolledSubjects}
                         activeSubject={activeSubject}
                         onSelectSubject={setActiveSubject}
                         hasStartedLearning={false}
+                        warmedSubjects={dashboardBootstrap.warmed_subjects}
                         graphSignal={dashboardSignal}
                         signalSubject={dashboardSignal?.subject || activeSubject}
                         onResumeSignal={dashboardSignal?.payload?.next_step?.recommended_topic_id ? resumeLatestIntervention : null}

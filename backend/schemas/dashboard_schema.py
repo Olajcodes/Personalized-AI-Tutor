@@ -12,4 +12,6 @@ class DashboardBootstrapOut(BaseModel):
     term: Literal[1, 2, 3]
     available_subjects: list[Literal["math", "english", "civic"]] = Field(default_factory=list)
     active_subject: Literal["math", "english", "civic"] | None = None
+    warmed_subjects: list[Literal["math", "english", "civic"]] = Field(default_factory=list)
+    failed_subjects: list[Literal["math", "english", "civic"]] = Field(default_factory=list)
     course_bootstrap: CourseBootstrapOut | None = None

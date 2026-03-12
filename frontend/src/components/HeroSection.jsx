@@ -9,6 +9,7 @@ const HeroSection = ({
   activeSubject,
   onSelectSubject,
   hasStartedLearning,
+  warmedSubjects = [],
   graphSignal = null,
   signalSubject = null,
   onResumeSignal = null,
@@ -139,6 +140,14 @@ const HeroSection = ({
                     {signalAnalytics?.blocking_prerequisite || signalRecommendation?.blocking_prerequisite_label}
                   </div>
                 )}
+              </div>
+            )}
+            {Array.isArray(warmedSubjects) && warmedSubjects.length > 0 && (
+              <div className="mb-5 flex flex-wrap gap-2">
+                <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 shadow-sm">
+                  <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
+                  Warm-switched: {warmedSubjects.join(', ')}
+                </div>
               </div>
             )}
             <div className="flex items-center gap-4">

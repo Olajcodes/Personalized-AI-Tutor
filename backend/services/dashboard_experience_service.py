@@ -150,12 +150,28 @@ class DashboardExperienceService:
                 term=int(profile.active_term),
             )
 
+        warmed_subjects: list[Literal["math", "english", "civic"]] = []
+        failed_subjects: list[Literal["math", "english", "civic"]] = []
+        for candidate_subject in available_subjects:
+            if candidate_subject == active_subject:
+                continue
+            if CourseExperienceService.prewarm_scope(
+                student_id=student_id,
+                subject=candidate_subject,
+                term=int(profile.active_term),
+            ):
+                warmed_subjects.append(candidate_subject)
+            else:
+                failed_subjects.append(candidate_subject)
+
         payload = DashboardBootstrapOut(
             student_id=student_id,
             sss_level=str(profile.sss_level),  # type: ignore[arg-type]
             term=int(profile.active_term),  # type: ignore[arg-type]
             available_subjects=available_subjects,
             active_subject=active_subject,
+            warmed_subjects=warmed_subjects,
+            failed_subjects=failed_subjects,
             course_bootstrap=course_bootstrap,
         )
         return self._write_cached_bootstrap(cache_key=cache_key, payload=payload)
