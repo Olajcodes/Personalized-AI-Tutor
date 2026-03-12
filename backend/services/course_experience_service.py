@@ -174,6 +174,40 @@ class CourseExperienceService:
         )
 
     @staticmethod
+    def _candidate_prewarm_topic_ids(
+        *,
+        topics: list[CourseBootstrapTopicOut],
+        next_step,
+        max_topics: int = 3,
+    ) -> list[UUID]:
+        candidates: list[UUID] = []
+
+        def _append(topic_id: str | UUID | None) -> None:
+            if not topic_id:
+                return
+            try:
+                parsed = topic_id if isinstance(topic_id, UUID) else UUID(str(topic_id))
+            except (TypeError, ValueError):
+                return
+            if parsed in candidates:
+                return
+            candidates.append(parsed)
+
+        if next_step and getattr(next_step, "recommended_topic_id", None):
+            _append(next_step.recommended_topic_id)
+
+        for topic in topics:
+            if len(candidates) >= max_topics:
+                break
+            if not topic.lesson_ready:
+                continue
+            if topic.status not in {"current", "ready"} and not topic.is_recommended:
+                continue
+            _append(topic.topic_id)
+
+        return candidates[:max_topics]
+
+    @staticmethod
     def _scope_mastery_signature(
         *,
         db: Session,
@@ -372,23 +406,24 @@ class CourseExperienceService:
         warmed_topic_ids: list[str] = []
         cache_hit_topic_ids: list[str] = []
         failed_topic_ids: list[str] = []
-        if recommended_topic_id:
+        prewarm_topic_ids = self._candidate_prewarm_topic_ids(topics=topics, next_step=next_step)
+        if prewarm_topic_ids:
             prewarm = LessonExperienceService.prewarm_topics(
                 student_id=student_id,
                 subject=subject,
                 sss_level=str(student_profile.sss_level),
                 term=term,
-                topic_ids=[UUID(recommended_topic_id)],
+                topic_ids=prewarm_topic_ids,
             )
             warmed_topic_ids = list(prewarm.get("warmed_topic_ids", []))
             cache_hit_topic_ids = list(prewarm.get("cache_hit_topic_ids", []))
             failed_topic_ids = list(prewarm.get("failed_topic_ids", []))
             logger.info(
-                "course.bootstrap.prewarm student_id=%s subject=%s term=%s recommended_topic_id=%s warmed=%s cache_hits=%s failed=%s",
+                "course.bootstrap.prewarm student_id=%s subject=%s term=%s candidate_topic_ids=%s warmed=%s cache_hits=%s failed=%s",
                 student_id,
                 subject,
                 term,
-                recommended_topic_id,
+                [str(topic_id) for topic_id in prewarm_topic_ids],
                 warmed_topic_ids,
                 cache_hit_topic_ids,
                 failed_topic_ids,
