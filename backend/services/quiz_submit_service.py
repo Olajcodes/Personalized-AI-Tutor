@@ -146,6 +146,7 @@ class QuizSubmitService:
         from backend.services.lesson_cockpit_service import LessonCockpitService
         from backend.services.lesson_experience_service import LessonExperienceService
         from backend.services.course_experience_service import CourseExperienceService
+        from backend.services.dashboard_experience_service import DashboardExperienceService
 
         LessonExperienceService.invalidate_topic_snapshot_cache(
             student_id=request.student_id,
@@ -166,5 +167,6 @@ class QuizSubmitService:
             sss_level=quiz.sss_level,
             term=int(quiz.term),
         )
+        DashboardExperienceService.invalidate_student_cache(student_id=request.student_id)
 
         return QuizSubmitResponse(attempt_id=attempt.id, score=score, xp_awarded=xp)

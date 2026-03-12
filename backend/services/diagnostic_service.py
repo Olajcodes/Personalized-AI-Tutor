@@ -302,6 +302,7 @@ class DiagnosticService:
         from backend.services.lesson_cockpit_service import LessonCockpitService
         from backend.services.lesson_experience_service import LessonExperienceService
         from backend.services.course_experience_service import CourseExperienceService
+        from backend.services.dashboard_experience_service import DashboardExperienceService
 
         LessonExperienceService.invalidate_topic_snapshot_cache(
             student_id=payload.student_id,
@@ -321,6 +322,7 @@ class DiagnosticService:
             sss_level=diagnostic.sss_level,
             term=int(diagnostic.term),
         )
+        DashboardExperienceService.invalidate_student_cache(student_id=payload.student_id)
         db.commit()
 
         return DiagnosticSubmitOut(

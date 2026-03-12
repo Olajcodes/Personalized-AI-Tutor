@@ -284,6 +284,7 @@ class TutorAssessmentService:
         from backend.services.lesson_cockpit_service import LessonCockpitService
         from backend.services.lesson_experience_service import LessonExperienceService
         from backend.services.course_experience_service import CourseExperienceService
+        from backend.services.dashboard_experience_service import DashboardExperienceService
 
         LessonExperienceService.invalidate_topic_snapshot_cache(
             student_id=payload.student_id,
@@ -304,6 +305,7 @@ class TutorAssessmentService:
             sss_level=payload.sss_level,
             term=int(payload.term),
         )
+        DashboardExperienceService.invalidate_student_cache(student_id=payload.student_id)
         return ai_out.model_copy(
             update={
                 "assessment_id": payload.assessment_id,

@@ -36,7 +36,7 @@ def test_lesson_prewarm_endpoint_requires_matching_student_id(monkeypatch):
 
 def test_lesson_prewarm_endpoint_returns_warm_result(monkeypatch):
     student_id = uuid4()
-    calls = {"course": 0}
+    calls = {"course": 0, "dashboard": 0}
 
     monkeypatch.setattr(
         "backend.endpoints.lessons.LessonExperienceService.prewarm_topics",
@@ -49,6 +49,10 @@ def test_lesson_prewarm_endpoint_returns_warm_result(monkeypatch):
     monkeypatch.setattr(
         "backend.endpoints.lessons.CourseExperienceService.prewarm_scope",
         lambda **kwargs: calls.__setitem__("course", calls["course"] + 1) or True,
+    )
+    monkeypatch.setattr(
+        "backend.endpoints.lessons.DashboardExperienceService.prewarm",
+        lambda **kwargs: calls.__setitem__("dashboard", calls["dashboard"] + 1) or True,
     )
 
     client = TestClient(app)
@@ -72,3 +76,4 @@ def test_lesson_prewarm_endpoint_returns_warm_result(monkeypatch):
     assert body["requested_topic_ids"] == [str(topic_id)]
     assert body["warmed_topic_ids"] == [str(topic_id)]
     assert calls["course"] == 1
+    assert calls["dashboard"] == 1
