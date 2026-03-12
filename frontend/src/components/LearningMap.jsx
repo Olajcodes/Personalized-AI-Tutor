@@ -1,4 +1,16 @@
-import { AlertTriangle, ArrowRight, Brain, CheckCircle2, GitBranch, Lock, PlayCircle, Sparkles } from 'lucide-react';
+ï»¿import React, { useState } from 'react';
+import {
+  AlertTriangle,
+  ArrowRight,
+  Brain,
+  CheckCircle2,
+  GitBranch,
+  Lock,
+  PlayCircle,
+  Route,
+  Sparkles,
+  Target,
+} from 'lucide-react';
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
 
@@ -18,10 +30,9 @@ const statusIcon = {
   unmapped: AlertTriangle,
 };
 
-function MapNode({ node, isLast, isRecommended, onSelectTopic }) {
+function MapNode({ node, isLast, isRecommended, isSelected, onSelectNode }) {
   const Icon = statusIcon[node.status] || Brain;
   const style = statusStyles[node.status] || statusStyles.locked;
-  const isInteractive = typeof onSelectTopic === 'function' && !['locked', 'unmapped'].includes(node.status);
 
   return (
     <div className="relative flex min-w-[210px] shrink-0 snap-center flex-col items-center">
@@ -31,15 +42,8 @@ function MapNode({ node, isLast, isRecommended, onSelectTopic }) {
       </div>
       <button
         type="button"
-        onClick={() => {
-          if (isInteractive) {
-            onSelectTopic(node.topic_id);
-          }
-        }}
-        disabled={!isInteractive}
-        className={`mt-4 w-full rounded-2xl border px-4 py-4 text-left shadow-sm ${style} ${
-          isInteractive ? 'cursor-pointer transition-transform duration-200 hover:-translate-y-1 hover:shadow-md' : 'cursor-default'
-        } ${isRecommended ? 'ring-2 ring-indigo-200 ring-offset-2' : ''}`}
+        onClick={() => onSelectNode(node)}
+        className={`mt-4 w-full rounded-2xl border px-4 py-4 text-left shadow-sm ${style} cursor-pointer transition-transform duration-200 hover:-translate-y-1 hover:shadow-md ${isRecommended ? 'ring-2 ring-indigo-200 ring-offset-2' : ''} ${isSelected ? 'ring-2 ring-slate-900/10 ring-offset-2' : ''}`}
       >
         <div className="flex items-center justify-between gap-3">
           <h4 className="text-sm font-black leading-5">{node.title}</h4>
@@ -53,8 +57,8 @@ function MapNode({ node, isLast, isRecommended, onSelectTopic }) {
           <span>{Math.round((node.mastery_score || 0) * 100)}%</span>
         </div>
         <div className="mt-4 flex items-center justify-between text-[11px] font-black uppercase tracking-[0.16em]">
-          <span>{isRecommended ? 'Recommended now' : isInteractive ? 'Open lesson' : 'Graph only'}</span>
-          {isInteractive ? <PlayCircle className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+          <span>{isRecommended ? 'Recommended now' : isSelected ? 'Inspecting node' : 'Inspect node'}</span>
+          {isSelected ? <Target className="h-4 w-4" /> : <PlayCircle className="h-4 w-4" />}
         </div>
       </button>
     </div>
@@ -68,6 +72,23 @@ export default function LearningMap({ classLevel = 'SSS 2', subject = 'Mathemati
   const relationCount = edges.length;
   const scopeWarning = nextStep?.scope_warning || null;
   const unmappedTopics = safeArray(nextStep?.unmapped_topic_titles);
+  const [selectedNodeId, setSelectedNodeId] = useState(null);
+  const preferredNode =
+    nodes.find((node) => nextStep?.recommended_topic_id && nextStep.recommended_topic_id === node.topic_id)
+    || nodes.find((node) => node.status === 'current')
+    || nodes[0]
+    || null;
+  const activeNodeId = nodes.some((node) => (node.topic_id || node.concept_id) === selectedNodeId)
+    ? selectedNodeId
+    : (preferredNode?.topic_id || preferredNode?.concept_id || null);
+  const selectedNode = nodes.find((node) => (node.topic_id || node.concept_id) === activeNodeId) || null;
+  const selectedGraphMeta = selectedNode
+    ? {
+        incoming: edges.filter((edge) => edge.target_id === (selectedNode.concept_id || selectedNode.topic_id)),
+        outgoing: edges.filter((edge) => edge.source_id === (selectedNode.concept_id || selectedNode.topic_id)),
+        isRecommended: Boolean(nextStep?.recommended_topic_id && nextStep.recommended_topic_id === selectedNode.topic_id),
+      }
+    : null;
 
   return (
     <div className="mb-8 rounded-3xl border border-gray-100 bg-white p-8 shadow-sm">
@@ -78,7 +99,7 @@ export default function LearningMap({ classLevel = 'SSS 2', subject = 'Mathemati
             Graph-first path
           </div>
           <h2 className="text-lg font-bold text-gray-900">Your Learning Map</h2>
-          <p className="text-sm text-gray-500">{classLevel} {subject} · {relationCount} prerequisite links are currently shaping your next steps</p>
+          <p className="text-sm text-gray-500">{classLevel} {subject} - {relationCount} prerequisite links are currently shaping your next steps</p>
         </div>
         {nextStep && (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
@@ -95,7 +116,8 @@ export default function LearningMap({ classLevel = 'SSS 2', subject = 'Mathemati
             node={node}
             isLast={index === nodes.length - 1}
             isRecommended={Boolean(nextStep?.recommended_topic_id && nextStep.recommended_topic_id === node.topic_id)}
-            onSelectTopic={onSelectTopic}
+            isSelected={Boolean(selectedNode && (selectedNode.topic_id || selectedNode.concept_id) === (node.topic_id || node.concept_id))}
+            onSelectNode={(nextNode) => setSelectedNodeId(nextNode.topic_id || nextNode.concept_id)}
           />
         ))}
         {nodes.length === 0 && (
@@ -130,6 +152,78 @@ export default function LearningMap({ classLevel = 'SSS 2', subject = 'Mathemati
         </div>
       )}
 
+      {selectedNode && selectedGraphMeta && (
+        <div className="mt-5 grid gap-4 rounded-3xl border border-slate-100 bg-slate-50 p-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
+          <div>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${statusStyles[selectedNode.status] || statusStyles.locked}`}>
+                {selectedNode.status}
+              </span>
+              {selectedGraphMeta.isRecommended && (
+                <span className="rounded-full bg-indigo-600 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white">
+                  Graph recommendation
+                </span>
+              )}
+            </div>
+            <h3 className="text-xl font-black text-slate-900">{selectedNode.title}</h3>
+            <p className="mt-2 text-sm leading-7 text-slate-600">
+              {selectedNode.details || 'This node is part of your graph-backed course path.'}
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Concept focus</div>
+                <p className="mt-2 text-sm font-semibold text-slate-800">{selectedNode.concept_label || 'Topic-level focus'}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Mastery</div>
+                <p className="mt-2 text-sm font-semibold text-slate-800">{Math.round((selectedNode.mastery_score || 0) * 100)}%</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Unlock pressure</div>
+                <p className="mt-2 text-sm font-semibold text-slate-800">{selectedGraphMeta.outgoing.length} next links</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <div className="flex items-center gap-2 text-amber-700">
+                <Route className="h-4 w-4" />
+                <p className="text-[10px] font-black uppercase tracking-[0.18em]">What blocks this</p>
+              </div>
+              <p className="mt-2 text-sm font-semibold text-amber-900">
+                {selectedGraphMeta.incoming.length ? `${selectedGraphMeta.incoming.length} prerequisite link(s) feed this node.` : 'No blocking prerequisite edge is currently drawn.'}
+              </p>
+              {safeArray(nextStep?.prereq_gap_labels).length > 0 && (
+                <p className="mt-2 text-xs leading-6 text-amber-800">{nextStep.prereq_gap_labels.join(', ')}</p>
+              )}
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <div className="flex items-center gap-2 text-emerald-700">
+                <ArrowRight className="h-4 w-4" />
+                <p className="text-[10px] font-black uppercase tracking-[0.18em]">What this unlocks</p>
+              </div>
+              <p className="mt-2 text-sm font-semibold text-emerald-900">
+                {selectedGraphMeta.outgoing.length ? `${selectedGraphMeta.outgoing.length} downstream link(s) open from this node.` : 'This node is currently an end-point in the visible graph slice.'}
+              </p>
+              {nextStep?.recommended_concept_label && (
+                <p className="mt-2 text-xs leading-6 text-emerald-800">Next concept in focus: {nextStep.recommended_concept_label}</p>
+              )}
+            </div>
+            {selectedNode.topic_id && typeof onSelectTopic === 'function' && !['locked', 'unmapped'].includes(selectedNode.status) && (
+              <button
+                type="button"
+                onClick={() => onSelectTopic(selectedNode.topic_id)}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-black text-white hover:bg-indigo-700"
+              >
+                Open this lesson
+                <PlayCircle className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {(scopeWarning || unmappedTopics.length > 0) && (
         <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
           <div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Mapping status</div>
@@ -146,3 +240,6 @@ export default function LearningMap({ classLevel = 'SSS 2', subject = 'Mathemati
     </div>
   );
 }
+
+
+
