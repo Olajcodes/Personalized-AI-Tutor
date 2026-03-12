@@ -576,6 +576,30 @@ export default function LessonPage() {
     }
   };
 
+  const handleGraphExplain = async (concept) => {
+    if (!concept || isBusy) return;
+    const conceptLabel = concept.label || 'this concept';
+    const contextTitle = concept.topic_title || lesson?.title || 'this lesson';
+    await sendChat(`Explain ${conceptLabel} inside ${contextTitle}. Show how it connects to the current lesson and what students usually miss.`);
+  };
+
+  const handleGraphBridge = async (concept) => {
+    if (!concept || isBusy) return;
+    const conceptLabel = concept.label || 'this concept';
+    const blockingLabel = safeArray(concept.blocking_prerequisite_labels)[0];
+    if (blockingLabel) {
+      await sendChat(`Bridge ${blockingLabel} into ${conceptLabel} for me. Start from the prerequisite, then connect it to this lesson with one clear example.`);
+      return;
+    }
+    await sendChat(`Connect the previous concept in this lesson graph to ${conceptLabel} and explain why that bridge matters.`);
+  };
+
+  const handleGraphDrill = async (concept) => {
+    if (!concept || isBusy) return;
+    const conceptLabel = concept.label || 'this concept';
+    await sendChat(`Give me one short checkpoint question focused only on ${conceptLabel}. Wait for my answer after the question.`);
+  };
+
   const handleQuickAction = async (action) => {
     if (action.intent === 'assessment_start') {
       await startAssessment();
@@ -991,6 +1015,9 @@ export default function LessonPage() {
               nextUnlock={bootstrap?.next_unlock}
               whyTopicDetail={whyTopicDetail}
               onOpenTopic={openRecommendedLesson}
+              onExplainConcept={handleGraphExplain}
+              onBridgeConcept={handleGraphBridge}
+              onDrillConcept={handleGraphDrill}
             />
 
             <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">

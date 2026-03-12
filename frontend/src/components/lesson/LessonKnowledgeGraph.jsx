@@ -101,6 +101,9 @@ export default function LessonKnowledgeGraph({
   nextUnlock,
   whyTopicDetail = null,
   onOpenTopic = null,
+  onExplainConcept = null,
+  onBridgeConcept = null,
+  onDrillConcept = null,
 }) {
   const { grouped, nodes, renderedEdges } = useMemo(() => buildLayout(graphContext), [graphContext]);
   const [selectedConceptId, setSelectedConceptId] = useState(null);
@@ -286,14 +289,45 @@ export default function LessonKnowledgeGraph({
               )}
             </div>
             {selectedAction && typeof onOpenTopic === 'function' && (
-              <button
-                type="button"
-                onClick={() => onOpenTopic(selectedAction.topicId)}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-black text-white hover:bg-indigo-700"
-              >
-                {selectedAction.label}
-                <PlayCircle className="h-4 w-4" />
-              </button>
+              <div className="flex flex-col gap-3 lg:items-end">
+                <button
+                  type="button"
+                  onClick={() => onOpenTopic(selectedAction.topicId)}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-black text-white hover:bg-indigo-700"
+                >
+                  {selectedAction.label}
+                  <PlayCircle className="h-4 w-4" />
+                </button>
+                <div className="flex flex-wrap justify-end gap-2">
+                  {typeof onExplainConcept === 'function' && (
+                    <button
+                      type="button"
+                      onClick={() => onExplainConcept(selectedNode)}
+                      className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-slate-700 hover:bg-slate-50"
+                    >
+                      Explain node
+                    </button>
+                  )}
+                  {typeof onBridgeConcept === 'function' && (
+                    <button
+                      type="button"
+                      onClick={() => onBridgeConcept(selectedNode)}
+                      className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-amber-800 hover:bg-amber-100"
+                    >
+                      Bridge blocker
+                    </button>
+                  )}
+                  {typeof onDrillConcept === 'function' && (
+                    <button
+                      type="button"
+                      onClick={() => onDrillConcept(selectedNode)}
+                      className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-emerald-800 hover:bg-emerald-100"
+                    >
+                      Drill node
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>
