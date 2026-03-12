@@ -281,6 +281,7 @@ class TutorAssessmentService:
             focus_concept_id=ai_out.concept_id,
             fallback_topic_id=payload.topic_id,
         )
+        from backend.services.lesson_cockpit_service import LessonCockpitService
         from backend.services.lesson_experience_service import LessonExperienceService
         from backend.services.course_experience_service import CourseExperienceService
 
@@ -290,6 +291,12 @@ class TutorAssessmentService:
             sss_level=payload.sss_level,
             term=int(payload.term),
             topic_id=payload.topic_id,
+        )
+        LessonCockpitService.invalidate_scope_cache(
+            student_id=payload.student_id,
+            subject=payload.subject,
+            sss_level=payload.sss_level,
+            term=int(payload.term),
         )
         CourseExperienceService.invalidate_scope_cache(
             student_id=payload.student_id,

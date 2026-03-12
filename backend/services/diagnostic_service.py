@@ -299,10 +299,17 @@ class DiagnosticService:
             score=score,
         )
         repo.mark_submitted(diagnostic)
+        from backend.services.lesson_cockpit_service import LessonCockpitService
         from backend.services.lesson_experience_service import LessonExperienceService
         from backend.services.course_experience_service import CourseExperienceService
 
         LessonExperienceService.invalidate_topic_snapshot_cache(
+            student_id=payload.student_id,
+            subject=diagnostic.subject,
+            sss_level=diagnostic.sss_level,
+            term=int(diagnostic.term),
+        )
+        LessonCockpitService.invalidate_scope_cache(
             student_id=payload.student_id,
             subject=diagnostic.subject,
             sss_level=diagnostic.sss_level,

@@ -42,27 +42,30 @@ export default function AIRecommendation({
       setError("");
 
       try {
-        const response = await fetch(`${apiUrl}/learning/path/next`, {
-          method: 'POST',
+        const queryParams = new URLSearchParams({
+          student_id: activeId,
+          subject: currentSubject,
+          term: currentTerm,
+        });
+
+        const response = await fetch(`${apiUrl}/learning/course/bootstrap?${queryParams.toString()}`, {
+          method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            student_id: activeId,
-            subject: currentSubject,
-            sss_level: currentLevel,
-            term: currentTerm
-          })
+          }
         });
 
         if (!response.ok) {
           const errData = await response.json().catch(() => null);
-          throw new Error(errData?.detail || "Failed to calculate optimal learning path.");
+          throw new Error(errData?.detail || "Failed to calculate graph recommendation.");
         }
 
         const data = await response.json();
-        setRecommendation(data);
+        if (!data?.next_step) {
+          throw new Error(data?.map_error || "Graph recommendation unavailable.");
+        }
+        setRecommendation(data.next_step);
       } catch (err) {
         setError(err.message);
       } finally {
@@ -72,36 +75,6 @@ export default function AIRecommendation({
 
     fetchNextStep();
   }, [activeId, currentSubject, currentLevel, currentTerm, token, apiUrl, recommendationOverride]);
-
-  useEffect(() => {
-    const nextTopicId = recommendation?.recommended_topic_id;
-    if (!activeId || !token || !currentSubject || !nextTopicId) {
-      return;
-    }
-
-    const prewarm = async () => {
-      try {
-        await fetch(`${apiUrl}/learning/lesson/prewarm`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            student_id: activeId,
-            subject: currentSubject,
-            sss_level: currentLevel,
-            term: currentTerm,
-            topic_ids: [nextTopicId],
-          }),
-        });
-      } catch (err) {
-        console.warn('Recommendation prewarm skipped:', err);
-      }
-    };
-
-    prewarm();
-  }, [activeId, apiUrl, currentLevel, currentSubject, currentTerm, recommendation, token]);
 
   // Handle Loading State
   if (isLoading) {

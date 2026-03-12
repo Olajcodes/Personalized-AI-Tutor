@@ -37,6 +37,7 @@ from backend.schemas.tutor_schema import (
     TutorStudyPlanIn,
 )
 from backend.services.lesson_experience_service import LessonExperienceService
+from backend.services.lesson_cockpit_service import LessonCockpitService
 from backend.services.tutor_assessment_service import TutorAssessmentService
 from backend.services.tutor_orchestration_service import (
     TutorOrchestrationService,
@@ -209,6 +210,7 @@ async def tutor_assessment_start(
     try:
         response = await _assessment_service(db).start_assessment(payload)
         LessonExperienceService.invalidate_session_cache(session_id=payload.session_id)
+        LessonCockpitService.invalidate_session_cache(session_id=payload.session_id)
         return response
     except TutorProviderUnavailableError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
@@ -233,6 +235,7 @@ async def tutor_assessment_submit(
     try:
         response = await _assessment_service(db).submit_assessment(payload)
         LessonExperienceService.invalidate_session_cache(session_id=payload.session_id)
+        LessonCockpitService.invalidate_session_cache(session_id=payload.session_id)
         return response
     except TutorProviderUnavailableError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))

@@ -143,6 +143,7 @@ class QuizSubmitService:
             concept_breakdown=concept_breakdown,
         )
 
+        from backend.services.lesson_cockpit_service import LessonCockpitService
         from backend.services.lesson_experience_service import LessonExperienceService
         from backend.services.course_experience_service import CourseExperienceService
 
@@ -152,6 +153,12 @@ class QuizSubmitService:
             sss_level=quiz.sss_level,
             term=int(quiz.term),
             topic_id=quiz.topic_id,
+        )
+        LessonCockpitService.invalidate_scope_cache(
+            student_id=request.student_id,
+            subject=quiz.subject,
+            sss_level=quiz.sss_level,
+            term=int(quiz.term),
         )
         CourseExperienceService.invalidate_scope_cache(
             student_id=request.student_id,

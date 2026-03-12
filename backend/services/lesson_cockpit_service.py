@@ -1,13 +1,21 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import time
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from backend.repositories.graph_repo import GraphRepository
 from backend.schemas.lesson_cockpit_schema import LessonCockpitBootstrapIn, LessonCockpitBootstrapOut
 from backend.schemas.tutor_schema import TutorSessionBootstrapIn
 from backend.services.course_experience_service import CourseExperienceService
 from backend.services.lesson_experience_service import LessonExperienceService
+
+
+COCKPIT_CACHE_TTL_SECONDS = 30.0
+_LESSON_COCKPIT_CACHE: dict[str, tuple[float, LessonCockpitBootstrapOut]] = {}
 
 
 class LessonCockpitService:
@@ -16,7 +24,112 @@ class LessonCockpitService:
         self.course_service = CourseExperienceService(db)
         self.lesson_service = LessonExperienceService(db)
 
+    @staticmethod
+    def _scope_mastery_signature(
+        *,
+        db: Session,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+    ) -> str:
+        mastery_map = GraphRepository(db).get_mastery_map(
+            student_id=student_id,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+        )
+        if not mastery_map:
+            return "no_mastery"
+        payload = json.dumps(sorted(mastery_map.items()), separators=(",", ":"), ensure_ascii=True)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+    @staticmethod
+    def _cache_key(
+        *,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+        topic_id: UUID,
+        session_id: UUID | None,
+        mastery_signature: str,
+    ) -> str:
+        session_token = str(session_id) if session_id else "auto"
+        return ":".join(
+            [
+                str(student_id),
+                subject,
+                sss_level,
+                str(term),
+                str(topic_id),
+                session_token,
+                mastery_signature,
+            ]
+        )
+
+    @staticmethod
+    def _read_cached_bootstrap(*, cache_key: str) -> LessonCockpitBootstrapOut | None:
+        entry = _LESSON_COCKPIT_CACHE.get(cache_key)
+        if entry is None:
+            return None
+        created_at, payload = entry
+        if (time.time() - created_at) > COCKPIT_CACHE_TTL_SECONDS:
+            _LESSON_COCKPIT_CACHE.pop(cache_key, None)
+            return None
+        return payload
+
+    @staticmethod
+    def _write_cached_bootstrap(*, cache_key: str, payload: LessonCockpitBootstrapOut) -> LessonCockpitBootstrapOut:
+        _LESSON_COCKPIT_CACHE[cache_key] = (time.time(), payload)
+        return payload
+
+    @classmethod
+    def invalidate_scope_cache(
+        cls,
+        *,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+        topic_id: UUID | None = None,
+    ) -> None:
+        prefix = ":".join([str(student_id), subject, sss_level, str(term)])
+        for cache_key in list(_LESSON_COCKPIT_CACHE.keys()):
+            if not cache_key.startswith(prefix):
+                continue
+            if topic_id is not None and f":{topic_id}:" not in cache_key:
+                continue
+            _LESSON_COCKPIT_CACHE.pop(cache_key, None)
+
+    @staticmethod
+    def invalidate_session_cache(*, session_id: UUID) -> None:
+        session_token = f":{session_id}:"
+        for cache_key in list(_LESSON_COCKPIT_CACHE.keys()):
+            if session_token in cache_key:
+                _LESSON_COCKPIT_CACHE.pop(cache_key, None)
+
     def bootstrap(self, payload: LessonCockpitBootstrapIn) -> LessonCockpitBootstrapOut:
+        mastery_signature = self._scope_mastery_signature(
+            db=self.db,
+            student_id=payload.student_id,
+            subject=payload.subject,
+            sss_level=payload.sss_level,
+            term=int(payload.term),
+        )
+        cache_key = self._cache_key(
+            student_id=payload.student_id,
+            subject=payload.subject,
+            sss_level=payload.sss_level,
+            term=int(payload.term),
+            topic_id=payload.topic_id,
+            session_id=payload.session_id,
+            mastery_signature=mastery_signature,
+        )
+        cached = self._read_cached_bootstrap(cache_key=cache_key)
+        if cached is not None:
+            return cached
+
         course_bootstrap = self.course_service.bootstrap(
             student_id=payload.student_id,
             subject=payload.subject,
@@ -75,17 +188,20 @@ class LessonCockpitService:
             topic_ids=candidate_ids,
         )
 
-        return LessonCockpitBootstrapOut(
-            student_id=payload.student_id,
-            topic_id=payload.topic_id,
-            subject=payload.subject,
-            sss_level=payload.sss_level,
-            term=payload.term,
-            topics=course_topics,
-            next_step=course_bootstrap.next_step,
-            map_error=course_bootstrap.map_error,
-            tutor_bootstrap=tutor_bootstrap,
-            warmed_topic_ids=prewarm["warmed_topic_ids"],
-            cache_hit_topic_ids=prewarm["cache_hit_topic_ids"],
-            failed_topic_ids=prewarm["failed_topic_ids"],
+        return self._write_cached_bootstrap(
+            cache_key=cache_key,
+            payload=LessonCockpitBootstrapOut(
+                student_id=payload.student_id,
+                topic_id=payload.topic_id,
+                subject=payload.subject,
+                sss_level=payload.sss_level,
+                term=payload.term,
+                topics=course_topics,
+                next_step=course_bootstrap.next_step,
+                map_error=course_bootstrap.map_error,
+                tutor_bootstrap=tutor_bootstrap,
+                warmed_topic_ids=prewarm["warmed_topic_ids"],
+                cache_hit_topic_ids=prewarm["cache_hit_topic_ids"],
+                failed_topic_ids=prewarm["failed_topic_ids"],
+            ),
         )

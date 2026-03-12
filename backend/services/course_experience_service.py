@@ -282,6 +282,8 @@ class CourseExperienceService:
             sss_level=str(student_profile.sss_level),  # type: ignore[arg-type]
             term=term,  # type: ignore[arg-type]
             topics=topics,
+            nodes=list(map_visual.nodes) if map_visual is not None else [],
+            edges=list(map_visual.edges) if map_visual is not None else [],
             next_step=next_step,
             map_error=map_error,
             warmed_topic_ids=warmed_topic_ids,

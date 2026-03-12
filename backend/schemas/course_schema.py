@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from backend.schemas.learning_path_schema import PathNextOut
+from backend.schemas.learning_path_schema import LearningMapEdgeOut, LearningMapNodeOut, PathNextOut
 
 
 class CourseBootstrapTopicOut(BaseModel):
@@ -30,6 +30,8 @@ class CourseBootstrapOut(BaseModel):
     sss_level: Literal["SSS1", "SSS2", "SSS3"]
     term: Literal[1, 2, 3]
     topics: list[CourseBootstrapTopicOut] = Field(default_factory=list)
+    nodes: list[LearningMapNodeOut] = Field(default_factory=list)
+    edges: list[LearningMapEdgeOut] = Field(default_factory=list)
     next_step: PathNextOut | None = None
     map_error: str | None = None
     warmed_topic_ids: list[str] = Field(default_factory=list)

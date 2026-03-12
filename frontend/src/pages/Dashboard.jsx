@@ -48,12 +48,10 @@ export default function Dashboard() {
                 const queryParams = new URLSearchParams({
                     student_id: activeId,
                     subject: activeSubject,
-                    sss_level: currentLevel,
                     term: currentTerm,
-                    view: 'topic',
                 });
 
-                const response = await fetch(`${apiUrl}/learning/path/map/visual?${queryParams.toString()}`, {
+                const response = await fetch(`${apiUrl}/learning/course/bootstrap?${queryParams.toString()}`, {
                     method: 'GET',
                     headers: {
                         Authorization: `Bearer ${token}`,
@@ -71,6 +69,7 @@ export default function Dashboard() {
                     edges: Array.isArray(data?.edges) ? data.edges : [],
                     next_step: data?.next_step || null,
                 });
+                setMapError(data?.map_error || '');
             } catch (err) {
                 console.error('Map fetch error:', err);
                 setMapData({ nodes: [], edges: [], next_step: null });
@@ -82,36 +81,6 @@ export default function Dashboard() {
 
         fetchLearningMap();
     }, [activeId, activeSubject, currentLevel, currentTerm, token, apiUrl]);
-
-    useEffect(() => {
-        const nextTopicId = mapData?.next_step?.recommended_topic_id;
-        if (!activeId || !token || !activeSubject || !nextTopicId) {
-            return;
-        }
-
-        const prewarm = async () => {
-            try {
-                await fetch(`${apiUrl}/learning/lesson/prewarm`, {
-                    method: 'POST',
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        student_id: activeId,
-                        subject: activeSubject,
-                        sss_level: currentLevel,
-                        term: currentTerm,
-                        topic_ids: [nextTopicId],
-                    }),
-                });
-            } catch (err) {
-                console.warn('Lesson prewarm skipped:', err);
-            }
-        };
-
-        prewarm();
-    }, [activeId, activeSubject, apiUrl, currentLevel, currentTerm, mapData, token]);
 
     const apiLeaderboardData = [
         { id: 'u1', rank: 1, name: 'Sarah Jenkins', points: '4,250' },

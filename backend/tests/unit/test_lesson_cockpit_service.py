@@ -5,7 +5,7 @@ from backend.schemas.graph_learning_schema import GraphNextStepOut, LessonGraphC
 from backend.schemas.lesson_cockpit_schema import LessonCockpitBootstrapIn
 from backend.schemas.lesson_schema import ContentBlockOut, TopicLessonResponse
 from backend.schemas.tutor_schema import TutorSessionBootstrapOut
-from backend.services.lesson_cockpit_service import LessonCockpitService
+from backend.services.lesson_cockpit_service import LessonCockpitService, _LESSON_COCKPIT_CACHE
 
 
 def _course_bootstrap(student_id, topic_id):
@@ -105,6 +105,7 @@ def _tutor_bootstrap(student_id, topic_id):
 def test_lesson_cockpit_bootstrap_merges_course_and_tutor_context(monkeypatch):
     student_id = uuid4()
     topic_id = uuid4()
+    _LESSON_COCKPIT_CACHE.clear()
 
     monkeypatch.setattr(
         "backend.services.lesson_cockpit_service.CourseExperienceService.bootstrap",
@@ -117,6 +118,10 @@ def test_lesson_cockpit_bootstrap_merges_course_and_tutor_context(monkeypatch):
     monkeypatch.setattr(
         "backend.services.lesson_cockpit_service.LessonExperienceService.prewarm_topics",
         lambda **kwargs: {"warmed_topic_ids": [str(kwargs["topic_ids"][0])], "cache_hit_topic_ids": [], "failed_topic_ids": []},
+    )
+    monkeypatch.setattr(
+        "backend.services.lesson_cockpit_service.GraphRepository.get_mastery_map",
+        lambda self, **kwargs: {},
     )
 
     payload = LessonCockpitBootstrapIn(
@@ -133,3 +138,58 @@ def test_lesson_cockpit_bootstrap_merges_course_and_tutor_context(monkeypatch):
     assert len(result.topics) == 3
     assert result.tutor_bootstrap.lesson.title == "Lesson: Sequences and Series"
     assert result.warmed_topic_ids
+
+
+def test_lesson_cockpit_bootstrap_uses_cache_and_can_invalidate(monkeypatch):
+    student_id = uuid4()
+    topic_id = uuid4()
+    _LESSON_COCKPIT_CACHE.clear()
+
+    call_count = {"course": 0, "lesson": 0, "prewarm": 0}
+
+    def _course(self, **kwargs):
+        call_count["course"] += 1
+        return _course_bootstrap(student_id, topic_id)
+
+    def _lesson(self, payload):
+        call_count["lesson"] += 1
+        return _tutor_bootstrap(student_id, topic_id)
+
+    def _prewarm(**kwargs):
+        call_count["prewarm"] += 1
+        return {"warmed_topic_ids": [], "cache_hit_topic_ids": [], "failed_topic_ids": []}
+
+    monkeypatch.setattr("backend.services.lesson_cockpit_service.CourseExperienceService.bootstrap", _course)
+    monkeypatch.setattr("backend.services.lesson_cockpit_service.LessonExperienceService.bootstrap", _lesson)
+    monkeypatch.setattr("backend.services.lesson_cockpit_service.LessonExperienceService.prewarm_topics", _prewarm)
+    monkeypatch.setattr(
+        "backend.services.lesson_cockpit_service.GraphRepository.get_mastery_map",
+        lambda self, **kwargs: {},
+    )
+
+    payload = LessonCockpitBootstrapIn(
+        student_id=student_id,
+        subject="math",
+        sss_level="SSS2",
+        term=2,
+        topic_id=topic_id,
+    )
+
+    service = LessonCockpitService(db=object())
+    first = service.bootstrap(payload)
+    second = service.bootstrap(payload)
+
+    assert first.tutor_bootstrap.session_id == second.tutor_bootstrap.session_id
+    assert call_count == {"course": 1, "lesson": 1, "prewarm": 1}
+
+    LessonCockpitService.invalidate_scope_cache(
+        student_id=student_id,
+        subject="math",
+        sss_level="SSS2",
+        term=2,
+    )
+
+    third = service.bootstrap(payload)
+
+    assert third.tutor_bootstrap.session_id != second.tutor_bootstrap.session_id
+    assert call_count == {"course": 2, "lesson": 2, "prewarm": 2}
