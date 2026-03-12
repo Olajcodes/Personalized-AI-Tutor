@@ -138,6 +138,10 @@ class LessonGraphService:
         mastery_score: float,
         role: str,
         is_unlocked: bool,
+        detail: str | None = None,
+        blocking_prerequisite_labels: list[str] | None = None,
+        blocking_prerequisite_topic_id: str | None = None,
+        blocking_prerequisite_topic_title: str | None = None,
     ) -> GraphConceptNodeOut:
         if mastery_score >= MASTERY_THRESHOLD:
             mastery_state = "demonstrated"
@@ -154,6 +158,10 @@ class LessonGraphService:
             mastery_state=mastery_state,
             role=role,  # type: ignore[arg-type]
             is_unlocked=is_unlocked,
+            detail=detail,
+            blocking_prerequisite_labels=list(blocking_prerequisite_labels or []),
+            blocking_prerequisite_topic_id=blocking_prerequisite_topic_id,
+            blocking_prerequisite_topic_title=blocking_prerequisite_topic_title,
         )
 
     def get_lesson_graph_context(
@@ -190,6 +198,50 @@ class LessonGraphService:
             )
 
         unlocked = self._unlocked(prereq_edges, mastery_map)
+        prereq_by_concept: dict[str, list[str]] = {}
+        for prereq_id, concept_id in prereq_edges:
+            prereq_by_concept.setdefault(concept_id, []).append(prereq_id)
+
+        current_title = concept_lookup.get(current_ids[0]).topic_title if current_ids else None
+
+        def _blocking_info(concept_id: str) -> tuple[list[str], str | None, str | None]:
+            blockers = [
+                prereq_id
+                for prereq_id in prereq_by_concept.get(concept_id, [])
+                if mastery_map.get(prereq_id, 0.0) < MASTERY_THRESHOLD
+            ]
+            if not blockers:
+                return [], None, None
+            weakest = min(blockers, key=lambda prereq_id: mastery_map.get(prereq_id, 0.0))
+            weakest_concept = _lookup(weakest)
+            return (
+                [_lookup(prereq_id).label for prereq_id in blockers],
+                weakest_concept.topic_id,
+                weakest_concept.topic_title,
+            )
+
+        def _node_detail(concept_id: str, *, role: str, is_unlocked: bool) -> tuple[str, list[str], str | None, str | None]:
+            blocking_labels, blocking_topic_id, blocking_topic_title = _blocking_info(concept_id)
+            concept = _lookup(concept_id)
+            if role == "prerequisite":
+                if mastery_map.get(concept_id, 0.0) >= MASTERY_THRESHOLD:
+                    detail = f"{concept.label} already supports {current_title or 'this lesson'}."
+                else:
+                    detail = f"Strengthen {concept.label} to stabilize {current_title or 'the current lesson'}."
+            elif role == "downstream":
+                if blocking_labels:
+                    detail = f"Locked until {', '.join(blocking_labels)} is stronger."
+                elif is_unlocked:
+                    detail = f"{concept.label} is ready to unlock next."
+                else:
+                    detail = f"{concept.label} will open once this lesson cluster is stronger."
+            else:
+                if blocking_labels:
+                    detail = f"This lesson still depends on {', '.join(blocking_labels)}."
+                else:
+                    detail = f"{concept.label} anchors the current lesson cluster."
+            return detail, blocking_labels, blocking_topic_id, blocking_topic_title
+
         prerequisite_ids = list(
             dict.fromkeys([prereq for prereq, concept in prereq_edges if concept in current_ids])
         )
@@ -198,39 +250,38 @@ class LessonGraphService:
         )
         related_ids = list(dict.fromkeys(current_ids + prerequisite_ids + downstream_ids))
 
-        current_nodes = [
-            self._node(
+        def _build_graph_node(concept_id: str, *, role: str) -> GraphConceptNodeOut:
+            is_node_unlocked = concept_id in unlocked
+            detail, blocking_labels, blocking_topic_id, blocking_topic_title = _node_detail(
+                concept_id,
+                role=role,
+                is_unlocked=is_node_unlocked,
+            )
+            return self._node(
                 concept=_lookup(concept_id),
                 mastery_score=mastery_map.get(concept_id, 0.0),
-                role="current",
-                is_unlocked=concept_id in unlocked,
+                role=role,
+                is_unlocked=is_node_unlocked,
+                detail=detail,
+                blocking_prerequisite_labels=blocking_labels,
+                blocking_prerequisite_topic_id=blocking_topic_id,
+                blocking_prerequisite_topic_title=blocking_topic_title,
             )
-            for concept_id in current_ids
-        ]
+
+        current_nodes = [_build_graph_node(concept_id, role="current") for concept_id in current_ids]
         prerequisite_nodes = [
-            self._node(
-                concept=_lookup(concept_id),
-                mastery_score=mastery_map.get(concept_id, 0.0),
-                role="prerequisite",
-                is_unlocked=concept_id in unlocked,
-            )
+            _build_graph_node(concept_id, role="prerequisite")
             for concept_id in prerequisite_ids
         ]
         downstream_nodes = [
-            self._node(
-                concept=_lookup(concept_id),
-                mastery_score=mastery_map.get(concept_id, 0.0),
-                role="downstream",
-                is_unlocked=concept_id in unlocked,
-            )
+            _build_graph_node(concept_id, role="downstream")
             for concept_id in downstream_ids
         ]
         weakest_nodes = sorted(current_nodes, key=lambda item: item.mastery_score)[:3]
 
         graph_nodes = [
-            self._node(
-                concept=_lookup(concept_id),
-                mastery_score=mastery_map.get(concept_id, 0.0),
+            _build_graph_node(
+                concept_id,
                 role=(
                     "current"
                     if concept_id in current_ids
@@ -238,7 +289,6 @@ class LessonGraphService:
                     if concept_id in prerequisite_ids
                     else "downstream"
                 ),
-                is_unlocked=concept_id in unlocked,
             )
             for concept_id in related_ids
         ]

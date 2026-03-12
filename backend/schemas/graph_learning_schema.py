@@ -15,6 +15,10 @@ class GraphConceptNodeOut(BaseModel):
     mastery_state: Literal["demonstrated", "needs_review", "unassessed"]
     role: Literal["current", "prerequisite", "downstream", "related"]
     is_unlocked: bool = False
+    detail: str | None = None
+    blocking_prerequisite_labels: list[str] = Field(default_factory=list)
+    blocking_prerequisite_topic_id: str | None = None
+    blocking_prerequisite_topic_title: str | None = None
 
 
 class GraphConceptEdgeOut(BaseModel):

@@ -106,6 +106,22 @@ export default function LessonKnowledgeGraph({
   const [selectedConceptId, setSelectedConceptId] = useState(null);
   const preferredNode = nodes.find((node) => node.role === 'current') || nodes[0] || null;
   const selectedNode = nodes.find((node) => node.concept_id === selectedConceptId) || preferredNode || null;
+  const selectedAction = useMemo(() => {
+    if (!selectedNode) return null;
+    if (!selectedNode.is_unlocked && selectedNode.blocking_prerequisite_topic_id) {
+      return {
+        topicId: selectedNode.blocking_prerequisite_topic_id,
+        label: 'Open blocking prerequisite',
+      };
+    }
+    if (selectedNode.topic_id) {
+      return {
+        topicId: selectedNode.topic_id,
+        label: selectedNode.role === 'downstream' ? 'Open unlock lesson' : 'Open related lesson',
+      };
+    }
+    return null;
+  }, [selectedNode]);
 
   return (
     <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
@@ -180,6 +196,7 @@ export default function LessonKnowledgeGraph({
                   r={node.role === 'current' ? 34 : 28}
                   fill={tone.fill}
                   stroke={tone.node}
+                  strokeDasharray={!node.is_unlocked && node.role === 'downstream' ? "6 5" : undefined}
                   strokeWidth={isSelected ? "3.5" : "2.4"}
                 />
                 <text x={node.x} y={node.y - 5} textAnchor="middle" fontSize="11" fontWeight="800" fill={tone.text}>
@@ -220,9 +237,10 @@ export default function LessonKnowledgeGraph({
               </div>
               <h3 className="mt-3 text-lg font-black text-slate-900">{selectedNode.label}</h3>
               <p className="mt-2 text-sm leading-7 text-slate-600">
-                {selectedNode.topic_title
-                  ? `${selectedNode.role === 'prerequisite' ? 'Supports' : selectedNode.role === 'downstream' ? 'Unlocks through' : 'Anchors'} ${selectedNode.topic_title}.`
-                  : 'This concept is part of the current graph slice.'}
+                {selectedNode.detail
+                  || (selectedNode.topic_title
+                    ? `${selectedNode.role === 'prerequisite' ? 'Supports' : selectedNode.role === 'downstream' ? 'Unlocks through' : 'Anchors'} ${selectedNode.topic_title}.`
+                    : 'This concept is part of the current graph slice.')}
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-600">
@@ -234,15 +252,33 @@ export default function LessonKnowledgeGraph({
                 <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-bold text-slate-600">
                   {selectedNode.is_unlocked ? 'Unlocked' : 'Still locked'}
                 </span>
+                {!selectedNode.is_unlocked && safeArray(selectedNode.blocking_prerequisite_labels).length > 0 && (
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-bold text-amber-800">
+                    Blocked by {selectedNode.blocking_prerequisite_labels[0]}
+                  </span>
+                )}
               </div>
+              {!selectedNode.is_unlocked && safeArray(selectedNode.blocking_prerequisite_labels).length > 0 && (
+                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Why locked</p>
+                  <p className="mt-2 font-semibold">
+                    {selectedNode.blocking_prerequisite_labels.join(', ')} still needs more mastery before this node opens.
+                  </p>
+                  {selectedNode.blocking_prerequisite_topic_title && (
+                    <p className="mt-2 text-xs leading-6 text-amber-800">
+                      Best repair lesson: {selectedNode.blocking_prerequisite_topic_title}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
-            {selectedNode.topic_id && typeof onOpenTopic === 'function' && (
+            {selectedAction && typeof onOpenTopic === 'function' && (
               <button
                 type="button"
-                onClick={() => onOpenTopic(selectedNode.topic_id)}
+                onClick={() => onOpenTopic(selectedAction.topicId)}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-black text-white hover:bg-indigo-700"
               >
-                Open related lesson
+                {selectedAction.label}
                 <PlayCircle className="h-4 w-4" />
               </button>
             )}
