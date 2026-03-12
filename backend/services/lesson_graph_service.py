@@ -139,9 +139,15 @@ class LessonGraphService:
         role: str,
         is_unlocked: bool,
         detail: str | None = None,
+        lock_reason: str | None = None,
+        mastery_gap: float | None = None,
         blocking_prerequisite_labels: list[str] | None = None,
         blocking_prerequisite_topic_id: str | None = None,
         blocking_prerequisite_topic_title: str | None = None,
+        recommended_action_label: str | None = None,
+        recommended_action_reason: str | None = None,
+        recommended_topic_id: str | None = None,
+        recommended_topic_title: str | None = None,
     ) -> GraphConceptNodeOut:
         if mastery_score >= MASTERY_THRESHOLD:
             mastery_state = "demonstrated"
@@ -159,9 +165,15 @@ class LessonGraphService:
             role=role,  # type: ignore[arg-type]
             is_unlocked=is_unlocked,
             detail=detail,
+            lock_reason=lock_reason,
+            mastery_gap=round(float(mastery_gap), 4) if mastery_gap is not None else None,
             blocking_prerequisite_labels=list(blocking_prerequisite_labels or []),
             blocking_prerequisite_topic_id=blocking_prerequisite_topic_id,
             blocking_prerequisite_topic_title=blocking_prerequisite_topic_title,
+            recommended_action_label=recommended_action_label,
+            recommended_action_reason=recommended_action_reason,
+            recommended_topic_id=recommended_topic_id,
+            recommended_topic_title=recommended_topic_title,
         )
 
     def get_lesson_graph_context(
@@ -220,27 +232,97 @@ class LessonGraphService:
                 weakest_concept.topic_title,
             )
 
-        def _node_detail(concept_id: str, *, role: str, is_unlocked: bool) -> tuple[str, list[str], str | None, str | None]:
+        def _node_detail(
+            concept_id: str,
+            *,
+            role: str,
+            is_unlocked: bool,
+        ) -> tuple[
+            str,
+            str | None,
+            float,
+            list[str],
+            str | None,
+            str | None,
+            str | None,
+            str | None,
+            str | None,
+            str | None,
+        ]:
             blocking_labels, blocking_topic_id, blocking_topic_title = _blocking_info(concept_id)
             concept = _lookup(concept_id)
+            mastery_score = mastery_map.get(concept_id, 0.0)
+            mastery_gap = max(0.0, MASTERY_THRESHOLD - mastery_score)
+            lock_reason = None
+            recommended_action_label = None
+            recommended_action_reason = None
+            recommended_topic_id = None
+            recommended_topic_title = None
             if role == "prerequisite":
                 if mastery_map.get(concept_id, 0.0) >= MASTERY_THRESHOLD:
                     detail = f"{concept.label} already supports {current_title or 'this lesson'}."
+                    recommended_action_label = "Review support concept"
+                    recommended_action_reason = f"{concept.label} is already strong enough to support this lesson cluster."
+                    recommended_topic_id = concept.topic_id
+                    recommended_topic_title = concept.topic_title
                 else:
                     detail = f"Strengthen {concept.label} to stabilize {current_title or 'the current lesson'}."
+                    lock_reason = f"{current_title or 'This lesson'} stays fragile until {concept.label} crosses the mastery threshold."
+                    recommended_action_label = "Repair prerequisite"
+                    recommended_action_reason = f"Revisit {concept.topic_title or concept.label} and lift {concept.label} above {int(MASTERY_THRESHOLD * 100)}% mastery."
+                    recommended_topic_id = concept.topic_id
+                    recommended_topic_title = concept.topic_title
             elif role == "downstream":
                 if blocking_labels:
                     detail = f"Locked until {', '.join(blocking_labels)} is stronger."
+                    lock_reason = f"{concept.label} is locked because {', '.join(blocking_labels)} still needs more evidence."
+                    recommended_action_label = "Open blocking prerequisite"
+                    recommended_action_reason = (
+                        f"Best repair lesson: {blocking_topic_title}."
+                        if blocking_topic_title
+                        else f"Strengthen {blocking_labels[0]} first."
+                    )
+                    recommended_topic_id = blocking_topic_id
+                    recommended_topic_title = blocking_topic_title
                 elif is_unlocked:
                     detail = f"{concept.label} is ready to unlock next."
+                    recommended_action_label = "Open unlock lesson"
+                    recommended_action_reason = f"All visible prerequisites for {concept.label} are strong enough. This node is ready now."
+                    recommended_topic_id = concept.topic_id
+                    recommended_topic_title = concept.topic_title
                 else:
                     detail = f"{concept.label} will open once this lesson cluster is stronger."
+                    lock_reason = f"{concept.label} still depends on stronger performance in the current cluster."
             else:
                 if blocking_labels:
                     detail = f"This lesson still depends on {', '.join(blocking_labels)}."
+                    lock_reason = f"The current lesson cluster is being slowed down by {', '.join(blocking_labels)}."
+                    recommended_action_label = "Open blocking prerequisite"
+                    recommended_action_reason = (
+                        f"Best repair lesson: {blocking_topic_title}."
+                        if blocking_topic_title
+                        else f"Strengthen {blocking_labels[0]} before pushing forward."
+                    )
+                    recommended_topic_id = blocking_topic_id
+                    recommended_topic_title = blocking_topic_title
                 else:
                     detail = f"{concept.label} anchors the current lesson cluster."
-            return detail, blocking_labels, blocking_topic_id, blocking_topic_title
+                    recommended_action_label = "Stay with current lesson"
+                    recommended_action_reason = f"{concept.label} is the main concept cluster for this lesson."
+                    recommended_topic_id = concept.topic_id
+                    recommended_topic_title = concept.topic_title
+            return (
+                detail,
+                lock_reason,
+                mastery_gap,
+                blocking_labels,
+                blocking_topic_id,
+                blocking_topic_title,
+                recommended_action_label,
+                recommended_action_reason,
+                recommended_topic_id,
+                recommended_topic_title,
+            )
 
         prerequisite_ids = list(
             dict.fromkeys([prereq for prereq, concept in prereq_edges if concept in current_ids])
@@ -252,7 +334,18 @@ class LessonGraphService:
 
         def _build_graph_node(concept_id: str, *, role: str) -> GraphConceptNodeOut:
             is_node_unlocked = concept_id in unlocked
-            detail, blocking_labels, blocking_topic_id, blocking_topic_title = _node_detail(
+            (
+                detail,
+                lock_reason,
+                mastery_gap,
+                blocking_labels,
+                blocking_topic_id,
+                blocking_topic_title,
+                recommended_action_label,
+                recommended_action_reason,
+                recommended_topic_id,
+                recommended_topic_title,
+            ) = _node_detail(
                 concept_id,
                 role=role,
                 is_unlocked=is_node_unlocked,
@@ -263,9 +356,15 @@ class LessonGraphService:
                 role=role,
                 is_unlocked=is_node_unlocked,
                 detail=detail,
+                lock_reason=lock_reason,
+                mastery_gap=mastery_gap,
                 blocking_prerequisite_labels=blocking_labels,
                 blocking_prerequisite_topic_id=blocking_topic_id,
                 blocking_prerequisite_topic_title=blocking_topic_title,
+                recommended_action_label=recommended_action_label,
+                recommended_action_reason=recommended_action_reason,
+                recommended_topic_id=recommended_topic_id,
+                recommended_topic_title=recommended_topic_title,
             )
 
         current_nodes = [_build_graph_node(concept_id, role="current") for concept_id in current_ids]

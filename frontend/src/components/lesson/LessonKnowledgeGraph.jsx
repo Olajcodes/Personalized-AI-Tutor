@@ -108,10 +108,10 @@ export default function LessonKnowledgeGraph({
   const selectedNode = nodes.find((node) => node.concept_id === selectedConceptId) || preferredNode || null;
   const selectedAction = useMemo(() => {
     if (!selectedNode) return null;
-    if (!selectedNode.is_unlocked && selectedNode.blocking_prerequisite_topic_id) {
+    if (selectedNode.recommended_topic_id) {
       return {
-        topicId: selectedNode.blocking_prerequisite_topic_id,
-        label: 'Open blocking prerequisite',
+        topicId: selectedNode.recommended_topic_id,
+        label: selectedNode.recommended_action_label || 'Open related lesson',
       };
     }
     if (selectedNode.topic_id) {
@@ -237,7 +237,8 @@ export default function LessonKnowledgeGraph({
               </div>
               <h3 className="mt-3 text-lg font-black text-slate-900">{selectedNode.label}</h3>
               <p className="mt-2 text-sm leading-7 text-slate-600">
-                {selectedNode.detail
+                {selectedNode.lock_reason
+                  || selectedNode.detail
                   || (selectedNode.topic_title
                     ? `${selectedNode.role === 'prerequisite' ? 'Supports' : selectedNode.role === 'downstream' ? 'Unlocks through' : 'Anchors'} ${selectedNode.topic_title}.`
                     : 'This concept is part of the current graph slice.')}
@@ -252,23 +253,35 @@ export default function LessonKnowledgeGraph({
                 <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-bold text-slate-600">
                   {selectedNode.is_unlocked ? 'Unlocked' : 'Still locked'}
                 </span>
+                {!!selectedNode.mastery_gap && selectedNode.mastery_gap > 0 && (
+                  <span className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-[11px] font-bold text-rose-700">
+                    {Math.round(selectedNode.mastery_gap * 100)}% gap to unlock
+                  </span>
+                )}
                 {!selectedNode.is_unlocked && safeArray(selectedNode.blocking_prerequisite_labels).length > 0 && (
                   <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-bold text-amber-800">
                     Blocked by {selectedNode.blocking_prerequisite_labels[0]}
                   </span>
                 )}
               </div>
-              {!selectedNode.is_unlocked && safeArray(selectedNode.blocking_prerequisite_labels).length > 0 && (
+              {(selectedNode.lock_reason || (!selectedNode.is_unlocked && safeArray(selectedNode.blocking_prerequisite_labels).length > 0)) && (
                 <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Why locked</p>
                   <p className="mt-2 font-semibold">
-                    {selectedNode.blocking_prerequisite_labels.join(', ')} still needs more mastery before this node opens.
+                    {selectedNode.lock_reason || `${selectedNode.blocking_prerequisite_labels.join(', ')} still needs more mastery before this node opens.`}
                   </p>
-                  {selectedNode.blocking_prerequisite_topic_title && (
+                  {(selectedNode.recommended_action_reason || selectedNode.blocking_prerequisite_topic_title) && (
                     <p className="mt-2 text-xs leading-6 text-amber-800">
-                      Best repair lesson: {selectedNode.blocking_prerequisite_topic_title}
+                      {selectedNode.recommended_action_reason
+                        || `Best repair lesson: ${selectedNode.blocking_prerequisite_topic_title}`}
                     </p>
                   )}
+                </div>
+              )}
+              {selectedNode.is_unlocked && selectedNode.recommended_action_reason && (
+                <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Best next move</p>
+                  <p className="mt-2 font-semibold">{selectedNode.recommended_action_reason}</p>
                 </div>
               )}
             </div>

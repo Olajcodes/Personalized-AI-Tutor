@@ -16,9 +16,15 @@ class GraphConceptNodeOut(BaseModel):
     role: Literal["current", "prerequisite", "downstream", "related"]
     is_unlocked: bool = False
     detail: str | None = None
+    lock_reason: str | None = None
+    mastery_gap: float | None = Field(default=None, ge=0.0)
     blocking_prerequisite_labels: list[str] = Field(default_factory=list)
     blocking_prerequisite_topic_id: str | None = None
     blocking_prerequisite_topic_title: str | None = None
+    recommended_action_label: str | None = None
+    recommended_action_reason: str | None = None
+    recommended_topic_id: str | None = None
+    recommended_topic_title: str | None = None
 
 
 class GraphConceptEdgeOut(BaseModel):

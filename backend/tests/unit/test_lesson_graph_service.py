@@ -75,6 +75,11 @@ def test_lesson_graph_context_marks_blocking_prerequisite_details(monkeypatch):
 
     assert current.blocking_prerequisite_labels == ["Variables"]
     assert current.detail == "This lesson still depends on Variables."
+    assert current.lock_reason == "The current lesson cluster is being slowed down by Variables."
+    assert current.recommended_action_label == "Open blocking prerequisite"
+    assert current.recommended_topic_title == "Variables"
     assert downstream.blocking_prerequisite_labels == ["Linear Equations"]
     assert downstream.detail == "Locked until Linear Equations is stronger."
+    assert downstream.lock_reason == "Simultaneous Equations is locked because Linear Equations still needs more evidence."
+    assert downstream.recommended_action_label == "Open blocking prerequisite"
     assert downstream.blocking_prerequisite_topic_title == "Linear Equations"
