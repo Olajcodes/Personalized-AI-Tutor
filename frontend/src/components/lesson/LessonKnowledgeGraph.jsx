@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, GitBranch } from 'lucide-react';
+import { ArrowRight, GitBranch, Route, ShieldAlert, Sparkles } from 'lucide-react';
 
 const ROLE_X = {
   prerequisite: 136,
@@ -96,7 +96,7 @@ function buildLayout(graphContext) {
   return { grouped, nodes, renderedEdges };
 }
 
-export default function LessonKnowledgeGraph({ graphContext, nextUnlock }) {
+export default function LessonKnowledgeGraph({ graphContext, nextUnlock, whyTopicDetail = null }) {
   const { grouped, nodes, renderedEdges } = useMemo(() => buildLayout(graphContext), [graphContext]);
 
   return (
@@ -191,6 +191,73 @@ export default function LessonKnowledgeGraph({ graphContext, nextUnlock }) {
           <p className="mt-1 font-semibold">{nextUnlock?.topic_title || nextUnlock?.concept_label || 'Stay with this concept cluster a bit longer.'}</p>
         </div>
       </div>
+
+      {whyTopicDetail && (
+        <div className="mt-4 rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(280px,0.7fr)]">
+            <div>
+              <div className="flex items-center gap-2 text-slate-700">
+                <Route className="h-4 w-4 text-indigo-600" />
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Why this topic now</p>
+              </div>
+              <p className="mt-3 text-sm leading-7 text-slate-700">{whyTopicDetail.explanation}</p>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <div className="rounded-2xl border border-white bg-white px-4 py-3">
+                  <div className="flex items-center gap-2 text-amber-700">
+                    <ShieldAlert className="h-4 w-4" />
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em]">Build from</p>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {safeArray(whyTopicDetail.prerequisite_labels).length > 0 ? (
+                      whyTopicDetail.prerequisite_labels.map((label) => (
+                        <span key={label} className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-bold text-amber-800">
+                          {label}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-slate-500">No blocking prerequisite in this slice.</span>
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-white bg-white px-4 py-3">
+                  <div className="flex items-center gap-2 text-emerald-700">
+                    <Sparkles className="h-4 w-4" />
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em]">Unlock next</p>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {safeArray(whyTopicDetail.unlock_labels).length > 0 ? (
+                      whyTopicDetail.unlock_labels.map((label) => (
+                        <span key={label} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-800">
+                          {label}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-slate-500">No downstream unlock is visible yet.</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {whyTopicDetail.weakest_prerequisite_label && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Weakest prerequisite</p>
+                  <p className="mt-2 font-semibold">{whyTopicDetail.weakest_prerequisite_label}</p>
+                </div>
+              )}
+              {whyTopicDetail.recommended_next && (
+                <div className="rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600">Recommended next move</p>
+                  <p className="mt-2 font-semibold">
+                    {whyTopicDetail.recommended_next.topic_title || whyTopicDetail.recommended_next.concept_label || 'Continue the current lesson'}
+                  </p>
+                  <p className="mt-2 text-xs leading-6 text-indigo-800">{whyTopicDetail.recommended_next.reason}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

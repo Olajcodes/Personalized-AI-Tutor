@@ -93,6 +93,19 @@ def test_lesson_cockpit_returns_merged_payload(monkeypatch):
                 "graph_edges": [],
                 "assessment_ready": True,
             },
+            "why_topic_detail": {
+                "student_id": str(payload.student_id),
+                "subject": payload.subject,
+                "sss_level": payload.sss_level,
+                "term": payload.term,
+                "topic_id": str(payload.topic_id),
+                "topic_title": "Sequences and Series",
+                "explanation": "Builds later algebra.",
+                "prerequisite_labels": [],
+                "unlock_labels": [],
+                "weakest_prerequisite_label": None,
+                "recommended_next": None,
+            },
             "warmed_topic_ids": [],
             "cache_hit_topic_ids": [],
             "failed_topic_ids": [],
@@ -117,3 +130,4 @@ def test_lesson_cockpit_returns_merged_payload(monkeypatch):
     body = response.json()
     assert body["topic_id"] == str(topic_id)
     assert body["tutor_bootstrap"]["lesson"]["title"] == "Lesson: Sequences and Series"
+    assert body["why_topic_detail"]["explanation"] == "Builds later algebra."

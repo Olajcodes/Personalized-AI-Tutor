@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from backend.schemas.course_schema import CourseBootstrapTopicOut, CourseRecentEvidenceOut
+from backend.schemas.graph_learning_schema import WhyThisTopicOut
 from backend.schemas.learning_path_schema import PathNextOut
 from backend.schemas.tutor_schema import TutorSessionBootstrapOut
 
@@ -28,6 +29,7 @@ class LessonCockpitBootstrapOut(BaseModel):
     recent_evidence: CourseRecentEvidenceOut | None = None
     map_error: str | None = None
     tutor_bootstrap: TutorSessionBootstrapOut
+    why_topic_detail: WhyThisTopicOut | None = None
     warmed_topic_ids: list[str] = Field(default_factory=list)
     cache_hit_topic_ids: list[str] = Field(default_factory=list)
     failed_topic_ids: list[str] = Field(default_factory=list)

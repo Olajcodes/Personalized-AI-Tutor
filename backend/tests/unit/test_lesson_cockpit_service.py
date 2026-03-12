@@ -137,6 +137,8 @@ def test_lesson_cockpit_bootstrap_merges_course_and_tutor_context(monkeypatch):
     assert result.student_id == student_id
     assert len(result.topics) == 3
     assert result.tutor_bootstrap.lesson.title == "Lesson: Sequences and Series"
+    assert result.why_topic_detail is not None
+    assert result.why_topic_detail.explanation == "Builds later algebra."
     assert result.warmed_topic_ids
 
 

@@ -254,6 +254,7 @@ export default function LessonPage() {
 
   const lesson = bootstrap?.lesson || null;
   const graphContext = bootstrap?.graph_context || null;
+  const whyTopicDetail = bootstrap?.why_topic_detail || null;
   const sessionId = bootstrap?.session_id || null;
   const quickActions = safeArray(bootstrap?.suggested_actions);
   const recentEvidence = bootstrap?.recent_evidence || null;
@@ -884,7 +885,11 @@ export default function LessonPage() {
             transition={{ duration: 0.35, delay: 0.05 }}
             className="space-y-6"
           >
-            <LessonKnowledgeGraph graphContext={graphContext} nextUnlock={bootstrap?.next_unlock} />
+            <LessonKnowledgeGraph
+              graphContext={graphContext}
+              nextUnlock={bootstrap?.next_unlock}
+              whyTopicDetail={whyTopicDetail}
+            />
 
             <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center gap-2">

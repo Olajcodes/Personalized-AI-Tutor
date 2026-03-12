@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from backend.repositories.graph_repo import GraphRepository
+from backend.schemas.graph_learning_schema import WhyThisTopicOut
 from backend.schemas.lesson_cockpit_schema import LessonCockpitBootstrapIn, LessonCockpitBootstrapOut
 from backend.schemas.tutor_schema import TutorSessionBootstrapIn
 from backend.services.course_experience_service import CourseExperienceService
@@ -109,6 +110,31 @@ class LessonCockpitService:
             if session_token in cache_key:
                 _LESSON_COCKPIT_CACHE.pop(cache_key, None)
 
+    @staticmethod
+    def _why_topic_detail(*, payload: LessonCockpitBootstrapIn, tutor_bootstrap) -> WhyThisTopicOut:
+        graph_context = tutor_bootstrap.graph_context
+        weakest_prerequisite = min(
+            list(graph_context.prerequisite_concepts or []),
+            key=lambda item: item.mastery_score,
+            default=None,
+        )
+        return WhyThisTopicOut(
+            student_id=payload.student_id,
+            subject=payload.subject,  # type: ignore[arg-type]
+            sss_level=payload.sss_level,  # type: ignore[arg-type]
+            term=payload.term,
+            topic_id=str(graph_context.topic_id),
+            topic_title=str(graph_context.topic_title),
+            explanation=(
+                graph_context.why_this_matters
+                or f"{graph_context.topic_title} connects your prerequisites to what unlocks next."
+            ),
+            prerequisite_labels=[item.label for item in list(graph_context.prerequisite_concepts or [])],
+            unlock_labels=[item.label for item in list(graph_context.downstream_concepts or [])],
+            weakest_prerequisite_label=(weakest_prerequisite.label if weakest_prerequisite is not None else None),
+            recommended_next=tutor_bootstrap.next_unlock,
+        )
+
     def bootstrap(self, payload: LessonCockpitBootstrapIn) -> LessonCockpitBootstrapOut:
         mastery_signature = self._scope_mastery_signature(
             db=self.db,
@@ -187,6 +213,7 @@ class LessonCockpitService:
             term=int(payload.term),
             topic_ids=candidate_ids,
         )
+        why_topic_detail = self._why_topic_detail(payload=payload, tutor_bootstrap=tutor_bootstrap)
 
         return self._write_cached_bootstrap(
             cache_key=cache_key,
@@ -201,6 +228,7 @@ class LessonCockpitService:
                 recent_evidence=course_bootstrap.recent_evidence,
                 map_error=course_bootstrap.map_error,
                 tutor_bootstrap=tutor_bootstrap,
+                why_topic_detail=why_topic_detail,
                 warmed_topic_ids=prewarm["warmed_topic_ids"],
                 cache_hit_topic_ids=prewarm["cache_hit_topic_ids"],
                 failed_topic_ids=prewarm["failed_topic_ids"],
