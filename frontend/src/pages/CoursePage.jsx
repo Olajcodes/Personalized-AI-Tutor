@@ -1,9 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
 import CourseSidebar from '../components/CourseSidebar';
 import { PlayCircle, Clock, BookOpen, GitBranch, Lock, Sparkles } from 'lucide-react';
+import {
+  buildGraphInterventionScope,
+  readGraphIntervention,
+  subscribeGraphIntervention,
+} from '../services/graphIntervention';
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
 
@@ -64,8 +69,30 @@ const CoursePage = () => {
   const [recentEvidence, setRecentEvidence] = useState(null);
   const [recommendationStory, setRecommendationStory] = useState(null);
   const [mapError, setMapError] = useState('');
+  const [graphIntervention, setGraphIntervention] = useState(null);
 
   const apiUrl = import.meta.env.VITE_API_URL || 'https://mastery-backend-7xe8.onrender.com/api/v1';
+  const interventionScope = useMemo(
+    () => buildGraphInterventionScope({
+      studentId: activeId,
+      subject,
+      sssLevel: currentLevel,
+      term: currentTerm,
+    }),
+    [activeId, currentLevel, currentTerm, subject],
+  );
+  const effectiveNextStep = graphIntervention?.next_step || nextStep || null;
+  const effectiveRecentEvidence = graphIntervention?.recent_evidence || recentEvidence || null;
+  const effectiveRecommendationStory = graphIntervention?.recommendation_story || recommendationStory || null;
+
+  useEffect(() => {
+    if (!interventionScope) {
+      setGraphIntervention(null);
+      return () => {};
+    }
+    setGraphIntervention(readGraphIntervention(interventionScope));
+    return subscribeGraphIntervention(interventionScope, setGraphIntervention);
+  }, [interventionScope]);
 
   useEffect(() => {
     if (!activeId || !token || !subject) return;
@@ -113,7 +140,14 @@ const CoursePage = () => {
     fetchTopicsList();
   }, [activeId, token, subject, currentLevel, currentTerm, apiUrl]);
 
-  const safeTopics = Array.isArray(topics) ? topics : [];
+  const displayTopics = useMemo(
+    () => (Array.isArray(topics) ? topics : []).map((topic) => (
+      effectiveNextStep?.recommended_topic_id && topic?.topic_id === effectiveNextStep.recommended_topic_id
+        ? { ...topic, is_recommended: true }
+        : topic
+    )),
+    [effectiveNextStep, topics],
+  );
 
   return (
     <div className="flex bg-slate-50 h-[calc(100vh-64px)] overflow-hidden">
@@ -122,7 +156,7 @@ const CoursePage = () => {
       <CourseSidebar 
         activeStep={null} 
         subject={subject} 
-        topics={safeTopics} 
+        topics={displayTopics} 
         level={currentLevel}
       />
       
@@ -135,7 +169,7 @@ const CoursePage = () => {
             <p className="text-slate-500 text-lg">Follow this AI-curated syllabus to achieve mastery in {currentLevel} {subject}.</p>
           </div>
 
-          {nextStep && (
+          {effectiveNextStep && (
             <div className="mb-6 rounded-3xl border border-indigo-200 bg-gradient-to-r from-indigo-50 via-white to-sky-50 p-6 shadow-sm">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="max-w-2xl">
@@ -144,28 +178,28 @@ const CoursePage = () => {
                     Next best move
                   </div>
                   <h2 className="mt-3 text-2xl font-black text-slate-900">
-                    {recommendationStory?.headline || nextStep.recommended_topic_title || nextStep.recommended_concept_label || 'Continue current focus'}
+                    {effectiveRecommendationStory?.headline || effectiveNextStep.recommended_topic_title || effectiveNextStep.recommended_concept_label || 'Continue current focus'}
                   </h2>
-                  <p className="mt-2 text-sm leading-7 text-slate-600">{recommendationStory?.supporting_reason || nextStep.reason}</p>
-                  {safeArray(nextStep.prereq_gap_labels).length > 0 && (
+                  <p className="mt-2 text-sm leading-7 text-slate-600">{effectiveRecommendationStory?.supporting_reason || effectiveNextStep.reason}</p>
+                  {safeArray(effectiveNextStep.prereq_gap_labels).length > 0 && (
                     <p className="mt-3 text-sm font-semibold text-amber-700">
-                      Blocking prerequisites: {nextStep.prereq_gap_labels.join(', ')}
+                      Blocking prerequisites: {effectiveNextStep.prereq_gap_labels.join(', ')}
                     </p>
                   )}
-                  {recommendationStory?.next_concept_label && (
+                  {effectiveRecommendationStory?.next_concept_label && (
                     <p className="mt-3 text-sm font-semibold text-cyan-700">
-                      Best next concept: {recommendationStory.next_concept_label}
+                      Best next concept: {effectiveRecommendationStory.next_concept_label}
                     </p>
                   )}
-                  {recommendationStory?.evidence_summary && (
+                  {effectiveRecommendationStory?.evidence_summary && (
                     <p className="mt-3 text-sm leading-7 text-slate-500">
-                      {recommendationStory.evidence_summary}
+                      {effectiveRecommendationStory.evidence_summary}
                     </p>
                   )}
                 </div>
                 <button
                   onClick={async () => {
-                    if (nextStep.recommended_topic_id) {
+                    if (effectiveNextStep.recommended_topic_id) {
                       await prewarmTopics({
                         apiUrl,
                         token,
@@ -173,19 +207,19 @@ const CoursePage = () => {
                         subject,
                         sssLevel: currentLevel,
                         term: currentTerm,
-                        topicIds: [nextStep.recommended_topic_id],
+                        topicIds: [effectiveNextStep.recommended_topic_id],
                       });
-                      navigate(`/lesson/${nextStep.recommended_topic_id}`);
+                      navigate(`/lesson/${effectiveNextStep.recommended_topic_id}`);
                     }
                   }}
-                  disabled={!nextStep.recommended_topic_id}
+                  disabled={!effectiveNextStep.recommended_topic_id}
                   className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-black transition-colors ${
-                    nextStep.recommended_topic_id
+                    effectiveNextStep.recommended_topic_id
                       ? 'bg-indigo-600 text-white hover:bg-indigo-700'
                       : 'bg-slate-200 text-slate-500 cursor-not-allowed'
                   }`}
                 >
-                  {recommendationStory?.action_label || 'Open Recommended Lesson'} <Sparkles className="h-4 w-4" />
+                  {effectiveRecommendationStory?.action_label || 'Open Recommended Lesson'} <Sparkles className="h-4 w-4" />
                 </button>
               </div>
               {mapError && (
@@ -194,20 +228,20 @@ const CoursePage = () => {
             </div>
           )}
 
-          {recentEvidence && (
+          {effectiveRecentEvidence && (
             <div className="mb-6 rounded-3xl border border-indigo-100 bg-white p-5 shadow-sm">
               <div className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600">Latest evidence</div>
-              <p className="mt-2 text-sm leading-7 text-slate-700">{recentEvidence.summary}</p>
-              {(recentEvidence.strongest_gain_concept_label || recentEvidence.strongest_drop_concept_label) && (
+              <p className="mt-2 text-sm leading-7 text-slate-700">{effectiveRecentEvidence.summary}</p>
+              {(effectiveRecentEvidence.strongest_gain_concept_label || effectiveRecentEvidence.strongest_drop_concept_label) && (
                 <p className="mt-3 text-xs font-semibold text-slate-500">
-                  {recentEvidence.strongest_gain_concept_label ? `Gain: ${recentEvidence.strongest_gain_concept_label}` : 'No recent gain'}
-                  {recentEvidence.strongest_drop_concept_label ? ` · Gap: ${recentEvidence.strongest_drop_concept_label}` : ''}
+                  {effectiveRecentEvidence.strongest_gain_concept_label ? `Gain: ${effectiveRecentEvidence.strongest_gain_concept_label}` : 'No recent gain'}
+                  {effectiveRecentEvidence.strongest_drop_concept_label ? ` · Gap: ${effectiveRecentEvidence.strongest_drop_concept_label}` : ''}
                 </p>
               )}
             </div>
           )}
 
-          {mapError && !nextStep && (
+          {mapError && !effectiveNextStep && (
             <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-semibold text-amber-800">
               {mapError}
             </div>
@@ -219,9 +253,9 @@ const CoursePage = () => {
                  <div key={i} className="h-28 bg-white border border-slate-200 rounded-2xl w-full"></div>
                ))}
             </div>
-          ) : safeTopics.length > 0 ? (
+          ) : displayTopics.length > 0 ? (
             <div className="space-y-4">
-              {safeTopics.map((topic, index) => {
+              {displayTopics.map((topic, index) => {
                 const targetId = topic.topic_id || topic.id;
                 const currentStatus = topic.status || 'pending';
                 const isLocked = currentStatus === 'locked';

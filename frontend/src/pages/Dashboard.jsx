@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ArrowRight, GitBranch } from 'lucide-react';
 
 import HeroSection from '../components/HeroSection';
 import AIRecommendation from '../components/AIRecommendation';
@@ -10,6 +11,13 @@ import Leaderboard from '../components/Leaderboard';
 import Footer from '../components/Footer';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
+import {
+    applyGraphInterventionOverlay,
+    buildGraphInterventionScope,
+    readLatestGraphIntervention,
+    readGraphIntervention,
+    subscribeGraphIntervention,
+} from '../services/graphIntervention';
 
 const prewarmTopics = async ({ apiUrl, token, studentId, subject, sssLevel, term, topicIds }) => {
     const normalizedIds = Array.from(new Set((topicIds || []).filter(Boolean)));
@@ -44,19 +52,58 @@ export default function Dashboard() {
     const currentLevel = studentData?.sss_level || 'SSS1';
     const currentTerm = studentData?.current_term || 1;
     const enrolledSubjects = studentData?.subjects || [];
+    const latestIntervention = useMemo(
+        () => readLatestGraphIntervention(activeId),
+        [activeId],
+    );
 
-    const [activeSubject, setActiveSubject] = useState(null);
+    const [activeSubject, setActiveSubject] = useState(() => localStorage.getItem('active_subject') || null);
     const [mapData, setMapData] = useState({ nodes: [], edges: [], next_step: null, recent_evidence: null, recommendation_story: null });
     const [isLoadingMap, setIsLoadingMap] = useState(false);
     const [mapError, setMapError] = useState('');
+    const [graphIntervention, setGraphIntervention] = useState(null);
 
     const apiUrl = import.meta.env.VITE_API_URL;
+    const interventionScope = useMemo(
+        () => buildGraphInterventionScope({
+            studentId: activeId,
+            subject: activeSubject,
+            sssLevel: currentLevel,
+            term: currentTerm,
+        }),
+        [activeId, activeSubject, currentLevel, currentTerm],
+    );
+    const effectiveMapData = useMemo(
+        () => applyGraphInterventionOverlay(mapData, graphIntervention),
+        [graphIntervention, mapData],
+    );
 
     useEffect(() => {
         if (studentData && (!studentData.subjects || studentData.subjects.length === 0)) {
             navigate('/class-selection');
         }
     }, [studentData, navigate]);
+
+    useEffect(() => {
+        if (!activeSubject && latestIntervention?.subject) {
+            setActiveSubject(latestIntervention.subject);
+        }
+    }, [activeSubject, latestIntervention]);
+
+    useEffect(() => {
+        if (activeSubject) {
+            localStorage.setItem('active_subject', activeSubject);
+        }
+    }, [activeSubject]);
+
+    useEffect(() => {
+        if (!interventionScope) {
+            setGraphIntervention(null);
+            return () => {};
+        }
+        setGraphIntervention(readGraphIntervention(interventionScope));
+        return subscribeGraphIntervention(interventionScope, setGraphIntervention);
+    }, [interventionScope]);
 
     useEffect(() => {
         if (!activeId || !token || !activeSubject) {
@@ -139,11 +186,73 @@ export default function Dashboard() {
                     />
                     <AIRecommendation
                         activeSubject={activeSubject}
-                        recommendation={activeSubject ? mapData?.next_step : null}
-                        recentEvidence={activeSubject ? mapData?.recent_evidence : null}
-                        recommendationStory={activeSubject ? mapData?.recommendation_story : null}
+                        recommendation={activeSubject ? effectiveMapData?.next_step : null}
+                        recentEvidence={activeSubject ? effectiveMapData?.recent_evidence : null}
+                        recommendationStory={activeSubject ? effectiveMapData?.recommendation_story : null}
                     />
                 </div>
+
+                {latestIntervention?.payload && (
+                    <div className="mb-8 rounded-3xl border border-indigo-200 bg-gradient-to-r from-indigo-50 via-white to-sky-50 p-6 shadow-sm">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                            <div className="max-w-3xl">
+                                <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-700">
+                                    <GitBranch className="h-3.5 w-3.5" />
+                                    Resume last intervention
+                                </div>
+                                <h2 className="mt-3 text-2xl font-black text-slate-900">
+                                    {latestIntervention.payload.recommendation_story?.headline
+                                        || latestIntervention.payload.next_step?.recommended_topic_title
+                                        || latestIntervention.payload.next_step?.recommended_concept_label
+                                        || `Continue ${latestIntervention.subject}`}
+                                </h2>
+                                <p className="mt-2 text-sm leading-7 text-slate-600">
+                                    {latestIntervention.payload.recommendation_story?.supporting_reason
+                                        || latestIntervention.payload.next_step?.reason
+                                        || latestIntervention.payload.recent_evidence?.summary
+                                        || 'Resume the last graph-backed recommendation from your latest evidence.'}
+                                </p>
+                                {latestIntervention.payload.recent_evidence?.summary && (
+                                    <p className="mt-3 text-xs font-semibold text-slate-500">
+                                        Latest evidence: {latestIntervention.payload.recent_evidence.summary}
+                                    </p>
+                                )}
+                            </div>
+                            <div className="flex flex-wrap gap-3">
+                                {latestIntervention.subject && latestIntervention.subject !== activeSubject && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveSubject(latestIntervention.subject)}
+                                        className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                                    >
+                                        Open {latestIntervention.subject}
+                                    </button>
+                                )}
+                                {latestIntervention.payload.next_step?.recommended_topic_id && (
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            await prewarmTopics({
+                                                apiUrl,
+                                                token,
+                                                studentId: activeId,
+                                                subject: latestIntervention.subject,
+                                                sssLevel: latestIntervention.sssLevel || currentLevel,
+                                                term: Number(latestIntervention.term || currentTerm),
+                                                topicIds: [latestIntervention.payload.next_step.recommended_topic_id],
+                                            });
+                                            navigate(`/lesson/${latestIntervention.payload.next_step.recommended_topic_id}`);
+                                        }}
+                                        className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-700"
+                                    >
+                                        Resume now
+                                        <ArrowRight className="h-4 w-4" />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <DashboardStats />
 
@@ -172,7 +281,7 @@ export default function Dashboard() {
                     <LearningMap
                         classLevel={currentLevel}
                         subject={activeSubject}
-                        mapData={mapData}
+                        mapData={effectiveMapData}
                         onSelectTopic={openTopicFromGraph}
                     />
                 )}

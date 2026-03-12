@@ -11,6 +11,7 @@ import ConceptCard from "../components/ConceptCard";
 import AITutorInsights from "../components/AITutorInsights";
 import PathProgress from "../components/PathProgress";
 import FooterActions from "../components/FooterActions";
+import { saveGraphIntervention } from '../services/graphIntervention';
 
 const humanizeConceptId = (conceptId, fallback = 'Concept') => {
   const value = String(conceptId || '').trim();
@@ -198,6 +199,9 @@ const QuizPage = () => {
       const wrongConcepts = (resultsJson.concept_breakdown || [])
         .filter(c => !c.is_correct)
         .map(c => c.concept_label || humanizeConceptId(c.concept_id));
+      const firstCorrectConcept = (resultsJson.concept_breakdown || []).find((concept) => concept?.is_correct);
+      const weakestConceptLabel = resultsJson.graph_remediation?.weakest_concept_label || wrongConcepts[0] || null;
+      const nextConceptLabel = resultsJson.graph_remediation?.recommended_next_concept_label || null;
 
       const firstWrongQuestion = quizData.questions.find((question) => {
         const submitted = finalAnswers[question.id];
@@ -215,6 +219,63 @@ const QuizPage = () => {
       const recommendedTopicId = resultsJson.recommended_revision_topic_id
         || resultsJson.graph_remediation?.recommended_next_topic_id
         || null;
+      const recommendedTopicTitle = resultsJson.recommended_revision_topic_title
+        || resultsJson.graph_remediation?.recommended_next_topic_title
+        || null;
+      const recommendationReason = resultsJson.graph_remediation?.recommendation_reason
+        || resultsJson.recommendation_story?.supporting_reason
+        || null;
+      const recentEvidence = (resultsJson.recommendation_story?.evidence_summary || firstCorrectConcept?.concept_label || weakestConceptLabel)
+        ? {
+            summary: resultsJson.recommendation_story?.evidence_summary
+              || `Latest quiz attempt scored ${finalScorePercentage}% and changed your concept focus for this course.`,
+            strongest_gain_concept_label: firstCorrectConcept?.concept_label || null,
+            strongest_drop_concept_label: weakestConceptLabel,
+          }
+        : null;
+      const nextStep = (recommendedTopicId || recommendedTopicTitle || nextConceptLabel || recommendationReason || weakestConceptLabel)
+        ? {
+            recommended_topic_id: recommendedTopicId,
+            recommended_topic_title: recommendedTopicTitle,
+            recommended_concept_label: nextConceptLabel,
+            prereq_gaps: resultsJson.graph_remediation?.blocking_prerequisite_label
+              ? [{ label: resultsJson.graph_remediation.blocking_prerequisite_label }]
+              : [],
+            prereq_gap_labels: resultsJson.graph_remediation?.blocking_prerequisite_label
+              ? [resultsJson.graph_remediation.blocking_prerequisite_label]
+              : [],
+            reason: recommendationReason,
+          }
+        : null;
+      const recommendationStory = resultsJson.recommendation_story || (nextStep
+        ? {
+            status: weakestConceptLabel ? 'hold_current' : 'advance',
+            headline: recommendedTopicTitle
+              ? `Move into ${recommendedTopicTitle}`
+              : weakestConceptLabel
+                ? `Repair ${weakestConceptLabel}`
+                : 'Use the latest quiz evidence to guide your next move.',
+            supporting_reason: recommendationReason,
+            evidence_summary: recentEvidence?.summary || null,
+            next_concept_label: nextConceptLabel,
+            action_label: recommendedTopicId ? 'Open Recommended Lesson' : 'Review this concept',
+          }
+        : null);
+
+      if (nextStep || recentEvidence || recommendationStory) {
+        saveGraphIntervention({
+          studentId: activeId,
+          subject: currentSubject,
+          sssLevel: currentLevel,
+          term: currentTerm,
+          payload: {
+            source: 'quiz',
+            next_step: nextStep,
+            recent_evidence: recentEvidence,
+            recommendation_story: recommendationStory,
+          },
+        });
+      }
 
       await prewarmTopics({
         apiUrl,
@@ -254,12 +315,12 @@ const QuizPage = () => {
         nextTopicId: recommendedTopicId,
         nextTopic: resultsJson.recommended_revision_topic_title || "Next Module",
         remediation: {
-          weakestConcept: resultsJson.graph_remediation?.weakest_concept_label || null,
+          weakestConcept: weakestConceptLabel,
           blockingPrerequisite: resultsJson.graph_remediation?.blocking_prerequisite_label || null,
-          recommendationReason: resultsJson.graph_remediation?.recommendation_reason || null,
-          nextConcept: resultsJson.graph_remediation?.recommended_next_concept_label || null,
+          recommendationReason: recommendationReason,
+          nextConcept: nextConceptLabel,
         },
-        recommendationStory: resultsJson.recommendation_story || null,
+        recommendationStory,
         explainState,
       };
 

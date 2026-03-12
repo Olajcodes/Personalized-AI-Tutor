@@ -25,6 +25,7 @@ import CourseSidebar from '../components/CourseSidebar';
 import LessonKnowledgeGraph from '../components/lesson/LessonKnowledgeGraph';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
+import { saveGraphIntervention } from '../services/graphIntervention';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://mastery-backend-7xe8.onrender.com/api/v1';
 const safeArray = (value) => (Array.isArray(value) ? value : []);
@@ -641,6 +642,58 @@ export default function LessonPage() {
         answer: submittedAnswer,
       });
       const recommendedTopicId = out.graph_remediation?.recommended_next_topic_id || out.recommended_topic_id || null;
+      const recommendedTopicTitle = out.graph_remediation?.recommended_next_topic_title || out.recommended_topic_title || null;
+      const assessmentSummary = out.is_correct
+        ? `${out.concept_label} checkpoint cleared at ${Math.round((out.score || 0) * 100)}%.`
+        : `${out.concept_label} checkpoint exposed a gap at ${Math.round((out.score || 0) * 100)}%.`;
+      const nextStep = (recommendedTopicId || recommendedTopicTitle || out.graph_remediation?.recommended_next_concept_label || out.graph_remediation?.blocking_prerequisite_label || out.graph_remediation?.recommendation_reason)
+        ? {
+            recommended_topic_id: recommendedTopicId,
+            recommended_topic_title: recommendedTopicTitle,
+            recommended_concept_label: out.graph_remediation?.recommended_next_concept_label || null,
+            prereq_gaps: out.graph_remediation?.blocking_prerequisite_label
+              ? [{ label: out.graph_remediation.blocking_prerequisite_label }]
+              : [],
+            prereq_gap_labels: out.graph_remediation?.blocking_prerequisite_label
+              ? [out.graph_remediation.blocking_prerequisite_label]
+              : [],
+            reason: out.graph_remediation?.recommendation_reason
+              || (out.is_correct ? `Build on ${out.concept_label} while it is fresh.` : `Repair the blocking concept before retrying ${out.concept_label}.`),
+          }
+        : null;
+      const recentEvidence = {
+        summary: assessmentSummary,
+        strongest_gain_concept_label: out.is_correct ? out.concept_label : null,
+        strongest_drop_concept_label: out.is_correct ? null : out.concept_label,
+      };
+      const recommendationStory = {
+        status: out.is_correct ? 'advance' : 'hold_current',
+        headline: out.is_correct
+          ? (recommendedTopicTitle ? `Push into ${recommendedTopicTitle}` : `Advance beyond ${out.concept_label}`)
+          : (out.graph_remediation?.blocking_prerequisite_label
+              ? `Rebuild ${out.graph_remediation.blocking_prerequisite_label}`
+              : `Revisit ${out.concept_label}`),
+        supporting_reason: out.graph_remediation?.recommendation_reason
+          || (out.is_correct
+            ? `Your latest checkpoint shows ${out.concept_label} is warming up.`
+            : `Your latest checkpoint shows ${out.concept_label} still needs repair.`),
+        evidence_summary: assessmentSummary,
+        next_concept_label: out.graph_remediation?.recommended_next_concept_label || null,
+        action_label: recommendedTopicId ? 'Open Recommended Lesson' : (out.is_correct ? 'Continue current focus' : 'Repair prerequisite'),
+      };
+
+      saveGraphIntervention({
+        studentId: activeId,
+        subject: currentSubject,
+        sssLevel: currentLevel,
+        term: currentTerm,
+        payload: {
+          source: 'tutor_assessment',
+          next_step: nextStep,
+          recent_evidence: recentEvidence,
+          recommendation_story: recommendationStory,
+        },
+      });
       await prewarmTopics({
         token,
         studentId: activeId,
@@ -659,7 +712,7 @@ export default function LessonPage() {
         conceptLabel: out.concept_label,
         conceptId: out.concept_id,
         recommendedTopicId: recommendedTopicId,
-        recommendedTopicTitle: out.graph_remediation?.recommended_next_topic_title || out.recommended_topic_title || null,
+        recommendedTopicTitle: recommendedTopicTitle,
         graphRemediation: out.graph_remediation || null,
       });
       setPendingAssessment(null);
