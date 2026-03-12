@@ -85,6 +85,28 @@ export default function Dashboard() {
         () => applyGraphInterventionOverlay(mapData, graphIntervention),
         [graphIntervention, mapData],
     );
+    const dashboardSignal = useMemo(() => {
+        if (latestIntervention?.payload) {
+            return latestIntervention;
+        }
+        if (!activeSubject) {
+            return null;
+        }
+        if (!effectiveMapData?.next_step && !effectiveMapData?.recent_evidence && !effectiveMapData?.recommendation_story) {
+            return null;
+        }
+        return {
+            subject: activeSubject,
+            sssLevel: currentLevel,
+            term: currentTerm,
+            payload: {
+                next_step: effectiveMapData?.next_step || null,
+                recent_evidence: effectiveMapData?.recent_evidence || null,
+                recommendation_story: effectiveMapData?.recommendation_story || null,
+                intervention_timeline: Array.isArray(effectiveMapData?.intervention_timeline) ? effectiveMapData.intervention_timeline : [],
+            },
+        };
+    }, [activeSubject, currentLevel, currentTerm, effectiveMapData, latestIntervention]);
 
     useEffect(() => {
         if (studentData && (!studentData.subjects || studentData.subjects.length === 0)) {
@@ -185,15 +207,15 @@ export default function Dashboard() {
     };
 
     const resumeLatestIntervention = async () => {
-        const topicId = latestIntervention?.payload?.next_step?.recommended_topic_id;
+        const topicId = dashboardSignal?.payload?.next_step?.recommended_topic_id;
         if (!topicId) return;
         await prewarmTopics({
             apiUrl,
             token,
             studentId: activeId,
-            subject: latestIntervention.subject,
-            sssLevel: latestIntervention.sssLevel || currentLevel,
-            term: Number(latestIntervention.term || currentTerm),
+            subject: dashboardSignal?.subject || activeSubject,
+            sssLevel: dashboardSignal?.sssLevel || currentLevel,
+            term: Number(dashboardSignal?.term || currentTerm),
             topicIds: [topicId],
         });
         navigate(`/lesson/${topicId}`);
@@ -214,8 +236,9 @@ export default function Dashboard() {
                         activeSubject={activeSubject}
                         onSelectSubject={setActiveSubject}
                         hasStartedLearning={false}
-                        latestIntervention={latestIntervention}
-                        onResumeIntervention={latestIntervention?.payload?.next_step?.recommended_topic_id ? resumeLatestIntervention : null}
+                        graphSignal={dashboardSignal}
+                        signalSubject={dashboardSignal?.subject || activeSubject}
+                        onResumeSignal={dashboardSignal?.payload?.next_step?.recommended_topic_id ? resumeLatestIntervention : null}
                     />
                     <AIRecommendation
                         activeSubject={activeSubject}
@@ -225,7 +248,7 @@ export default function Dashboard() {
                     />
                 </div>
 
-                {latestIntervention?.payload && (
+                {dashboardSignal?.payload && (
                     <div className="mb-8 rounded-3xl border border-indigo-200 bg-gradient-to-r from-indigo-50 via-white to-sky-50 p-6 shadow-sm">
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                             <div className="max-w-3xl">
@@ -234,34 +257,34 @@ export default function Dashboard() {
                                     Resume last intervention
                                 </div>
                                 <h2 className="mt-3 text-2xl font-black text-slate-900">
-                                    {latestIntervention.payload.recommendation_story?.headline
-                                        || latestIntervention.payload.next_step?.recommended_topic_title
-                                        || latestIntervention.payload.next_step?.recommended_concept_label
-                                        || `Continue ${latestIntervention.subject}`}
+                                    {dashboardSignal.payload.recommendation_story?.headline
+                                        || dashboardSignal.payload.next_step?.recommended_topic_title
+                                        || dashboardSignal.payload.next_step?.recommended_concept_label
+                                        || `Continue ${dashboardSignal.subject}`}
                                 </h2>
                                 <p className="mt-2 text-sm leading-7 text-slate-600">
-                                    {latestIntervention.payload.recommendation_story?.supporting_reason
-                                        || latestIntervention.payload.next_step?.reason
-                                        || latestIntervention.payload.recent_evidence?.summary
+                                    {dashboardSignal.payload.recommendation_story?.supporting_reason
+                                        || dashboardSignal.payload.next_step?.reason
+                                        || dashboardSignal.payload.recent_evidence?.summary
                                         || 'Resume the last graph-backed recommendation from your latest evidence.'}
                                 </p>
-                                {latestIntervention.payload.recent_evidence?.summary && (
+                                {dashboardSignal.payload.recent_evidence?.summary && (
                                     <p className="mt-3 text-xs font-semibold text-slate-500">
-                                        Latest evidence: {latestIntervention.payload.recent_evidence.summary}
+                                        Latest evidence: {dashboardSignal.payload.recent_evidence.summary}
                                     </p>
                                 )}
                             </div>
                             <div className="flex flex-wrap gap-3">
-                                {latestIntervention.subject && latestIntervention.subject !== activeSubject && (
+                                {dashboardSignal.subject && dashboardSignal.subject !== activeSubject && (
                                     <button
                                         type="button"
-                                        onClick={() => setActiveSubject(latestIntervention.subject)}
+                                        onClick={() => setActiveSubject(dashboardSignal.subject)}
                                         className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
                                     >
-                                        Open {latestIntervention.subject}
+                                        Open {dashboardSignal.subject}
                                     </button>
                                 )}
-                                {latestIntervention.payload.next_step?.recommended_topic_id && (
+                                {dashboardSignal.payload.next_step?.recommended_topic_id && (
                                     <button
                                         type="button"
                                         onClick={async () => {
@@ -269,12 +292,12 @@ export default function Dashboard() {
                                                 apiUrl,
                                                 token,
                                                 studentId: activeId,
-                                                subject: latestIntervention.subject,
-                                                sssLevel: latestIntervention.sssLevel || currentLevel,
-                                                term: Number(latestIntervention.term || currentTerm),
-                                                topicIds: [latestIntervention.payload.next_step.recommended_topic_id],
+                                                subject: dashboardSignal.subject,
+                                                sssLevel: dashboardSignal.sssLevel || currentLevel,
+                                                term: Number(dashboardSignal.term || currentTerm),
+                                                topicIds: [dashboardSignal.payload.next_step.recommended_topic_id],
                                             });
-                                            navigate(`/lesson/${latestIntervention.payload.next_step.recommended_topic_id}`);
+                                            navigate(`/lesson/${dashboardSignal.payload.next_step.recommended_topic_id}`);
                                         }}
                                         className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-700"
                                     >

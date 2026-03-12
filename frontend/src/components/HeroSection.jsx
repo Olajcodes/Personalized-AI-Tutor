@@ -9,8 +9,9 @@ const HeroSection = ({
   activeSubject,
   onSelectSubject,
   hasStartedLearning,
-  latestIntervention = null,
-  onResumeIntervention = null,
+  graphSignal = null,
+  signalSubject = null,
+  onResumeSignal = null,
 }) => {
   const { userData } = useUser();
   const firstName = userData?.first_name || 'Student';
@@ -22,6 +23,11 @@ const HeroSection = ({
     }
   };
 
+  const signalPayload = graphSignal?.payload || graphSignal || null;
+  const signalAnalytics = signalPayload?.analytics || null;
+  const signalNextStep = signalPayload?.next_step || null;
+  const signalRecommendation = signalPayload?.recommendation_story || null;
+
   return (
     <div className="relative flex-1 overflow-hidden rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
       <div className="pointer-events-none absolute right-0 top-0 -mr-8 -mt-8 h-64 w-64 rounded-full bg-indigo-50 opacity-50 blur-3xl" />
@@ -31,14 +37,14 @@ const HeroSection = ({
           Welcome back, {firstName}.
         </h1>
 
-        {latestIntervention?.payload && (
+        {signalPayload && (
           <div className="mb-5 rounded-2xl border border-indigo-200 bg-indigo-50/70 p-4">
             <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-700">
               <GitBranch className="h-3.5 w-3.5" />
               Live graph signal
-              {latestIntervention.payload.analytics?.source_label && (
+              {(signalAnalytics?.source_label || signalPayload?.intervention_timeline?.[0]?.source_label) && (
                 <span className="rounded-full bg-white px-2 py-1 text-[10px] text-indigo-600">
-                  {latestIntervention.payload.analytics.source_label}
+                  {signalAnalytics?.source_label || signalPayload?.intervention_timeline?.[0]?.source_label}
                 </span>
               )}
             </div>
@@ -46,37 +52,40 @@ const HeroSection = ({
               <div className="rounded-2xl bg-white p-3">
                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Focus now</p>
                 <p className="mt-1 text-sm font-bold text-slate-800">
-                  {latestIntervention.payload.analytics?.focus_concept
-                    || latestIntervention.payload.next_step?.recommended_concept_label
-                    || latestIntervention.payload.next_step?.recommended_topic_title
+                  {signalAnalytics?.focus_concept
+                    || signalPayload?.intervention_timeline?.[0]?.focus_concept_label
+                    || signalNextStep?.recommended_concept_label
+                    || signalNextStep?.recommended_topic_title
                     || 'Current lesson focus'}
                 </p>
               </div>
               <div className="rounded-2xl bg-white p-3">
                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Blocking prerequisite</p>
                 <p className="mt-1 text-sm font-bold text-slate-800">
-                  {latestIntervention.payload.analytics?.blocking_prerequisite
-                    || latestIntervention.payload.next_step?.prereq_gap_labels?.[0]
+                  {signalAnalytics?.blocking_prerequisite
+                    || signalRecommendation?.blocking_prerequisite_label
+                    || signalNextStep?.prereq_gap_labels?.[0]
                     || 'No active block detected'}
                 </p>
               </div>
               <div className="rounded-2xl bg-white p-3">
                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Next move</p>
                 <p className="mt-1 text-sm font-bold text-slate-800">
-                  {latestIntervention.payload.recommendation_story?.action_label
-                    || latestIntervention.payload.analytics?.outcome
+                  {signalRecommendation?.action_label
+                    || signalAnalytics?.outcome
+                    || signalPayload?.intervention_timeline?.[0]?.action_label
                     || 'Resume graph recommendation'}
                 </p>
               </div>
             </div>
-            {typeof onResumeIntervention === 'function' && (
+            {typeof onResumeSignal === 'function' && signalNextStep?.recommended_topic_id && (
               <button
                 type="button"
-                onClick={onResumeIntervention}
+                onClick={onResumeSignal}
                 className="mt-4 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700"
               >
                 <Sparkles className="h-4 w-4" />
-                Resume intervention
+                Open recommended lesson
               </button>
             )}
           </div>
@@ -112,22 +121,22 @@ const HeroSection = ({
             <p className="mb-6 text-slate-500">
               Ready to dive into <strong className="capitalize text-indigo-600">{activeSubject}</strong>?
             </p>
-            {latestIntervention?.payload?.analytics && (
+            {signalPayload && (
               <div className="mb-5 flex flex-wrap gap-3">
                 <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm">
                   <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
-                  {latestIntervention.payload.analytics.source_label || 'Latest evidence'}
+                  {signalAnalytics?.source_label || signalPayload?.intervention_timeline?.[0]?.source_label || 'Latest evidence'}
                 </div>
-                {latestIntervention.payload.analytics.focus_concept && (
+                {(signalAnalytics?.focus_concept || signalPayload?.intervention_timeline?.[0]?.focus_concept_label) && (
                   <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm">
                     <BookOpen className="h-3.5 w-3.5 text-cyan-500" />
-                    {latestIntervention.payload.analytics.focus_concept}
+                    {signalAnalytics?.focus_concept || signalPayload?.intervention_timeline?.[0]?.focus_concept_label}
                   </div>
                 )}
-                {latestIntervention.payload.analytics.blocking_prerequisite && (
+                {(signalAnalytics?.blocking_prerequisite || signalRecommendation?.blocking_prerequisite_label) && (
                   <div className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 shadow-sm">
                     <ShieldAlert className="h-3.5 w-3.5 text-amber-500" />
-                    {latestIntervention.payload.analytics.blocking_prerequisite}
+                    {signalAnalytics?.blocking_prerequisite || signalRecommendation?.blocking_prerequisite_label}
                   </div>
                 )}
               </div>
@@ -138,7 +147,7 @@ const HeroSection = ({
                 className="flex cursor-pointer items-center gap-2 rounded-xl bg-indigo-600 px-8 py-3.5 font-bold text-white shadow-lg shadow-indigo-200 transition-all hover:scale-105 hover:bg-indigo-700 active:scale-95"
               >
                 <PlayCircle className="h-5 w-5" />
-                {hasStartedLearning ? 'Resume Learning' : 'Start First Lesson'}
+                {signalNextStep?.recommended_topic_id ? `Continue ${signalSubject || activeSubject || 'learning'}` : hasStartedLearning ? 'Resume Learning' : 'Start First Lesson'}
               </button>
               <button
                 onClick={() => onSelectSubject(null)}
