@@ -147,6 +147,9 @@ class LearningPathService:
                 + ("." if len(unmapped_topic_titles) <= 4 else ", ...")
             )
 
+        blocking_candidates: list[dict] = []
+        weak_topic_candidates: list[dict] = []
+
         for topic in topics:
             topic_id = str(topic.id)
             concept_rows = topic_rows.get(topic_id, [])
@@ -160,43 +163,99 @@ class LearningPathService:
                         unmet_prereqs.append(prereq_id)
             unmet_prereqs = list(dict.fromkeys(unmet_prereqs))
             if unmet_prereqs:
-                blocking_concept = unmet_prereqs[0]
+                blocking_concept = min(
+                    unmet_prereqs,
+                    key=lambda concept_id: (
+                        float(mastery_map.get(concept_id, 0.0)),
+                        self._readable_concept_label(concept_id, fallback_topic_title=concept_to_topic.get(concept_id, (None, None))[1]),
+                    ),
+                )
                 blocking_topic_id, blocking_topic_title = concept_to_topic.get(
                     blocking_concept,
                     (None, None),
                 )
-                return PathNextOut(
-                    recommended_topic_id=blocking_topic_id,
-                    recommended_topic_title=blocking_topic_title,
-                    recommended_concept_id=blocking_concept,
-                    recommended_concept_label=self._readable_concept_label(
-                        blocking_concept,
-                        fallback_topic_title=blocking_topic_title,
-                    ),
-                    reason="A prerequisite concept is still weak; revisit the blocking foundation before proceeding.",
-                    prereq_gaps=unmet_prereqs,
-                    prereq_gap_labels=[
-                        self._readable_concept_label(item, fallback_topic_title=concept_to_topic.get(item, (None, None))[1])
-                        for item in unmet_prereqs
-                    ],
-                    scope_warning=scope_warning,
-                    unmapped_topic_titles=unmapped_topic_titles,
+                blocking_candidates.append(
+                    {
+                        "recommended_topic_id": blocking_topic_id,
+                        "recommended_topic_title": blocking_topic_title,
+                        "recommended_concept_id": blocking_concept,
+                        "recommended_concept_label": self._readable_concept_label(
+                            blocking_concept,
+                            fallback_topic_title=blocking_topic_title,
+                        ),
+                        "reason": (
+                            "A prerequisite concept is still weak; revisit the weakest blocking foundation before proceeding."
+                        ),
+                        "prereq_gaps": unmet_prereqs,
+                        "prereq_gap_labels": [
+                            self._readable_concept_label(
+                                item,
+                                fallback_topic_title=concept_to_topic.get(item, (None, None))[1],
+                            )
+                            for item in unmet_prereqs
+                        ],
+                        "score": float(mastery_map.get(blocking_concept, 0.0)),
+                    }
                 )
+                continue
 
             topic_mastery = mean([float(item["score"]) for item in concept_rows]) if concept_rows else 0.0
             if topic_mastery < MASTERY_THRESHOLD:
                 weakest_concept = min(concept_rows, key=lambda item: float(item["score"]))
-                return PathNextOut(
-                    recommended_topic_id=topic_id,
-                    recommended_topic_title=str(topic.title),
-                    recommended_concept_id=str(weakest_concept["concept_id"]),
-                    recommended_concept_label=str(weakest_concept["concept_label"]),
-                    reason="Recommended next topic based on the weakest concept still below mastery threshold.",
-                    prereq_gaps=[],
-                    prereq_gap_labels=[],
-                    scope_warning=scope_warning,
-                    unmapped_topic_titles=unmapped_topic_titles,
+                weak_topic_candidates.append(
+                    {
+                        "recommended_topic_id": topic_id,
+                        "recommended_topic_title": str(topic.title),
+                        "recommended_concept_id": str(weakest_concept["concept_id"]),
+                        "recommended_concept_label": str(weakest_concept["concept_label"]),
+                        "reason": "Recommended next topic based on the weakest ready concept cluster still below mastery threshold.",
+                        "prereq_gaps": [],
+                        "prereq_gap_labels": [],
+                        "score": float(weakest_concept["score"]),
+                    }
                 )
+
+        if blocking_candidates:
+            best_blocker = min(
+                blocking_candidates,
+                key=lambda item: (
+                    float(item["score"]),
+                    str(item["recommended_topic_title"] or ""),
+                    str(item["recommended_concept_label"] or ""),
+                ),
+            )
+            return PathNextOut(
+                recommended_topic_id=best_blocker["recommended_topic_id"],
+                recommended_topic_title=best_blocker["recommended_topic_title"],
+                recommended_concept_id=best_blocker["recommended_concept_id"],
+                recommended_concept_label=best_blocker["recommended_concept_label"],
+                reason=best_blocker["reason"],
+                prereq_gaps=list(best_blocker["prereq_gaps"]),
+                prereq_gap_labels=list(best_blocker["prereq_gap_labels"]),
+                scope_warning=scope_warning,
+                unmapped_topic_titles=unmapped_topic_titles,
+            )
+
+        if weak_topic_candidates:
+            best_ready_cluster = min(
+                weak_topic_candidates,
+                key=lambda item: (
+                    float(item["score"]),
+                    str(item["recommended_topic_title"] or ""),
+                    str(item["recommended_concept_label"] or ""),
+                ),
+            )
+            return PathNextOut(
+                recommended_topic_id=best_ready_cluster["recommended_topic_id"],
+                recommended_topic_title=best_ready_cluster["recommended_topic_title"],
+                recommended_concept_id=best_ready_cluster["recommended_concept_id"],
+                recommended_concept_label=best_ready_cluster["recommended_concept_label"],
+                reason=best_ready_cluster["reason"],
+                prereq_gaps=[],
+                prereq_gap_labels=[],
+                scope_warning=scope_warning,
+                unmapped_topic_titles=unmapped_topic_titles,
+            )
 
         mapped_topics = [topic for topic in topics if topic_rows.get(str(topic.id))]
         weakest_topic = min(
