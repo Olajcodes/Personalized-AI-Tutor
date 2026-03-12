@@ -43,7 +43,7 @@ const LeaderboardItem = ({ rank, name, points, isCurrentUser }) => {
   );
 };
 
-export default function Leaderboard({ leagueName = "Gold League" }) {
+export default function Leaderboard({ leagueName = "Current League" }) {
   const { token } = useAuth();
   const { userData, studentData } = useUser();
   const activeId = studentData?.user_id || studentData?.student_id || userData?.id;

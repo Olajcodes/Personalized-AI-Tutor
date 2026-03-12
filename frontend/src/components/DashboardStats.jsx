@@ -19,7 +19,7 @@ const DashboardStats = () => {
   const streak = studentData?.streak_days || 0;
   const masteryPoints = studentData?.mastery_score || 0;
   const conceptsMastered = studentData?.concepts_mastered || 0;
-  const totalConcepts = studentData?.total_concepts || 45; // Or wherever your total comes from
+  const totalConcepts = studentData?.total_concepts || 0;
   const studyTime = studentData?.study_time_minutes || 0;
 
   return (

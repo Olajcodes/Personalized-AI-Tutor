@@ -1,12 +1,14 @@
-import { useState, useRef, useEffect } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import NotificationModal from './NotificationModal';
-import { useUser } from '../context/UserContext'; 
+import { useUser } from '../context/UserContext';
+import { readLatestGraphIntervention } from '../services/graphIntervention';
 
 const Navbar = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef(null);
-  const { userData, studentData } = useUser(); 
+  const { userData, studentData } = useUser();
+  const activeId = studentData?.user_id || studentData?.student_id || userData?.id;
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -18,16 +20,21 @@ const Navbar = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const displayName = userData 
-    ? `${userData.first_name || ''} ${userData.last_name || ''}`.trim() 
+  const displayName = userData
+    ? `${userData.first_name || ''} ${userData.last_name || ''}`.trim()
     : 'Student';
 
   const displayLevel = studentData?.sss_level || 'Student';
+  const displayLeague = studentData?.league_name || 'Current League';
   const avatarUrl = userData?.avatar_url || null;
+  const latestIntervention = useMemo(
+    () => (activeId ? readLatestGraphIntervention(activeId) : null),
+    [activeId],
+  );
 
   const getInitials = (name) => {
-    if (!name || name === 'Student') return "U"; 
-    const nameParts = name.trim().split(" ");
+    if (!name || name === 'Student') return 'U';
+    const nameParts = name.trim().split(' ');
     if (nameParts.length >= 2) {
       return `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`.toUpperCase();
     }
@@ -36,11 +43,7 @@ const Navbar = () => {
 
   return (
     <nav className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm w-full">
-      
-      {/* 🎯 OUTER CONTAINER: Matches Dashboard's width */}
       <div className="max-w-9xl mx-auto px-6 py-3 flex items-center gap-6">
-        
-        {/* 1. LEFT ZONE (Matches the 'Welcome back' card) */}
         <div className="flex-[3] flex items-center justify-between">
           <NavLink to="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity flex-shrink-0">
             <div className="bg-indigo-600 p-1.5 rounded-lg text-white shadow-md">
@@ -55,26 +58,22 @@ const Navbar = () => {
             <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
             </span>
-            <input 
-              type="text" 
-              placeholder="Search topics..." 
+            <input
+              type="text"
+              placeholder="Search topics..."
               className="w-full bg-slate-50 border border-slate-200 rounded-full py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all shadow-inner"
             />
           </div>
         </div>
 
-        {/* 2. RIGHT ZONE (Matches the 'AI Recommended' card)
-            🎯 CHANGE: We swapped 'justify-end' for 'justify-center' 🎯
-        */}
         <div className="flex-1 flex items-center justify-center gap-6">
-          
           <div className="relative" ref={notifRef}>
-            <button 
+            <button
               onClick={() => setShowNotifications(!showNotifications)}
               className={`relative transition-colors ${showNotifications ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-              <span className="absolute top-0 right-1 w-2 h-2 bg-rose-500 rounded-full border border-white"></span>
+              {latestIntervention ? <span className="absolute top-0 right-1 w-2 h-2 bg-rose-500 rounded-full border border-white"></span> : null}
             </button>
             {showNotifications && <NotificationModal onClose={() => setShowNotifications(false)} />}
           </div>
@@ -87,10 +86,10 @@ const Navbar = () => {
                 {displayName}
               </p>
               <p className="text-[10px] font-bold text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full inline-block mt-0.5 uppercase tracking-wider">
-                {displayLevel} • Gold League
+                {displayLevel} � {displayLeague}
               </p>
             </div>
-            
+
             <div className="w-10 h-10 rounded-full overflow-hidden border border-slate-200 bg-indigo-50 flex items-center justify-center flex-shrink-0 group-hover:border-indigo-300 transition-colors shadow-sm">
               {avatarUrl ? (
                 <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
@@ -102,7 +101,6 @@ const Navbar = () => {
             </div>
           </NavLink>
         </div>
-
       </div>
     </nav>
   );

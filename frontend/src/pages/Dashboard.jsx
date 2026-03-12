@@ -403,7 +403,7 @@ export default function Dashboard() {
 
                 <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
                     <LearningTasks tasks={dashboardTasks} />
-                    <Leaderboard leagueName="Gold League" />
+                    <Leaderboard leagueName={studentData?.league_name || 'Current League'} />
                 </div>
 
                 <Footer />
