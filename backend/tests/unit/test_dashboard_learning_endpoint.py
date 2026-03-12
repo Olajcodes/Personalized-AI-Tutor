@@ -1,0 +1,74 @@
+from types import SimpleNamespace
+from uuid import uuid4
+
+from fastapi.testclient import TestClient
+
+from backend.core.auth import get_current_user
+from backend.main import app
+
+
+def _override_user(user_id):
+    def _inner():
+        return SimpleNamespace(id=user_id, role="student")
+
+    return _inner
+
+
+def test_dashboard_bootstrap_requires_matching_student_id():
+    auth_user_id = uuid4()
+    payload_student_id = uuid4()
+    client = TestClient(app)
+    app.dependency_overrides[get_current_user] = _override_user(auth_user_id)
+
+    response = client.get(
+        "/api/v1/learning/dashboard/bootstrap",
+        params={"student_id": str(payload_student_id)},
+    )
+
+    app.dependency_overrides.clear()
+    assert response.status_code == 403
+
+
+def test_dashboard_bootstrap_returns_active_subject_and_course(monkeypatch):
+    student_id = uuid4()
+
+    monkeypatch.setattr(
+        "backend.endpoints.dashboard_learning.DashboardExperienceService.bootstrap",
+        lambda self, **kwargs: {
+            "student_id": str(student_id),
+            "sss_level": "SSS2",
+            "term": 2,
+            "available_subjects": ["english", "math"],
+            "active_subject": "english",
+            "course_bootstrap": {
+                "student_id": str(student_id),
+                "subject": "english",
+                "sss_level": "SSS2",
+                "term": 2,
+                "topics": [],
+                "nodes": [],
+                "edges": [],
+                "next_step": None,
+                "recent_evidence": None,
+                "intervention_timeline": [],
+                "recommendation_story": None,
+                "map_error": None,
+                "warmed_topic_ids": [],
+                "cache_hit_topic_ids": [],
+                "failed_topic_ids": [],
+            },
+        },
+    )
+
+    client = TestClient(app)
+    app.dependency_overrides[get_current_user] = _override_user(student_id)
+    response = client.get(
+        "/api/v1/learning/dashboard/bootstrap",
+        params={"student_id": str(student_id)},
+    )
+
+    app.dependency_overrides.clear()
+    assert response.status_code == 200
+    body = response.json()
+    assert body["active_subject"] == "english"
+    assert body["course_bootstrap"]["subject"] == "english"

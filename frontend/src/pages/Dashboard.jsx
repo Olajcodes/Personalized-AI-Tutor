@@ -52,6 +52,15 @@ const normalizeCourseBootstrap = (data) => ({
     recommendation_story: data?.recommendation_story || null,
 });
 
+const EMPTY_MAP_DATA = {
+    nodes: [],
+    edges: [],
+    next_step: null,
+    recent_evidence: null,
+    intervention_timeline: [],
+    recommendation_story: null,
+};
+
 export default function Dashboard() {
     const { token } = useAuth();
     const { userData, studentData } = useUser();
@@ -68,14 +77,7 @@ export default function Dashboard() {
     );
 
     const [activeSubject, setActiveSubject] = useState(() => localStorage.getItem('active_subject') || null);
-    const [mapData, setMapData] = useState({
-        nodes: [],
-        edges: [],
-        next_step: null,
-        recent_evidence: null,
-        intervention_timeline: [],
-        recommendation_story: null,
-    });
+    const [mapData, setMapData] = useState(EMPTY_MAP_DATA);
     const [isLoadingMap, setIsLoadingMap] = useState(false);
     const [mapError, setMapError] = useState('');
     const [graphIntervention, setGraphIntervention] = useState(null);
@@ -145,22 +147,21 @@ export default function Dashboard() {
     }, [interventionScope]);
 
     useEffect(() => {
-        if (!activeId || !token || !activeSubject) {
+        if (!activeId || !token) {
             return;
         }
 
-        const fetchLearningMap = async () => {
+        const fetchDashboardBootstrap = async () => {
             setIsLoadingMap(true);
             setMapError('');
 
             try {
-                const queryParams = new URLSearchParams({
-                    student_id: activeId,
-                    subject: activeSubject,
-                    term: currentTerm,
-                });
+                const queryParams = new URLSearchParams({ student_id: activeId });
+                if (activeSubject) {
+                    queryParams.set('subject', activeSubject);
+                }
 
-                const response = await fetch(`${apiUrl}/learning/course/bootstrap?${queryParams.toString()}`, {
+                const response = await fetch(`${apiUrl}/learning/dashboard/bootstrap?${queryParams.toString()}`, {
                     method: 'GET',
                     headers: {
                         Authorization: `Bearer ${token}`,
@@ -173,65 +174,22 @@ export default function Dashboard() {
                 }
 
                 const data = await response.json();
-                setMapData(normalizeCourseBootstrap(data));
-                setMapError(data?.map_error || '');
+                if (data?.active_subject && data.active_subject !== activeSubject) {
+                    setActiveSubject(data.active_subject);
+                }
+                setMapData(normalizeCourseBootstrap(data?.course_bootstrap || {}));
+                setMapError(data?.course_bootstrap?.map_error || '');
             } catch (err) {
                 console.error('Map fetch error:', err);
-                setMapData({
-                    nodes: [],
-                    edges: [],
-                    next_step: null,
-                    recent_evidence: null,
-                    intervention_timeline: [],
-                    recommendation_story: null,
-                });
+                setMapData(EMPTY_MAP_DATA);
                 setMapError(err.message || 'Learning map unavailable.');
             } finally {
                 setIsLoadingMap(false);
             }
         };
 
-        fetchLearningMap();
-    }, [activeId, activeSubject, currentLevel, currentTerm, token, apiUrl]);
-
-    useEffect(() => {
-        if (activeSubject || !activeId || !token || latestIntervention?.subject) {
-            return;
-        }
-
-        let cancelled = false;
-        const hydrateLatestScope = async () => {
-            try {
-                const queryParams = new URLSearchParams({ student_id: activeId });
-                const response = await fetch(`${apiUrl}/learning/course/latest-intervention?${queryParams.toString()}`, {
-                    method: 'GET',
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                    },
-                });
-                if (!response.ok) {
-                    return;
-                }
-                const data = await response.json();
-                if (cancelled) {
-                    return;
-                }
-                if (data?.subject) {
-                    setActiveSubject(data.subject);
-                    setMapData(normalizeCourseBootstrap(data));
-                    setMapError(data?.map_error || '');
-                }
-            } catch (error) {
-                console.warn('Latest intervention bootstrap unavailable:', error);
-            }
-        };
-
-        hydrateLatestScope();
-        return () => {
-            cancelled = true;
-        };
-    }, [activeId, activeSubject, apiUrl, latestIntervention, token]);
+        fetchDashboardBootstrap();
+    }, [activeId, activeSubject, token, apiUrl]);
 
     const openTopicFromGraph = async (topicId) => {
         if (!topicId) return;
