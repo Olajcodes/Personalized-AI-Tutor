@@ -198,6 +198,7 @@ export default function LessonPage() {
   const [chatInput, setChatInput] = useState('');
   const [assessmentAnswer, setAssessmentAnswer] = useState('');
   const [pendingAssessment, setPendingAssessment] = useState(null);
+  const [lastAssessmentReview, setLastAssessmentReview] = useState(null);
   const [isBusy, setIsBusy] = useState(false);
   const [streamPhase, setStreamPhase] = useState('');
   const [status, setStatus] = useState('loading');
@@ -418,7 +419,7 @@ export default function LessonPage() {
     }
   };
 
-  const startAssessment = async () => {
+  const startAssessment = async (difficulty = 'medium') => {
     if (!sessionId || isBusy) return;
     setIsBusy(true);
     try {
@@ -429,13 +430,20 @@ export default function LessonPage() {
         sss_level: currentLevel,
         term: currentTerm,
         topic_id: topicId,
-        difficulty: 'medium',
+        difficulty,
       });
       setPendingAssessment(out);
+      setAssessmentAnswer('');
+      setLastAssessmentReview(null);
       appendAssistant({
         assistant_message: `Checkpoint: ${out.question}`,
-        key_points: [`Focus concept: ${out.concept_label}`],
-        next_action: 'Answer the checkpoint below to update your mastery.',
+        key_points: [
+          `Focus concept: ${out.concept_label}`,
+          `Difficulty: ${difficulty}`,
+        ],
+        next_action: difficulty === 'hard'
+          ? 'Push for a sharper answer and justify it clearly.'
+          : 'Answer the checkpoint below to update your mastery.',
       });
     } catch (err) {
       setMessages((prev) => [...prev, { role: 'assistant', content: err.message || 'Checkpoint unavailable.' }]);
@@ -488,6 +496,41 @@ export default function LessonPage() {
     sendChat(action.prompt);
   };
 
+  const explainLastMistake = async () => {
+    if (!lastAssessmentReview || lastAssessmentReview.is_correct || isBusy) return;
+    setIsBusy(true);
+    try {
+      const out = await postJson('/tutor/explain-mistake', {
+        student_id: activeId,
+        session_id: sessionId,
+        subject: currentSubject,
+        sss_level: currentLevel,
+        term: currentTerm,
+        topic_id: topicId,
+        question: lastAssessmentReview.question,
+        student_answer: lastAssessmentReview.studentAnswer,
+        correct_answer: lastAssessmentReview.idealAnswer,
+      });
+      appendAssistant({
+        assistant_message: out.explanation,
+        key_points: [
+          `Focus concept: ${lastAssessmentReview.conceptLabel}`,
+          out.improvement_tip,
+        ].filter(Boolean),
+        prerequisite_warning: lastAssessmentReview.graphRemediation?.blocking_prerequisite_label
+          ? `Fix ${lastAssessmentReview.graphRemediation.blocking_prerequisite_label} before retrying this concept.`
+          : null,
+        next_action: lastAssessmentReview.recommendedTopicTitle
+          ? `Revise ${lastAssessmentReview.recommendedTopicTitle}, then retry this checkpoint.`
+          : 'Retry the checkpoint after revising the core rule and one worked example.',
+      });
+    } catch (err) {
+      setMessages((prev) => [...prev, { role: 'assistant', content: err.message || 'Mistake explanation unavailable.' }]);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   const handleDrill = async () => {
     if (!sessionId || isBusy) return;
     setIsBusy(true);
@@ -532,6 +575,8 @@ export default function LessonPage() {
     if (!pendingAssessment || !assessmentAnswer.trim() || isBusy) return;
     setIsBusy(true);
     try {
+      const submittedAnswer = assessmentAnswer.trim();
+      const submittedQuestion = pendingAssessment.question;
       const out = await postJson('/tutor/assessment/submit', {
         student_id: activeId,
         session_id: sessionId,
@@ -540,7 +585,7 @@ export default function LessonPage() {
         sss_level: currentLevel,
         term: currentTerm,
         topic_id: topicId,
-        answer: assessmentAnswer,
+        answer: submittedAnswer,
       });
       const recommendedTopicId = out.graph_remediation?.recommended_next_topic_id || out.recommended_topic_id || null;
       await prewarmTopics({
@@ -550,6 +595,19 @@ export default function LessonPage() {
         sssLevel: currentLevel,
         term: currentTerm,
         topicIds: recommendedTopicId ? [recommendedTopicId] : [],
+      });
+      setLastAssessmentReview({
+        assessmentId: pendingAssessment.assessment_id,
+        question: submittedQuestion,
+        studentAnswer: submittedAnswer,
+        idealAnswer: out.ideal_answer,
+        isCorrect: out.is_correct,
+        score: out.score,
+        conceptLabel: out.concept_label,
+        conceptId: out.concept_id,
+        recommendedTopicId: recommendedTopicId,
+        recommendedTopicTitle: out.graph_remediation?.recommended_next_topic_title || out.recommended_topic_title || null,
+        graphRemediation: out.graph_remediation || null,
       });
       setPendingAssessment(null);
       setAssessmentAnswer('');
@@ -839,6 +897,46 @@ export default function LessonPage() {
                         <CheckCircle2 size={16} />
                         Submit checkpoint
                       </button>
+                      <button type="button" onClick={() => startAssessment('hard')} disabled={isBusy} className="inline-flex items-center gap-2 rounded-2xl border border-emerald-300 bg-white px-4 py-3 text-sm font-bold text-emerald-700 disabled:opacity-60">
+                        <Zap size={16} />
+                        Try harder checkpoint
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {lastAssessmentReview && (
+                  <div className={`mb-4 rounded-[1.5rem] border p-4 ${lastAssessmentReview.isCorrect ? 'border-indigo-200 bg-indigo-50' : 'border-amber-200 bg-amber-50'}`}>
+                    <div className={`mb-3 flex items-center gap-2 ${lastAssessmentReview.isCorrect ? 'text-indigo-700' : 'text-amber-700'}`}>
+                      {lastAssessmentReview.isCorrect ? <CheckCircle2 size={16} /> : <ShieldAlert size={16} />}
+                      <p className="text-xs font-black uppercase tracking-[0.2em]">
+                        {lastAssessmentReview.isCorrect ? 'Checkpoint cleared' : 'Checkpoint follow-up'}
+                      </p>
+                    </div>
+                    <p className="text-sm font-semibold text-slate-800">
+                      {lastAssessmentReview.conceptLabel} - {Math.round((lastAssessmentReview.score || 0) * 100)}%
+                    </p>
+                    <p className="mt-2 text-xs leading-6 text-slate-600">
+                      {lastAssessmentReview.isCorrect
+                        ? 'Push into a harder checkpoint or open the recommended next lesson while the concept is warm.'
+                        : 'Review the mistake explanation, then retry or bridge the blocking prerequisite.'}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-3">
+                      {!lastAssessmentReview.isCorrect && (
+                        <button type="button" onClick={explainLastMistake} disabled={isBusy} className="inline-flex items-center gap-2 rounded-2xl bg-amber-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-60">
+                          <ShieldAlert size={16} />
+                          Explain my mistake
+                        </button>
+                      )}
+                      <button type="button" onClick={() => startAssessment(lastAssessmentReview.isCorrect ? 'hard' : 'medium')} disabled={isBusy} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 disabled:opacity-60">
+                        <Target size={16} />
+                        {lastAssessmentReview.isCorrect ? 'Try harder checkpoint' : 'Retry checkpoint'}
+                      </button>
+                      {lastAssessmentReview.recommendedTopicId && (
+                        <button type="button" onClick={() => openRecommendedLesson(lastAssessmentReview.recommendedTopicId)} className="inline-flex items-center gap-2 rounded-2xl border border-indigo-200 bg-white px-4 py-3 text-sm font-bold text-indigo-700">
+                          Open recommended lesson
+                          <ArrowRight size={16} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
