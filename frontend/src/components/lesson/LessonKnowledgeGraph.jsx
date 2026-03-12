@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, GitBranch, Route, ShieldAlert, Sparkles } from 'lucide-react';
+import { ArrowRight, Brain, GitBranch, PlayCircle, Route, ShieldAlert, Sparkles } from 'lucide-react';
 
 const ROLE_X = {
   prerequisite: 136,
@@ -96,8 +96,16 @@ function buildLayout(graphContext) {
   return { grouped, nodes, renderedEdges };
 }
 
-export default function LessonKnowledgeGraph({ graphContext, nextUnlock, whyTopicDetail = null }) {
+export default function LessonKnowledgeGraph({
+  graphContext,
+  nextUnlock,
+  whyTopicDetail = null,
+  onOpenTopic = null,
+}) {
   const { grouped, nodes, renderedEdges } = useMemo(() => buildLayout(graphContext), [graphContext]);
+  const [selectedConceptId, setSelectedConceptId] = useState(null);
+  const preferredNode = nodes.find((node) => node.role === 'current') || nodes[0] || null;
+  const selectedNode = nodes.find((node) => node.concept_id === selectedConceptId) || preferredNode || null;
 
   return (
     <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
@@ -147,12 +155,15 @@ export default function LessonKnowledgeGraph({ graphContext, nextUnlock, whyTopi
           {nodes.map((node, index) => {
             const tone = MASTERY_TONE[node.mastery_state] || MASTERY_TONE.unassessed;
             const labelLines = wrapLabel(node.label);
+            const isSelected = selectedNode?.concept_id === node.concept_id;
             return (
               <motion.g
                 key={node.concept_id}
                 initial={{ opacity: 0, scale: 0.92, y: 12 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 transition={{ duration: 0.34, delay: index * 0.05 }}
+                onClick={() => setSelectedConceptId(node.concept_id)}
+                className="cursor-pointer"
               >
                 <motion.circle
                   cx={node.x}
@@ -163,7 +174,14 @@ export default function LessonKnowledgeGraph({ graphContext, nextUnlock, whyTopi
                   transition={node.role === 'current' ? { repeat: Infinity, duration: 2.4, ease: 'easeInOut' } : undefined}
                   style={{ transformOrigin: `${node.x}px ${node.y}px` }}
                 />
-                <circle cx={node.x} cy={node.y} r={node.role === 'current' ? 34 : 28} fill={tone.fill} stroke={tone.node} strokeWidth="2.4" />
+                <circle
+                  cx={node.x}
+                  cy={node.y}
+                  r={node.role === 'current' ? 34 : 28}
+                  fill={tone.fill}
+                  stroke={tone.node}
+                  strokeWidth={isSelected ? "3.5" : "2.4"}
+                />
                 <text x={node.x} y={node.y - 5} textAnchor="middle" fontSize="11" fontWeight="800" fill={tone.text}>
                   {labelLines.map((line, lineIndex) => (
                     <tspan key={`${node.concept_id}-${lineIndex}`} x={node.x} dy={lineIndex === 0 ? 0 : 13}>{line}</tspan>
@@ -191,6 +209,46 @@ export default function LessonKnowledgeGraph({ graphContext, nextUnlock, whyTopi
           <p className="mt-1 font-semibold">{nextUnlock?.topic_title || nextUnlock?.concept_label || 'Stay with this concept cluster a bit longer.'}</p>
         </div>
       </div>
+
+      {selectedNode && (
+        <div className="mt-4 rounded-[1.5rem] border border-slate-200 bg-white p-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="flex items-center gap-2 text-slate-700">
+                <Brain className="h-4 w-4 text-indigo-600" />
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Selected graph node</p>
+              </div>
+              <h3 className="mt-3 text-lg font-black text-slate-900">{selectedNode.label}</h3>
+              <p className="mt-2 text-sm leading-7 text-slate-600">
+                {selectedNode.topic_title
+                  ? `${selectedNode.role === 'prerequisite' ? 'Supports' : selectedNode.role === 'downstream' ? 'Unlocks through' : 'Anchors'} ${selectedNode.topic_title}.`
+                  : 'This concept is part of the current graph slice.'}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-600">
+                  {selectedNode.role}
+                </span>
+                <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[11px] font-bold text-indigo-700">
+                  {Math.round((selectedNode.mastery_score || 0) * 100)}% mastery
+                </span>
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-bold text-slate-600">
+                  {selectedNode.is_unlocked ? 'Unlocked' : 'Still locked'}
+                </span>
+              </div>
+            </div>
+            {selectedNode.topic_id && typeof onOpenTopic === 'function' && (
+              <button
+                type="button"
+                onClick={() => onOpenTopic(selectedNode.topic_id)}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-black text-white hover:bg-indigo-700"
+              >
+                Open related lesson
+                <PlayCircle className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {whyTopicDetail && (
         <div className="mt-4 rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">

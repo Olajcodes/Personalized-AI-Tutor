@@ -889,6 +889,7 @@ export default function LessonPage() {
               graphContext={graphContext}
               nextUnlock={bootstrap?.next_unlock}
               whyTopicDetail={whyTopicDetail}
+              onOpenTopic={openRecommendedLesson}
             />
 
             <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
