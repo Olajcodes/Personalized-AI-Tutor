@@ -80,6 +80,19 @@ def test_course_bootstrap_returns_graph_ready_payload(monkeypatch):
                 "strongest_drop_concept_label": "Simple Interest",
                 "summary": "Latest practice strengthened Arithmetic Progression but exposed a gap in Simple Interest.",
             },
+            "intervention_timeline": [
+                {
+                    "kind": "quiz",
+                    "source": "practice",
+                    "source_label": "Quiz result",
+                    "created_at": "2026-03-12T10:00:00Z",
+                    "summary": "Quiz result strengthened Arithmetic Progression but exposed a gap in Simple Interest.",
+                    "focus_concept_label": "Simple Interest",
+                    "strongest_gain_concept_label": "Arithmetic Progression",
+                    "strongest_drop_concept_label": "Simple Interest",
+                    "action_label": "Review weak concept",
+                }
+            ],
             "recommendation_story": {
                 "status": "advance_to_next",
                 "headline": "Push into Sequences and Series next.",
@@ -116,4 +129,5 @@ def test_course_bootstrap_returns_graph_ready_payload(monkeypatch):
     assert body["topics"][0]["concept_label"] == "Arithmetic Progression"
     assert body["next_step"]["recommended_concept_label"] == "Arithmetic Progression"
     assert body["recent_evidence"]["strongest_drop_concept_label"] == "Simple Interest"
+    assert body["intervention_timeline"][0]["source_label"] == "Quiz result"
     assert body["recommendation_story"]["headline"] == "Push into Sequences and Series next."

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
 import CourseSidebar from '../components/CourseSidebar';
+import InterventionTimeline from '../components/InterventionTimeline';
 import { PlayCircle, Clock, BookOpen, GitBranch, Lock, Sparkles } from 'lucide-react';
 import {
   buildGraphInterventionScope,
@@ -67,6 +68,7 @@ const CoursePage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [nextStep, setNextStep] = useState(null);
   const [recentEvidence, setRecentEvidence] = useState(null);
+  const [interventionTimeline, setInterventionTimeline] = useState([]);
   const [recommendationStory, setRecommendationStory] = useState(null);
   const [mapError, setMapError] = useState('');
   const [graphIntervention, setGraphIntervention] = useState(null);
@@ -85,6 +87,7 @@ const CoursePage = () => {
   const effectiveRecentEvidence = graphIntervention?.recent_evidence || recentEvidence || null;
   const effectiveRecommendationStory = graphIntervention?.recommendation_story || recommendationStory || null;
   const effectiveAnalytics = graphIntervention?.analytics || null;
+  const effectiveTimeline = Array.isArray(interventionTimeline) ? interventionTimeline : [];
 
   useEffect(() => {
     if (!interventionScope) {
@@ -124,6 +127,7 @@ const CoursePage = () => {
         setTopics(safeArray(data?.topics));
         setNextStep(data?.next_step || null);
         setRecentEvidence(data?.recent_evidence || null);
+        setInterventionTimeline(safeArray(data?.intervention_timeline));
         setRecommendationStory(data?.recommendation_story || null);
         setMapError(data?.map_error || '');
 
@@ -132,6 +136,7 @@ const CoursePage = () => {
         setTopics([]);
         setNextStep(null);
         setRecentEvidence(null);
+        setInterventionTimeline([]);
         setRecommendationStory(null);
       } finally {
         setIsLoading(false);
@@ -267,6 +272,16 @@ const CoursePage = () => {
                   {effectiveRecentEvidence.strongest_drop_concept_label ? ` · Gap: ${effectiveRecentEvidence.strongest_drop_concept_label}` : ''}
                 </p>
               )}
+            </div>
+          )}
+
+          {effectiveTimeline.length > 0 && (
+            <div className="mb-6">
+              <InterventionTimeline
+                title="Evidence Timeline"
+                subtitle="Recent mastery evidence for this subject scope, straight from the backend graph state."
+                timeline={effectiveTimeline}
+              />
             </div>
           )}
 

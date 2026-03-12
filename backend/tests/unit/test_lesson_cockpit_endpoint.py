@@ -49,6 +49,7 @@ def test_lesson_cockpit_returns_merged_payload(monkeypatch):
             "term": payload.term,
             "topics": [],
             "next_step": None,
+            "intervention_timeline": [],
             "map_error": None,
             "tutor_bootstrap": {
                 "session_id": str(uuid4()),
@@ -130,4 +131,5 @@ def test_lesson_cockpit_returns_merged_payload(monkeypatch):
     body = response.json()
     assert body["topic_id"] == str(topic_id)
     assert body["tutor_bootstrap"]["lesson"]["title"] == "Lesson: Sequences and Series"
+    assert body["intervention_timeline"] == []
     assert body["why_topic_detail"]["explanation"] == "Builds later algebra."

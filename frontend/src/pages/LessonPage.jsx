@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 
 import CourseSidebar from '../components/CourseSidebar';
+import InterventionTimeline from '../components/InterventionTimeline';
 import LessonKnowledgeGraph from '../components/lesson/LessonKnowledgeGraph';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
@@ -259,6 +260,7 @@ export default function LessonPage() {
   const sessionId = bootstrap?.session_id || null;
   const quickActions = safeArray(bootstrap?.suggested_actions);
   const recentEvidence = bootstrap?.recent_evidence || null;
+  const interventionTimeline = safeArray(bootstrap?.intervention_timeline);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -318,6 +320,8 @@ export default function LessonPage() {
         const bootstrapJson = {
           ...cockpitJson.tutor_bootstrap,
           recent_evidence: cockpitJson.recent_evidence || null,
+          intervention_timeline: safeArray(cockpitJson.intervention_timeline),
+          why_topic_detail: cockpitJson.why_topic_detail || null,
         };
         setSidebarTopics(safeArray(cockpitJson.topics));
         setBootstrap(bootstrapJson);
@@ -1001,6 +1005,15 @@ export default function LessonPage() {
                 )}
               </div>
             </section>
+
+            {interventionTimeline.length > 0 && (
+              <InterventionTimeline
+                title="Intervention Timeline"
+                subtitle="Recent quiz and checkpoint evidence shaping this lesson path."
+                timeline={interventionTimeline}
+                compact
+              />
+            )}
 
             <section className="rounded-[2rem] border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-100 p-5">

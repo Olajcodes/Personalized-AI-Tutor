@@ -20,6 +20,7 @@ from backend.models.topic import Topic
 from backend.repositories.graph_repo import GraphRepository
 from backend.schemas.course_schema import (
     CourseBootstrapOut,
+    CourseInterventionEventOut,
     CourseBootstrapTopicOut,
     CourseRecentEvidenceOut,
     CourseRecommendationStoryOut,
@@ -87,7 +88,34 @@ class CourseExperienceService:
         sss_level: str,
         term: int,
     ) -> CourseRecentEvidenceOut | None:
-        event = (
+        events = self._recent_scope_events(
+            student_id=student_id,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+            limit=1,
+        )
+        if not events:
+            return None
+        signal = self._event_signal(events[0])
+        return CourseRecentEvidenceOut(
+            source=signal["source"],
+            created_at=signal["created_at"],
+            strongest_gain_concept_label=signal["strongest_gain_concept_label"],
+            strongest_drop_concept_label=signal["strongest_drop_concept_label"],
+            summary=signal["summary"],
+        )
+
+    def _recent_scope_events(
+        self,
+        *,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+        limit: int = 5,
+    ) -> list[MasteryUpdateEvent]:
+        return (
             self.db.query(MasteryUpdateEvent)
             .filter(
                 MasteryUpdateEvent.student_id == student_id,
@@ -96,11 +124,24 @@ class CourseExperienceService:
                 MasteryUpdateEvent.term == term,
             )
             .order_by(desc(MasteryUpdateEvent.created_at))
-            .first()
+            .limit(limit)
+            .all()
         )
-        if event is None:
-            return None
 
+    @staticmethod
+    def _event_kind_and_label(event: MasteryUpdateEvent) -> tuple[str, str]:
+        source = str(getattr(event, "source", "") or "").strip().lower()
+        if source == "practice":
+            if getattr(event, "quiz_id", None):
+                return "quiz", "Quiz result"
+            return "checkpoint", "Tutor checkpoint"
+        if source == "diagnostic":
+            return "diagnostic", "Diagnostic"
+        if source == "exam_prep":
+            return "exam_prep", "Exam prep"
+        return "practice", "Practice"
+
+    def _event_signal(self, event: MasteryUpdateEvent) -> dict[str, str | None]:
         strongest_gain = None
         strongest_drop = None
         gain_delta = 0.0
@@ -118,23 +159,66 @@ class CourseExperienceService:
                 drop_delta = delta
                 strongest_drop = concept_label
 
+        kind, source_label = self._event_kind_and_label(event)
+        focus_concept_label = strongest_drop or strongest_gain
         if strongest_gain and strongest_drop:
-            summary = f"Latest {event.source} strengthened {strongest_gain} but exposed a gap in {strongest_drop}."
-        elif strongest_gain:
-            summary = f"Latest {event.source} improved {strongest_gain}."
+            summary = f"{source_label} strengthened {strongest_gain} but exposed a gap in {strongest_drop}."
+            action_label = "Review weak concept"
         elif strongest_drop:
-            summary = f"Latest {event.source} showed a weaker result in {strongest_drop}."
+            summary = f"{source_label} showed a weaker result in {strongest_drop}."
+            action_label = "Repair prerequisite"
+        elif strongest_gain:
+            summary = f"{source_label} improved {strongest_gain}."
+            action_label = "Push the next concept"
         else:
-            summary = f"Latest {event.source} updated your mastery profile."
+            summary = f"{source_label} updated your mastery profile."
+            action_label = "Review latest evidence"
 
         created_at = event.created_at.isoformat() if getattr(event, "created_at", None) else ""
-        return CourseRecentEvidenceOut(
-            source=str(event.source),
-            created_at=created_at,
-            strongest_gain_concept_label=strongest_gain,
-            strongest_drop_concept_label=strongest_drop,
-            summary=summary,
+        return {
+            "kind": kind,
+            "source": str(event.source),
+            "source_label": source_label,
+            "created_at": created_at,
+            "summary": summary,
+            "focus_concept_label": focus_concept_label,
+            "strongest_gain_concept_label": strongest_gain,
+            "strongest_drop_concept_label": strongest_drop,
+            "action_label": action_label,
+        }
+
+    def _scope_intervention_timeline(
+        self,
+        *,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+    ) -> list[CourseInterventionEventOut]:
+        events = self._recent_scope_events(
+            student_id=student_id,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+            limit=4,
         )
+        timeline: list[CourseInterventionEventOut] = []
+        for event in events:
+            signal = self._event_signal(event)
+            timeline.append(
+                CourseInterventionEventOut(
+                    kind=signal["kind"],  # type: ignore[arg-type]
+                    source=signal["source"],  # type: ignore[arg-type]
+                    source_label=signal["source_label"],  # type: ignore[arg-type]
+                    created_at=signal["created_at"],  # type: ignore[arg-type]
+                    summary=signal["summary"],  # type: ignore[arg-type]
+                    focus_concept_label=signal["focus_concept_label"],
+                    strongest_gain_concept_label=signal["strongest_gain_concept_label"],
+                    strongest_drop_concept_label=signal["strongest_drop_concept_label"],
+                    action_label=signal["action_label"],  # type: ignore[arg-type]
+                )
+            )
+        return timeline
 
     @staticmethod
     def _recommendation_story(
@@ -470,6 +554,12 @@ class CourseExperienceService:
             sss_level=str(student_profile.sss_level),
             term=term,
         )
+        intervention_timeline = self._scope_intervention_timeline(
+            student_id=student_id,
+            subject=subject,
+            sss_level=str(student_profile.sss_level),
+            term=term,
+        )
 
         payload = CourseBootstrapOut(
             student_id=student_id,
@@ -481,6 +571,7 @@ class CourseExperienceService:
             edges=list(map_visual.edges) if map_visual is not None else [],
             next_step=next_step,
             recent_evidence=recent_evidence,
+            intervention_timeline=intervention_timeline,
             recommendation_story=self._recommendation_story(
                 next_step=next_step,
                 recent_evidence=recent_evidence,

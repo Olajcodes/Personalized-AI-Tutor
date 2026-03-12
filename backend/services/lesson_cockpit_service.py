@@ -226,6 +226,7 @@ class LessonCockpitService:
                 topics=course_topics,
                 next_step=course_bootstrap.next_step,
                 recent_evidence=course_bootstrap.recent_evidence,
+                intervention_timeline=course_bootstrap.intervention_timeline,
                 map_error=course_bootstrap.map_error,
                 tutor_bootstrap=tutor_bootstrap,
                 why_topic_detail=why_topic_detail,

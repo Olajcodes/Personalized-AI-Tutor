@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+from backend.models.mastery_update_event import MasteryUpdateEvent
 from backend.schemas.course_schema import CourseBootstrapOut, CourseBootstrapTopicOut
 from backend.services.course_experience_service import CourseExperienceService, _COURSE_BOOTSTRAP_CACHE
 
@@ -98,3 +99,49 @@ def test_candidate_prewarm_topic_ids_prefers_recommended_current_and_ready_topic
     )
 
     assert candidate_ids == [recommended_topic_id, current_topic_id, ready_topic_id]
+
+
+def test_scope_intervention_timeline_uses_real_mastery_event_labels():
+    student_id = uuid4()
+    service = CourseExperienceService(db=None)  # type: ignore[arg-type]
+    event = MasteryUpdateEvent(
+        student_id=student_id,
+        quiz_id=uuid4(),
+        attempt_id=None,
+        subject="math",
+        sss_level="SSS2",
+        term=2,
+        source="practice",
+        concept_breakdown=[],
+        new_mastery=[
+            {
+                "concept_id": "math:sss2:t2:arithmetic-progression",
+                "previous_score": 0.32,
+                "new_score": 0.61,
+                "delta": 0.29,
+            },
+            {
+                "concept_id": "math:sss2:t2:simple-interest",
+                "previous_score": 0.58,
+                "new_score": 0.42,
+                "delta": -0.16,
+            },
+        ],
+    )
+    event.created_at = None
+
+    service._recent_scope_events = lambda **kwargs: [event]  # type: ignore[method-assign]
+    timeline = service._scope_intervention_timeline(
+        student_id=student_id,
+        subject="math",
+        sss_level="SSS2",
+        term=2,
+    )
+
+    assert len(timeline) == 1
+    assert timeline[0].kind == "quiz"
+    assert timeline[0].source_label == "Quiz result"
+    assert timeline[0].focus_concept_label == "Simple Interest"
+    assert timeline[0].strongest_gain_concept_label == "Arithmetic Progression"
+    assert timeline[0].strongest_drop_concept_label == "Simple Interest"
+    assert timeline[0].action_label == "Review weak concept"

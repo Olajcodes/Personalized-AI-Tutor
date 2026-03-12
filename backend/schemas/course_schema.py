@@ -32,6 +32,18 @@ class CourseRecentEvidenceOut(BaseModel):
     summary: str
 
 
+class CourseInterventionEventOut(BaseModel):
+    kind: Literal["quiz", "checkpoint", "diagnostic", "exam_prep", "practice"]
+    source: str
+    source_label: str
+    created_at: str
+    summary: str
+    focus_concept_label: str | None = None
+    strongest_gain_concept_label: str | None = None
+    strongest_drop_concept_label: str | None = None
+    action_label: str
+
+
 class CourseRecommendationStoryOut(BaseModel):
     status: Literal["bridge_prerequisite", "advance_to_next", "hold_current"]
     headline: str
@@ -52,6 +64,7 @@ class CourseBootstrapOut(BaseModel):
     edges: list[LearningMapEdgeOut] = Field(default_factory=list)
     next_step: PathNextOut | None = None
     recent_evidence: CourseRecentEvidenceOut | None = None
+    intervention_timeline: list[CourseInterventionEventOut] = Field(default_factory=list)
     recommendation_story: CourseRecommendationStoryOut | None = None
     map_error: str | None = None
     warmed_topic_ids: list[str] = Field(default_factory=list)

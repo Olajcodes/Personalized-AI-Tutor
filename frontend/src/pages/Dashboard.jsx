@@ -5,6 +5,7 @@ import { ArrowRight, GitBranch } from 'lucide-react';
 import HeroSection from '../components/HeroSection';
 import AIRecommendation from '../components/AIRecommendation';
 import DashboardStats from '../components/DashboardStats';
+import InterventionTimeline from '../components/InterventionTimeline';
 import LearningMap from '../components/LearningMap';
 import LearningTasks from '../components/LearningTasks';
 import Leaderboard from '../components/Leaderboard';
@@ -58,7 +59,14 @@ export default function Dashboard() {
     );
 
     const [activeSubject, setActiveSubject] = useState(() => localStorage.getItem('active_subject') || null);
-    const [mapData, setMapData] = useState({ nodes: [], edges: [], next_step: null, recent_evidence: null, recommendation_story: null });
+    const [mapData, setMapData] = useState({
+        nodes: [],
+        edges: [],
+        next_step: null,
+        recent_evidence: null,
+        intervention_timeline: [],
+        recommendation_story: null,
+    });
     const [isLoadingMap, setIsLoadingMap] = useState(false);
     const [mapError, setMapError] = useState('');
     const [graphIntervention, setGraphIntervention] = useState(null);
@@ -139,12 +147,20 @@ export default function Dashboard() {
                     edges: Array.isArray(data?.edges) ? data.edges : [],
                     next_step: data?.next_step || null,
                     recent_evidence: data?.recent_evidence || null,
+                    intervention_timeline: Array.isArray(data?.intervention_timeline) ? data.intervention_timeline : [],
                     recommendation_story: data?.recommendation_story || null,
                 });
                 setMapError(data?.map_error || '');
             } catch (err) {
                 console.error('Map fetch error:', err);
-                setMapData({ nodes: [], edges: [], next_step: null, recent_evidence: null, recommendation_story: null });
+                setMapData({
+                    nodes: [],
+                    edges: [],
+                    next_step: null,
+                    recent_evidence: null,
+                    intervention_timeline: [],
+                    recommendation_story: null,
+                });
                 setMapError(err.message || 'Learning map unavailable.');
             } finally {
                 setIsLoadingMap(false);
@@ -268,6 +284,16 @@ export default function Dashboard() {
                                 )}
                             </div>
                         </div>
+                    </div>
+                )}
+
+                {activeSubject && Array.isArray(effectiveMapData?.intervention_timeline) && effectiveMapData.intervention_timeline.length > 0 && (
+                    <div className="mb-8">
+                        <InterventionTimeline
+                            title={`${activeSubject} Evidence Timeline`}
+                            subtitle="Recent quiz and checkpoint evidence from the backend graph state."
+                            timeline={effectiveMapData.intervention_timeline}
+                        />
                     </div>
                 )}
 

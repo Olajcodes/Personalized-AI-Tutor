@@ -3,7 +3,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from backend.schemas.course_schema import CourseBootstrapTopicOut, CourseRecentEvidenceOut
+from backend.schemas.course_schema import (
+    CourseBootstrapTopicOut,
+    CourseInterventionEventOut,
+    CourseRecentEvidenceOut,
+)
 from backend.schemas.graph_learning_schema import WhyThisTopicOut
 from backend.schemas.learning_path_schema import PathNextOut
 from backend.schemas.tutor_schema import TutorSessionBootstrapOut
@@ -27,6 +31,7 @@ class LessonCockpitBootstrapOut(BaseModel):
     topics: list[CourseBootstrapTopicOut] = Field(default_factory=list)
     next_step: PathNextOut | None = None
     recent_evidence: CourseRecentEvidenceOut | None = None
+    intervention_timeline: list[CourseInterventionEventOut] = Field(default_factory=list)
     map_error: str | None = None
     tutor_bootstrap: TutorSessionBootstrapOut
     why_topic_detail: WhyThisTopicOut | None = None
