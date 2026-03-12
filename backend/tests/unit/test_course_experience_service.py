@@ -145,3 +145,48 @@ def test_scope_intervention_timeline_uses_real_mastery_event_labels():
     assert timeline[0].strongest_gain_concept_label == "Arithmetic Progression"
     assert timeline[0].strongest_drop_concept_label == "Simple Interest"
     assert timeline[0].action_label == "Review weak concept"
+
+
+def test_latest_intervention_bootstrap_uses_latest_scope(monkeypatch):
+    student_id = uuid4()
+    event = MasteryUpdateEvent(
+        student_id=student_id,
+        quiz_id=uuid4(),
+        attempt_id=None,
+        subject="english",
+        sss_level="SSS2",
+        term=3,
+        source="practice",
+        concept_breakdown=[],
+        new_mastery=[],
+    )
+
+    class _Query:
+        def filter(self, *args, **kwargs):
+            return self
+
+        def order_by(self, *args, **kwargs):
+            return self
+
+        def first(self):
+            return event
+
+    class _DB:
+        def query(self, *args, **kwargs):
+            return _Query()
+
+    captured = {}
+
+    def _bootstrap(self, *, student_id, subject, term):
+        captured["student_id"] = student_id
+        captured["subject"] = subject
+        captured["term"] = term
+        return "ok"
+
+    service = CourseExperienceService(db=_DB())
+    monkeypatch.setattr(CourseExperienceService, "bootstrap", _bootstrap)
+
+    result = service.latest_intervention_bootstrap(student_id=student_id)
+
+    assert result == "ok"
+    assert captured == {"student_id": student_id, "subject": "english", "term": 3}

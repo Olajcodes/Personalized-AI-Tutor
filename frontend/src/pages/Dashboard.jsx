@@ -43,6 +43,15 @@ const prewarmTopics = async ({ apiUrl, token, studentId, subject, sssLevel, term
     }
 };
 
+const normalizeCourseBootstrap = (data) => ({
+    nodes: Array.isArray(data?.nodes) ? data.nodes : [],
+    edges: Array.isArray(data?.edges) ? data.edges : [],
+    next_step: data?.next_step || null,
+    recent_evidence: data?.recent_evidence || null,
+    intervention_timeline: Array.isArray(data?.intervention_timeline) ? data.intervention_timeline : [],
+    recommendation_story: data?.recommendation_story || null,
+});
+
 export default function Dashboard() {
     const { token } = useAuth();
     const { userData, studentData } = useUser();
@@ -164,14 +173,7 @@ export default function Dashboard() {
                 }
 
                 const data = await response.json();
-                setMapData({
-                    nodes: Array.isArray(data?.nodes) ? data.nodes : [],
-                    edges: Array.isArray(data?.edges) ? data.edges : [],
-                    next_step: data?.next_step || null,
-                    recent_evidence: data?.recent_evidence || null,
-                    intervention_timeline: Array.isArray(data?.intervention_timeline) ? data.intervention_timeline : [],
-                    recommendation_story: data?.recommendation_story || null,
-                });
+                setMapData(normalizeCourseBootstrap(data));
                 setMapError(data?.map_error || '');
             } catch (err) {
                 console.error('Map fetch error:', err);
@@ -191,6 +193,45 @@ export default function Dashboard() {
 
         fetchLearningMap();
     }, [activeId, activeSubject, currentLevel, currentTerm, token, apiUrl]);
+
+    useEffect(() => {
+        if (activeSubject || !activeId || !token || latestIntervention?.subject) {
+            return;
+        }
+
+        let cancelled = false;
+        const hydrateLatestScope = async () => {
+            try {
+                const queryParams = new URLSearchParams({ student_id: activeId });
+                const response = await fetch(`${apiUrl}/learning/course/latest-intervention?${queryParams.toString()}`, {
+                    method: 'GET',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                });
+                if (!response.ok) {
+                    return;
+                }
+                const data = await response.json();
+                if (cancelled) {
+                    return;
+                }
+                if (data?.subject) {
+                    setActiveSubject(data.subject);
+                    setMapData(normalizeCourseBootstrap(data));
+                    setMapError(data?.map_error || '');
+                }
+            } catch (error) {
+                console.warn('Latest intervention bootstrap unavailable:', error);
+            }
+        };
+
+        hydrateLatestScope();
+        return () => {
+            cancelled = true;
+        };
+    }, [activeId, activeSubject, apiUrl, latestIntervention, token]);
 
     const openTopicFromGraph = async (topicId) => {
         if (!topicId) return;

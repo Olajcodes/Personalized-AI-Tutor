@@ -386,6 +386,21 @@ class CourseExperienceService:
         finally:
             db.close()
 
+    def latest_intervention_bootstrap(self, *, student_id: UUID) -> CourseBootstrapOut | None:
+        latest_event = (
+            self.db.query(MasteryUpdateEvent)
+            .filter(MasteryUpdateEvent.student_id == student_id)
+            .order_by(desc(MasteryUpdateEvent.created_at))
+            .first()
+        )
+        if latest_event is None:
+            return None
+        return self.bootstrap(
+            student_id=student_id,
+            subject=str(latest_event.subject),
+            term=int(latest_event.term),
+        )
+
     def bootstrap(
         self,
         *,

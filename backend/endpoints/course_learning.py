@@ -31,3 +31,22 @@ def get_course_bootstrap(
         )
     except CourseExperienceError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/latest-intervention", response_model=CourseBootstrapOut)
+def get_latest_intervention_bootstrap(
+    student_id: UUID = Query(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if student_id != current_user.id:
+        raise HTTPException(status_code=403, detail="student_id must match authenticated user id")
+
+    try:
+        payload = CourseExperienceService(db).latest_intervention_bootstrap(student_id=student_id)
+    except CourseExperienceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    if payload is None:
+        raise HTTPException(status_code=404, detail="No recent intervention found for this student.")
+    return payload

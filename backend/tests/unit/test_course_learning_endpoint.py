@@ -131,3 +131,42 @@ def test_course_bootstrap_returns_graph_ready_payload(monkeypatch):
     assert body["recent_evidence"]["strongest_drop_concept_label"] == "Simple Interest"
     assert body["intervention_timeline"][0]["source_label"] == "Quiz result"
     assert body["recommendation_story"]["headline"] == "Push into Sequences and Series next."
+
+
+def test_latest_intervention_bootstrap_returns_recent_scope(monkeypatch):
+    student_id = uuid4()
+
+    monkeypatch.setattr(
+        "backend.endpoints.course_learning.CourseExperienceService.latest_intervention_bootstrap",
+        lambda self, *, student_id: {
+            "student_id": str(student_id),
+            "subject": "english",
+            "sss_level": "SSS2",
+            "term": 2,
+            "topics": [],
+            "nodes": [],
+            "edges": [],
+            "next_step": None,
+            "recent_evidence": None,
+            "intervention_timeline": [],
+            "recommendation_story": None,
+            "map_error": None,
+            "warmed_topic_ids": [],
+            "cache_hit_topic_ids": [],
+            "failed_topic_ids": [],
+        },
+    )
+
+    client = TestClient(app)
+    app.dependency_overrides[get_current_user] = _override_user(student_id)
+
+    response = client.get(
+        "/api/v1/learning/course/latest-intervention",
+        params={"student_id": str(student_id)},
+    )
+
+    app.dependency_overrides.clear()
+    assert response.status_code == 200
+    body = response.json()
+    assert body["subject"] == "english"
+    assert body["term"] == 2
