@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, GitBranch } from 'lucide-react';
 
@@ -190,7 +190,7 @@ export default function Dashboard() {
         fetchDashboardBootstrap();
     }, [activeId, activeSubject, token, apiUrl]);
 
-    const openTopicFromGraph = async (topicId) => {
+    const openTopicFromGraph = useCallback(async (topicId) => {
         if (!topicId) return;
         await prewarmTopics({
             apiUrl,
@@ -202,9 +202,9 @@ export default function Dashboard() {
             topicIds: [topicId],
         });
         navigate(`/lesson/${topicId}`);
-    };
+    }, [activeId, activeSubject, apiUrl, currentLevel, currentTerm, navigate, token]);
 
-    const resumeLatestIntervention = async () => {
+    const resumeLatestIntervention = useCallback(async () => {
         const topicId = dashboardSignal?.payload?.next_step?.recommended_topic_id;
         if (!topicId) return;
         await prewarmTopics({
@@ -217,7 +217,64 @@ export default function Dashboard() {
             topicIds: [topicId],
         });
         navigate(`/lesson/${topicId}`);
-    };
+    }, [activeId, activeSubject, apiUrl, currentLevel, currentTerm, dashboardSignal, navigate, token]);
+
+    const dashboardTasks = useMemo(() => {
+        const tasks = [];
+        const nextStep = dashboardSignal?.payload?.next_step || effectiveMapData?.next_step || null;
+        const recommendationStory = dashboardSignal?.payload?.recommendation_story || effectiveMapData?.recommendation_story || null;
+        const timeline = Array.isArray(dashboardSignal?.payload?.intervention_timeline)
+            ? dashboardSignal.payload.intervention_timeline
+            : Array.isArray(effectiveMapData?.intervention_timeline)
+                ? effectiveMapData.intervention_timeline
+                : [];
+
+        if (nextStep?.recommended_topic_id) {
+            tasks.push({
+                id: 'recommended-lesson',
+                badge: recommendationStory?.status === 'bridge_prerequisite' ? 'Repair gap' : 'Next lesson',
+                title: nextStep.recommended_topic_title || nextStep.recommended_concept_label || 'Continue your graph path',
+                subtext: recommendationStory?.supporting_reason || nextStep.reason || 'Open the lesson the graph recommends next.',
+                actionLabel: recommendationStory?.action_label || 'Open lesson',
+                onClick: resumeLatestIntervention,
+                tone: recommendationStory?.status === 'bridge_prerequisite' ? 'amber' : 'indigo',
+            });
+        }
+
+        if (timeline.length > 0) {
+            tasks.push({
+                id: 'latest-evidence',
+                badge: timeline[0].source_label || 'Latest evidence',
+                title: timeline[0].focus_concept_label || 'Review your latest intervention',
+                subtext: timeline[0].summary,
+                actionLabel: 'Resume',
+                onClick: resumeLatestIntervention,
+                tone: 'slate',
+            });
+        }
+
+        const alternateNode = Array.isArray(effectiveMapData?.nodes)
+            ? effectiveMapData.nodes.find(
+                (node) =>
+                    node?.topic_id &&
+                    node.status === 'ready' &&
+                    node.topic_id !== nextStep?.recommended_topic_id,
+            )
+            : null;
+        if (alternateNode?.topic_id) {
+            tasks.push({
+                id: 'alternate-ready-node',
+                badge: 'Ready concept',
+                title: alternateNode.concept_label || alternateNode.topic_title || 'Explore a ready concept',
+                subtext: alternateNode.details || 'Open another graph-ready lesson in this scope.',
+                actionLabel: 'Open node',
+                onClick: () => openTopicFromGraph(alternateNode.topic_id),
+                tone: 'indigo',
+            });
+        }
+
+        return tasks.slice(0, 3);
+    }, [dashboardSignal, effectiveMapData, openTopicFromGraph, resumeLatestIntervention]);
 
     return (
         <div className="min-h-screen bg-[#F8FAFC] font-sans">
@@ -345,7 +402,7 @@ export default function Dashboard() {
                 )}
 
                 <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-                    <LearningTasks />
+                    <LearningTasks tasks={dashboardTasks} />
                     <Leaderboard leagueName="Gold League" />
                 </div>
 
