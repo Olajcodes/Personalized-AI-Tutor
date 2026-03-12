@@ -66,7 +66,6 @@ export default function Dashboard() {
     const { userData, studentData } = useUser();
     const navigate = useNavigate();
 
-    const fullName = userData ? `${userData.first_name || ''} ${userData.last_name || ''}`.trim() : 'Student';
     const activeId = studentData?.user_id || userData?.id;
     const currentLevel = studentData?.sss_level || 'SSS1';
     const currentTerm = studentData?.current_term || 1;
@@ -220,12 +219,6 @@ export default function Dashboard() {
         navigate(`/lesson/${topicId}`);
     };
 
-    const apiLeaderboardData = [
-        { id: 'u1', rank: 1, name: 'Sarah Jenkins', points: '4,250' },
-        { id: 'u2', rank: 2, name: 'Marcus Thorne', points: '3,900' },
-        { id: 'u3', rank: 3, name: fullName, points: '3,450', isCurrentUser: true },
-    ];
-
     return (
         <div className="min-h-screen bg-[#F8FAFC] font-sans">
             <main className="max-w-9xl mx-auto px-6 py-8">
@@ -353,7 +346,7 @@ export default function Dashboard() {
 
                 <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
                     <LearningTasks />
-                    <Leaderboard items={apiLeaderboardData} leagueName="Gold League" />
+                    <Leaderboard leagueName="Gold League" />
                 </div>
 
                 <Footer />

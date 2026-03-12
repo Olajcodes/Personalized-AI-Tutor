@@ -51,13 +51,19 @@ export default function Leaderboard({ leagueName = "Gold League" }) {
 
   const [items, setItems] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  console.log("Leaderboard Check:", { activeId, token, apiUrl });
+  const [error, setError] = useState('');
+
   useEffect(() => {
     const fetchLeaderboard = async () => {
-      if (!activeId || !token) return;
+      if (!activeId || !token) {
+        setItems([]);
+        setError('Leaderboard unavailable.');
+        setIsLoading(false);
+        return;
+      }
 
       try {
-        // Hitting your exact endpoint with a limit of 5 students
+        setError('');
         const response = await fetch(`${apiUrl}/students/leaderboard?limit=5`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -65,7 +71,6 @@ export default function Leaderboard({ leagueName = "Gold League" }) {
         if (!response.ok) throw new Error("Failed to fetch leaderboard");
         const data = await response.json();
 
-        // 🎯 MAP THE API DATA TO YOUR UI PROPS
         const formattedData = data.map((item) => {
           const isMe = item.student_id === activeId;
           
@@ -87,12 +92,8 @@ export default function Leaderboard({ leagueName = "Gold League" }) {
         setItems(formattedData);
       } catch (err) {
         console.error("Leaderboard fetch error:", err);
-        // Fallback demo data so your UI doesn't break during dev!
-        setItems([
-          { id: '1', rank: 1, name: "Sarah Jenkins", points: 4250, isCurrentUser: false },
-          { id: '2', rank: 2, name: "Marcus Thorne", points: 3900, isCurrentUser: false },
-          { id: activeId, rank: 3, name: `${userData?.first_name || 'You'}`, points: 3450, isCurrentUser: true },
-        ]);
+        setItems([]);
+        setError(err.message || 'Leaderboard unavailable right now.');
       } finally {
         setIsLoading(false);
       }
@@ -118,6 +119,11 @@ export default function Leaderboard({ leagueName = "Gold League" }) {
           <div className="flex flex-col items-center justify-center py-10 text-slate-400">
             <Loader2 className="w-8 h-8 animate-spin mb-3 text-indigo-400" />
             <p className="text-sm font-medium">Calculating ranks...</p>
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center py-10 text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+            <Trophy className="w-8 h-8 mb-2 opacity-50 text-slate-400" />
+            <p className="text-sm font-medium">{error}</p>
           </div>
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
