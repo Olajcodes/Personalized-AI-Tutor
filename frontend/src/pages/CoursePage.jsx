@@ -25,6 +25,29 @@ const statusLabels = {
   pending: 'Pending',
 };
 
+const prewarmTopics = async ({ apiUrl, token, studentId, subject, sssLevel, term, topicIds }) => {
+  const normalizedIds = Array.from(new Set((topicIds || []).filter(Boolean)));
+  if (!normalizedIds.length) return;
+  try {
+    await fetch(`${apiUrl}/learning/lesson/prewarm`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        student_id: studentId,
+        subject,
+        sss_level: sssLevel,
+        term,
+        topic_ids: normalizedIds,
+      }),
+    });
+  } catch (error) {
+    console.warn('Course recommendation prewarm skipped:', error);
+  }
+};
+
 const CoursePage = () => {
   const { subject } = useParams(); 
   const navigate = useNavigate();
@@ -39,6 +62,7 @@ const CoursePage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [nextStep, setNextStep] = useState(null);
   const [recentEvidence, setRecentEvidence] = useState(null);
+  const [recommendationStory, setRecommendationStory] = useState(null);
   const [mapError, setMapError] = useState('');
 
   const apiUrl = import.meta.env.VITE_API_URL || 'https://mastery-backend-7xe8.onrender.com/api/v1';
@@ -72,6 +96,7 @@ const CoursePage = () => {
         setTopics(safeArray(data?.topics));
         setNextStep(data?.next_step || null);
         setRecentEvidence(data?.recent_evidence || null);
+        setRecommendationStory(data?.recommendation_story || null);
         setMapError(data?.map_error || '');
 
       } catch (err) {
@@ -79,6 +104,7 @@ const CoursePage = () => {
         setTopics([]);
         setNextStep(null);
         setRecentEvidence(null);
+        setRecommendationStory(null);
       } finally {
         setIsLoading(false);
       }
@@ -118,18 +144,37 @@ const CoursePage = () => {
                     Next best move
                   </div>
                   <h2 className="mt-3 text-2xl font-black text-slate-900">
-                    {nextStep.recommended_topic_title || nextStep.recommended_concept_label || 'Continue current focus'}
+                    {recommendationStory?.headline || nextStep.recommended_topic_title || nextStep.recommended_concept_label || 'Continue current focus'}
                   </h2>
-                  <p className="mt-2 text-sm leading-7 text-slate-600">{nextStep.reason}</p>
+                  <p className="mt-2 text-sm leading-7 text-slate-600">{recommendationStory?.supporting_reason || nextStep.reason}</p>
                   {safeArray(nextStep.prereq_gap_labels).length > 0 && (
                     <p className="mt-3 text-sm font-semibold text-amber-700">
                       Blocking prerequisites: {nextStep.prereq_gap_labels.join(', ')}
                     </p>
                   )}
+                  {recommendationStory?.next_concept_label && (
+                    <p className="mt-3 text-sm font-semibold text-cyan-700">
+                      Best next concept: {recommendationStory.next_concept_label}
+                    </p>
+                  )}
+                  {recommendationStory?.evidence_summary && (
+                    <p className="mt-3 text-sm leading-7 text-slate-500">
+                      {recommendationStory.evidence_summary}
+                    </p>
+                  )}
                 </div>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (nextStep.recommended_topic_id) {
+                      await prewarmTopics({
+                        apiUrl,
+                        token,
+                        studentId: activeId,
+                        subject,
+                        sssLevel: currentLevel,
+                        term: currentTerm,
+                        topicIds: [nextStep.recommended_topic_id],
+                      });
                       navigate(`/lesson/${nextStep.recommended_topic_id}`);
                     }
                   }}
@@ -140,7 +185,7 @@ const CoursePage = () => {
                       : 'bg-slate-200 text-slate-500 cursor-not-allowed'
                   }`}
                 >
-                  Open Recommended Lesson <Sparkles className="h-4 w-4" />
+                  {recommendationStory?.action_label || 'Open Recommended Lesson'} <Sparkles className="h-4 w-4" />
                 </button>
               </div>
               {mapError && (

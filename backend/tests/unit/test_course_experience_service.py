@@ -30,6 +30,8 @@ def test_course_bootstrap_cache_invalidation_is_scope_specific():
         term=2,
         topics=[],
         next_step=None,
+        recent_evidence=None,
+        recommendation_story=None,
         map_error=None,
         warmed_topic_ids=[],
         cache_hit_topic_ids=[],

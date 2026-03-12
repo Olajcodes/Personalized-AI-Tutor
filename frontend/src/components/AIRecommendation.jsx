@@ -6,10 +6,34 @@ import { useUser } from '../context/UserContext';
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
 
+const prewarmTopics = async ({ apiUrl, token, studentId, subject, sssLevel, term, topicIds }) => {
+  const normalizedIds = Array.from(new Set((topicIds || []).filter(Boolean)));
+  if (!normalizedIds.length) return;
+  try {
+    await fetch(`${apiUrl}/learning/lesson/prewarm`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        student_id: studentId,
+        subject,
+        sss_level: sssLevel,
+        term,
+        topic_ids: normalizedIds,
+      }),
+    });
+  } catch (error) {
+    console.warn('Dashboard recommendation prewarm skipped:', error);
+  }
+};
+
 export default function AIRecommendation({
   recommendation: recommendationOverride = null,
   activeSubject: activeSubjectProp = null,
   recentEvidence: recentEvidenceOverride = null,
+  recommendationStory: recommendationStoryOverride = null,
 }) {
   const navigate = useNavigate();
   const { token } = useAuth();
@@ -26,6 +50,7 @@ export default function AIRecommendation({
   // State
   const [recommendation, setRecommendation] = useState(null);
   const [recentEvidence, setRecentEvidence] = useState(null);
+  const [recommendationStory, setRecommendationStory] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -33,6 +58,7 @@ export default function AIRecommendation({
     if (recommendationOverride) {
       setRecommendation(recommendationOverride);
       setRecentEvidence(recentEvidenceOverride || null);
+      setRecommendationStory(recommendationStoryOverride || null);
       setError("");
       setIsLoading(false);
       return;
@@ -70,6 +96,7 @@ export default function AIRecommendation({
         }
         setRecommendation(data.next_step);
         setRecentEvidence(data.recent_evidence || null);
+        setRecommendationStory(data.recommendation_story || null);
       } catch (err) {
         setError(err.message);
       } finally {
@@ -78,7 +105,7 @@ export default function AIRecommendation({
     };
 
     fetchNextStep();
-  }, [activeId, currentSubject, currentLevel, currentTerm, token, apiUrl, recommendationOverride, recentEvidenceOverride]);
+  }, [activeId, currentSubject, currentLevel, currentTerm, token, apiUrl, recommendationOverride, recentEvidenceOverride, recommendationStoryOverride]);
 
   // Handle Loading State
   if (isLoading) {
@@ -114,6 +141,7 @@ export default function AIRecommendation({
     : recommendation.recommended_concept_label
       ? `Current concept focus: ${recommendation.recommended_concept_label}`
       : 'Graph sequencing is using your mastery evidence to choose the best next step.';
+  const story = recommendationStory || null;
 
   return (
     <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 w-full lg:w-80 flex flex-col justify-between relative overflow-hidden">
@@ -129,7 +157,7 @@ export default function AIRecommendation({
           {hasPrereqGap ? "Prerequisite bridge" : "Why you should study this next"}
         </p>
         
-        <h3 className="text-lg font-bold text-gray-900 mb-2">{title}</h3>
+        <h3 className="text-lg font-bold text-gray-900 mb-2">{story?.headline || title}</h3>
         <p className="text-sm font-medium text-gray-600 mb-3">{subtitle}</p>
         
         {hasPrereqGap && (
@@ -146,14 +174,21 @@ export default function AIRecommendation({
           </div>
         )}
         
-        <p className="text-sm text-gray-500 leading-relaxed mb-6">
-          {recommendation.reason}
+        <p className="text-sm text-gray-500 leading-relaxed mb-4">
+          {story?.supporting_reason || recommendation.reason}
         </p>
 
         {blockingLabels.length > 0 && (
           <div className="mb-4 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
             <div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Blocking concepts</div>
             <p className="mt-2 text-xs font-semibold leading-6 text-amber-900">{blockingLabels.join(', ')}</p>
+          </div>
+        )}
+
+        {story?.next_concept_label && !hasPrereqGap && (
+          <div className="mb-4 rounded-2xl border border-cyan-100 bg-cyan-50 px-4 py-3">
+            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-700">Best next concept</div>
+            <p className="mt-2 text-xs font-semibold leading-6 text-cyan-900">{story.next_concept_label}</p>
           </div>
         )}
 
@@ -167,6 +202,13 @@ export default function AIRecommendation({
                 {recentEvidence.strongest_drop_concept_label ? ` · Gap: ${recentEvidence.strongest_drop_concept_label}` : ''}
               </p>
             )}
+          </div>
+        )}
+
+        {story?.evidence_summary && !recentEvidence && (
+          <div className="mb-4 rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3">
+            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600">Latest evidence</div>
+            <p className="mt-2 text-xs leading-6 text-indigo-900">{story.evidence_summary}</p>
           </div>
         )}
 
@@ -193,8 +235,17 @@ export default function AIRecommendation({
         </div>
         
         <button 
-          onClick={() => {
+          onClick={async () => {
             if (recommendedTopicId) {
+              await prewarmTopics({
+                apiUrl,
+                token,
+                studentId: activeId,
+                subject: currentSubject,
+                sssLevel: currentLevel,
+                term: currentTerm,
+                topicIds: [recommendedTopicId],
+              });
               navigate(`/lesson/${recommendedTopicId}`);
             }
           }}
@@ -207,7 +258,7 @@ export default function AIRecommendation({
         >
           {recommendedTopicId ? (
             <>
-              Start Recommended Lesson <ChevronRight className="w-4 h-4" />
+              {story?.action_label || 'Start Recommended Lesson'} <ChevronRight className="w-4 h-4" />
             </>
           ) : (
             <>

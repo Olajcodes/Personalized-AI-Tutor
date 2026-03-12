@@ -32,6 +32,16 @@ class CourseRecentEvidenceOut(BaseModel):
     summary: str
 
 
+class CourseRecommendationStoryOut(BaseModel):
+    status: Literal["bridge_prerequisite", "advance_to_next", "hold_current"]
+    headline: str
+    supporting_reason: str
+    blocking_prerequisite_label: str | None = None
+    next_concept_label: str | None = None
+    evidence_summary: str | None = None
+    action_label: str
+
+
 class CourseBootstrapOut(BaseModel):
     student_id: UUID
     subject: Literal["math", "english", "civic"]
@@ -42,6 +52,7 @@ class CourseBootstrapOut(BaseModel):
     edges: list[LearningMapEdgeOut] = Field(default_factory=list)
     next_step: PathNextOut | None = None
     recent_evidence: CourseRecentEvidenceOut | None = None
+    recommendation_story: CourseRecommendationStoryOut | None = None
     map_error: str | None = None
     warmed_topic_ids: list[str] = Field(default_factory=list)
     cache_hit_topic_ids: list[str] = Field(default_factory=list)

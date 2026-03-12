@@ -80,6 +80,15 @@ def test_course_bootstrap_returns_graph_ready_payload(monkeypatch):
                 "strongest_drop_concept_label": "Simple Interest",
                 "summary": "Latest practice strengthened Arithmetic Progression but exposed a gap in Simple Interest.",
             },
+            "recommendation_story": {
+                "status": "advance_to_next",
+                "headline": "Push into Sequences and Series next.",
+                "supporting_reason": "Recommended next topic based on the weakest concept still below mastery threshold.",
+                "blocking_prerequisite_label": None,
+                "next_concept_label": "Arithmetic Progression",
+                "evidence_summary": "Latest practice strengthened Arithmetic Progression but exposed a gap in Simple Interest.",
+                "action_label": "Open recommended lesson",
+            },
             "map_error": None,
             "warmed_topic_ids": [],
             "cache_hit_topic_ids": [],
@@ -107,3 +116,4 @@ def test_course_bootstrap_returns_graph_ready_payload(monkeypatch):
     assert body["topics"][0]["concept_label"] == "Arithmetic Progression"
     assert body["next_step"]["recommended_concept_label"] == "Arithmetic Progression"
     assert body["recent_evidence"]["strongest_drop_concept_label"] == "Simple Interest"
+    assert body["recommendation_story"]["headline"] == "Push into Sequences and Series next."

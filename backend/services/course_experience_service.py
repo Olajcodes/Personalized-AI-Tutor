@@ -17,7 +17,12 @@ from backend.models.student import StudentProfile, StudentSubject
 from backend.models.subject import Subject
 from backend.models.topic import Topic
 from backend.repositories.graph_repo import GraphRepository
-from backend.schemas.course_schema import CourseBootstrapOut, CourseBootstrapTopicOut, CourseRecentEvidenceOut
+from backend.schemas.course_schema import (
+    CourseBootstrapOut,
+    CourseBootstrapTopicOut,
+    CourseRecentEvidenceOut,
+    CourseRecommendationStoryOut,
+)
 from backend.schemas.learning_path_schema import PathNextIn
 from backend.services.learning_path_service import LearningPathValidationError, learning_path_service
 from backend.services.lesson_experience_service import LessonExperienceService
@@ -128,6 +133,44 @@ class CourseExperienceService:
             strongest_gain_concept_label=strongest_gain,
             strongest_drop_concept_label=strongest_drop,
             summary=summary,
+        )
+
+    @staticmethod
+    def _recommendation_story(
+        *,
+        next_step,
+        recent_evidence: CourseRecentEvidenceOut | None,
+    ) -> CourseRecommendationStoryOut | None:
+        if next_step is None:
+            return None
+
+        evidence_summary = recent_evidence.summary if recent_evidence is not None else None
+        blocking_label = next_step.prereq_gap_labels[0] if next_step.prereq_gap_labels else None
+        next_concept_label = next_step.recommended_concept_label or None
+
+        if blocking_label:
+            headline = f"Repair {blocking_label} before pushing forward."
+            action_label = "Open prerequisite bridge"
+            status = "bridge_prerequisite"
+        elif next_step.recommended_topic_title or next_concept_label:
+            headline = (
+                f"Push into {next_step.recommended_topic_title or next_concept_label} next."
+            )
+            action_label = "Open recommended lesson"
+            status = "advance_to_next"
+        else:
+            headline = "Stay on the current focus and consolidate mastery."
+            action_label = "Review current lesson"
+            status = "hold_current"
+
+        return CourseRecommendationStoryOut(
+            status=status,
+            headline=headline,
+            supporting_reason=next_step.reason,
+            blocking_prerequisite_label=blocking_label,
+            next_concept_label=next_concept_label,
+            evidence_summary=evidence_summary,
+            action_label=action_label,
         )
 
     @staticmethod
@@ -351,6 +394,13 @@ class CourseExperienceService:
                 failed_topic_ids,
             )
 
+        recent_evidence = self._latest_scope_evidence(
+            student_id=student_id,
+            subject=subject,
+            sss_level=str(student_profile.sss_level),
+            term=term,
+        )
+
         payload = CourseBootstrapOut(
             student_id=student_id,
             subject=subject,  # type: ignore[arg-type]
@@ -360,11 +410,10 @@ class CourseExperienceService:
             nodes=list(map_visual.nodes) if map_visual is not None else [],
             edges=list(map_visual.edges) if map_visual is not None else [],
             next_step=next_step,
-            recent_evidence=self._latest_scope_evidence(
-                student_id=student_id,
-                subject=subject,
-                sss_level=str(student_profile.sss_level),
-                term=term,
+            recent_evidence=recent_evidence,
+            recommendation_story=self._recommendation_story(
+                next_step=next_step,
+                recent_evidence=recent_evidence,
             ),
             map_error=map_error,
             warmed_topic_ids=warmed_topic_ids,
