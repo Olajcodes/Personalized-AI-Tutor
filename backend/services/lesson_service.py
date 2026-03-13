@@ -168,6 +168,39 @@ def _lesson_response_from_blocks(
     graph_context: Any,
     covered_concepts: list[dict] | None = None,
 ) -> dict:
+    prerequisites: list[dict] = []
+    for node in list(getattr(graph_context, "prerequisite_concepts", []) or []):
+        prerequisites.append(
+            {
+                "concept_id": str(node.concept_id),
+                "label": str(node.label),
+                "mastery_score": node.mastery_score,
+                "mastery_state": node.mastery_state,
+            }
+        )
+
+    weakest_concepts: list[dict] = []
+    for node in list(getattr(graph_context, "weakest_concepts", []) or []):
+        weakest_concepts.append(
+            {
+                "concept_id": str(node.concept_id),
+                "label": str(node.label),
+                "mastery_score": node.mastery_score,
+                "mastery_state": node.mastery_state,
+            }
+        )
+
+    next_unlock = None
+    graph_next_unlock = getattr(graph_context, "next_unlock", None)
+    if graph_next_unlock is not None:
+        next_unlock = {
+            "concept_id": graph_next_unlock.concept_id,
+            "concept_label": graph_next_unlock.concept_label,
+            "topic_id": graph_next_unlock.topic_id,
+            "topic_title": graph_next_unlock.topic_title,
+            "reason": graph_next_unlock.reason,
+        }
+
     if covered_concepts is None:
         covered_concepts = []
         for node in list(getattr(graph_context, "current_concepts", []) or []):
@@ -187,9 +220,9 @@ def _lesson_response_from_blocks(
         "estimated_duration_minutes": estimated_duration_minutes,
         "content_blocks": content_blocks,
         "covered_concepts": covered_concepts,
-        "prerequisites": list(getattr(graph_context, "prerequisite_concepts", []) or []),
-        "weakest_concepts": list(getattr(graph_context, "weakest_concepts", []) or []),
-        "next_unlock": getattr(graph_context, "next_unlock", None),
+        "prerequisites": prerequisites,
+        "weakest_concepts": weakest_concepts,
+        "next_unlock": next_unlock,
         "why_this_matters": getattr(graph_context, "why_this_matters", None),
         "assessment_ready": bool(getattr(graph_context, "current_concepts", []) or []),
     }

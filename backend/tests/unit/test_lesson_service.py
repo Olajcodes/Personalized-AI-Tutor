@@ -162,3 +162,56 @@ def test_fetch_topic_lesson_uses_structured_curriculum_lesson_before_rag(monkeyp
     assert response["estimated_duration_minutes"] == 14
     assert response["content_blocks"][0]["value"] == "Learning Objectives\n\n- Define values"
     assert response["content_blocks"][1]["value"] == "Meaning of Values\n\nValues are important."
+
+
+def test_lesson_response_from_blocks_serializes_graph_models():
+    topic_id = uuid.uuid4()
+    graph_context = _obj(
+        current_concepts=[
+            _obj(
+                concept_id="math:sss1:t1:current-skill",
+                label="Current Skill",
+                mastery_score=0.45,
+                mastery_state="needs_review",
+            )
+        ],
+        prerequisite_concepts=[
+            _obj(
+                concept_id="math:sss1:t1:prereq-skill",
+                label="Prereq Skill",
+                mastery_score=0.82,
+                mastery_state="demonstrated",
+            )
+        ],
+        weakest_concepts=[
+            _obj(
+                concept_id="math:sss1:t1:current-skill",
+                label="Current Skill",
+                mastery_score=0.45,
+                mastery_state="needs_review",
+            )
+        ],
+        next_unlock=_obj(
+            concept_id="math:sss1:t1:next-skill",
+            concept_label="Next Skill",
+            topic_id=str(topic_id),
+            topic_title="Next Topic",
+            reason="Master the current skill first.",
+        ),
+        why_this_matters="This skill unlocks the next lesson.",
+    )
+
+    response = svc._lesson_response_from_blocks(
+        topic=_obj(id=topic_id),
+        title="Lesson: Current Skill",
+        summary="A focused lesson summary.",
+        estimated_duration_minutes=12,
+        content_blocks=[{"type": "text", "value": "Intro"}],
+        graph_context=graph_context,
+    )
+
+    assert response["covered_concepts"][0]["label"] == "Current Skill"
+    assert response["prerequisites"][0]["label"] == "Prereq Skill"
+    assert response["weakest_concepts"][0]["label"] == "Current Skill"
+    assert response["next_unlock"]["concept_label"] == "Next Skill"
+    assert response["next_unlock"]["topic_id"] == str(topic_id)
