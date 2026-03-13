@@ -30,6 +30,10 @@ def test_dashboard_bootstrap_uses_cache_and_invalidation(monkeypatch):
         "backend.services.dashboard_experience_service.CourseExperienceService.prewarm_scope",
         lambda **kwargs: prewarm_calls.append(kwargs["subject"]) or True,
     )
+    monkeypatch.setattr(
+        "backend.services.dashboard_experience_service.PrewarmJobService.enqueue_course_scope",
+        lambda self, **kwargs: None,
+    )
 
     def _bootstrap(**kwargs):
         calls["course"] += 1

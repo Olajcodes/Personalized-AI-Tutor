@@ -124,6 +124,10 @@ def test_lesson_cockpit_bootstrap_merges_course_and_tutor_context(monkeypatch):
         "backend.services.lesson_cockpit_service.GraphRepository.get_mastery_map",
         lambda self, **kwargs: {},
     )
+    monkeypatch.setattr(
+        "backend.services.lesson_cockpit_service.PrewarmJobService.enqueue_lesson_related",
+        lambda self, **kwargs: None,
+    )
 
     payload = LessonCockpitBootstrapIn(
         student_id=student_id,
@@ -169,6 +173,10 @@ def test_lesson_cockpit_bootstrap_uses_cache_and_can_invalidate(monkeypatch):
     monkeypatch.setattr(
         "backend.services.lesson_cockpit_service.GraphRepository.get_mastery_map",
         lambda self, **kwargs: {},
+    )
+    monkeypatch.setattr(
+        "backend.services.lesson_cockpit_service.PrewarmJobService.enqueue_lesson_related",
+        lambda self, **kwargs: None,
     )
 
     payload = LessonCockpitBootstrapIn(
