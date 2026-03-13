@@ -115,6 +115,39 @@ async def test_get_results_returns_readable_labels_and_topic_title(
 
 
 @pytest.mark.anyio
+async def test_get_results_skips_unmapped_question_concepts(
+    mock_db, quiz_id, student_id, attempt_id, mock_attempt, mock_quiz
+):
+    service = QuizResultsService(mock_db)
+    question_id = uuid4()
+
+    mock_answer = MagicMock()
+    mock_answer.question_id = question_id
+    mock_answer.is_correct = False
+    mock_attempt.answers = [mock_answer]
+
+    mock_question = MagicMock(spec=QuizQuestion)
+    mock_question.id = question_id
+    mock_question.concept_id = None
+
+    service.repo.get_attempt_with_answers = MagicMock(return_value=mock_attempt)
+    service.repo.get_quiz_with_questions = MagicMock(return_value=mock_quiz)
+    service.repo.get_questions_for_quiz = MagicMock(return_value=[mock_question])
+    service.repo.get_topic_title = MagicMock(return_value="Electoral Process and Participation")
+    service.repo.find_topic_title_for_concept = MagicMock(return_value=None)
+
+    with patch(
+        "backend.services.quiz_results_service.generate_quiz_insights",
+        new=AsyncMock(return_value=["Use the next lesson step to rebuild weak evidence."]),
+    ):
+        response = await service.get_results(quiz_id, student_id, attempt_id)
+
+    assert response.concept_breakdown == []
+    assert response.recommended_revision_topic_id is None
+    assert response.graph_remediation is None
+
+
+@pytest.mark.anyio
 async def test_get_results_attempt_not_found(
     mock_db, quiz_id, student_id, attempt_id
 ):

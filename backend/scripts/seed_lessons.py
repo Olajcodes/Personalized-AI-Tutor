@@ -29,7 +29,6 @@ from backend.core.database import SessionLocal
 from backend.models.activity import StudentStats
 from backend.models.lesson import Lesson, LessonBlock
 from backend.models.student import StudentProfile, StudentSubject
-from backend.models.student_concept_mastery import StudentConceptMastery
 from backend.models.subject import Subject
 from backend.models.topic import Topic
 from backend.models.user import User
@@ -804,39 +803,6 @@ def _upsert_topic_and_lesson(
     return topic, created
 
 
-def _seed_mastery_for_scope(
-    db: Session,
-    *,
-    student_id: uuid.UUID,
-    subject: str,
-    sss_level: str,
-    term: int,
-    topic_ids: list[uuid.UUID],
-) -> None:
-    db.query(StudentConceptMastery).filter(
-        StudentConceptMastery.student_id == student_id,
-        StudentConceptMastery.subject == subject,
-        StudentConceptMastery.sss_level == sss_level,
-        StudentConceptMastery.term == term,
-    ).delete(synchronize_session=False)
-
-    seed_pattern = [0.92, 0.84, 0.77, 0.69, 0.58, 0.46, 0.35, 0.28, 0.2]
-    for index, topic_id in enumerate(topic_ids):
-        score = seed_pattern[index] if index < len(seed_pattern) else max(0.08, 0.25 - (index * 0.02))
-        db.add(
-            StudentConceptMastery(
-                id=uuid.uuid4(),
-                student_id=student_id,
-                subject=subject,
-                sss_level=sss_level,
-                term=term,
-                concept_id=str(topic_id),
-                mastery_score=score,
-                source="seed_curriculum",
-            )
-        )
-
-
 def run() -> None:
     db: Session = SessionLocal()
     try:
@@ -924,7 +890,6 @@ def run() -> None:
             db.query(LessonBlock).delete(synchronize_session=False)
             db.query(Lesson).delete(synchronize_session=False)
             db.query(Topic).delete(synchronize_session=False)
-            db.query(StudentConceptMastery).delete(synchronize_session=False)
             db.commit()
 
         docs_root = _default_curriculum_root()
@@ -953,25 +918,11 @@ def run() -> None:
 
         db.commit()
 
-        for learner in learners:
-            for subject in SUBJECT_SLUGS:
-                scope_key = (subject, learner.sss_level, learner.term)
-                topic_ids = topic_ids_by_scope.get(scope_key, [])[:9]
-                _seed_mastery_for_scope(
-                    db,
-                    student_id=learner.user_id,
-                    subject=subject,
-                    sss_level=learner.sss_level,
-                    term=learner.term,
-                    topic_ids=topic_ids,
-                )
-
-        db.commit()
-
         print("Seed complete.")
         print(f"Curriculum source root: {docs_root}")
         if include_demo_learners and seed_student_id is not None:
             print(f"Primary student_id: {seed_student_id}")
+            print("Demo learner mastery seeded: no (mastery should come from diagnostics, quizzes, and tutor evidence).")
         else:
             print("Demo learners seeded: no (interface should create users/profiles).")
         print(f"Topics created: {created_topics}")

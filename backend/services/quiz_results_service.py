@@ -65,9 +65,10 @@ class QuizResultsService:
             if not question:
                 continue
 
-            concept_id = str(getattr(question, "concept_id", "")).strip()
+            raw_concept_id = getattr(question, "concept_id", None)
+            concept_id = str(raw_concept_id).strip() if raw_concept_id not in (None, "") else ""
             if not concept_id:
-                concept_id = str(quiz.topic_id or question.id)
+                continue
             concept_correctness.setdefault(concept_id, []).append(bool(answer.is_correct))
 
         concept_breakdown: list[QuizResultConceptBreakdownItem] = []
