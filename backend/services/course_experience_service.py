@@ -28,6 +28,7 @@ from backend.schemas.course_schema import (
 from backend.schemas.learning_path_schema import PathNextIn
 from backend.services.learning_path_service import LearningPathValidationError, learning_path_service
 from backend.services.lesson_experience_service import LessonExperienceService
+from backend.services.prewarm_job_service import PrewarmJobService
 from backend.services.rag_retrieve_service import RagRetrieveService, RagRetrieveServiceError
 
 logger = logging.getLogger(__name__)
@@ -543,6 +544,13 @@ class CourseExperienceService:
         prewarm_topic_ids = self._candidate_prewarm_topic_ids(topics=topics, next_step=next_step)
         if prewarm_topic_ids:
             prewarm = LessonExperienceService.prewarm_related_topics(
+                student_id=student_id,
+                subject=subject,
+                sss_level=str(student_profile.sss_level),
+                term=term,
+                topic_ids=prewarm_topic_ids,
+            )
+            PrewarmJobService(self.db).enqueue_lesson_related(
                 student_id=student_id,
                 subject=subject,
                 sss_level=str(student_profile.sss_level),

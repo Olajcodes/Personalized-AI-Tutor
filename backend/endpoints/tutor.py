@@ -38,6 +38,7 @@ from backend.schemas.tutor_schema import (
 )
 from backend.services.lesson_experience_service import LessonExperienceService
 from backend.services.lesson_cockpit_service import LessonCockpitService
+from backend.services.prewarm_job_service import PrewarmJobService
 from backend.services.tutor_assessment_service import TutorAssessmentService
 from backend.services.tutor_orchestration_service import (
     TutorOrchestrationService,
@@ -95,7 +96,7 @@ def tutor_session_bootstrap(
                 pass
         if warm_topic_ids:
             background_tasks.add_task(
-                LessonExperienceService.prewarm_related_topics,
+                PrewarmJobService.enqueue_lesson_related_job,
                 student_id=payload.student_id,
                 subject=payload.subject,
                 sss_level=payload.sss_level,

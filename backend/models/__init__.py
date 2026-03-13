@@ -22,6 +22,7 @@ from backend.models.student_concept_mastery import StudentConceptMastery  # noqa
 from backend.models.mastery_update_event import MasteryUpdateEvent  # noqa: F401
 from backend.models.mastery_snapshot import MasterySnapshot  # noqa: F401
 from backend.models.student_badge import StudentBadge  # noqa: F401
+from backend.models.prewarm_job import PrewarmJob  # noqa: F401
 
 # Diagnostic and quizzes
 from backend.models.diagnostic import Diagnostic  # noqa: F401

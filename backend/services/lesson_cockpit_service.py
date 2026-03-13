@@ -13,6 +13,7 @@ from backend.schemas.lesson_cockpit_schema import LessonCockpitBootstrapIn, Less
 from backend.schemas.tutor_schema import TutorSessionBootstrapIn
 from backend.services.course_experience_service import CourseExperienceService
 from backend.services.lesson_experience_service import LessonExperienceService
+from backend.services.prewarm_job_service import PrewarmJobService
 
 
 COCKPIT_CACHE_TTL_SECONDS = 30.0
@@ -207,6 +208,13 @@ class LessonCockpitService:
         _append_topic(weakest_prereq_topic_id)
 
         prewarm = LessonExperienceService.prewarm_related_topics(
+            student_id=payload.student_id,
+            subject=payload.subject,
+            sss_level=payload.sss_level,
+            term=int(payload.term),
+            topic_ids=candidate_ids,
+        )
+        PrewarmJobService(self.db).enqueue_lesson_related(
             student_id=payload.student_id,
             subject=payload.subject,
             sss_level=payload.sss_level,

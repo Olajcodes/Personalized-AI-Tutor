@@ -9,6 +9,7 @@ from sqlalchemy import text
 
 from backend.core.config import settings
 from backend.core.database import engine
+from backend.services.prewarm_job_service import PrewarmJobService
 from backend.services.rag_retrieve_service import QdrantRuntimeConfig, QdrantVectorStore
 
 
@@ -94,6 +95,7 @@ class SystemHealthService:
             "internal_service_auth": {
                 "status": "configured" if settings.internal_service_key else "not_configured"
             },
+            "prewarm_queue": PrewarmJobService.snapshot(),
         }
         overall_status = "ok"
         if checks["postgres"]["status"] != "ok":

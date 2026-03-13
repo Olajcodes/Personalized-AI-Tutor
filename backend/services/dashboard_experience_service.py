@@ -15,6 +15,7 @@ from backend.models.student import StudentProfile, StudentSubject
 from backend.models.subject import Subject
 from backend.schemas.dashboard_schema import DashboardBootstrapOut
 from backend.services.course_experience_service import CourseExperienceService
+from backend.services.prewarm_job_service import PrewarmJobService
 
 logger = logging.getLogger(__name__)
 DASHBOARD_CACHE_TTL_SECONDS = 30.0
@@ -163,6 +164,11 @@ class DashboardExperienceService:
                 warmed_subjects.append(candidate_subject)
             else:
                 failed_subjects.append(candidate_subject)
+            PrewarmJobService(self.db).enqueue_course_scope(
+                student_id=student_id,
+                subject=candidate_subject,
+                term=int(profile.active_term),
+            )
 
         payload = DashboardBootstrapOut(
             student_id=student_id,

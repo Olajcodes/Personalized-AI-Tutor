@@ -15,6 +15,7 @@ from backend.services.course_experience_service import CourseExperienceService
 from backend.services.dashboard_experience_service import DashboardExperienceService
 from backend.services.lesson_cockpit_service import LessonCockpitService
 from backend.services.lesson_experience_service import LessonExperienceService
+from backend.services.prewarm_job_service import PrewarmJobService
 from backend.services.lesson_service import (
     fetch_topic_lesson,
     LessonNotFound,
@@ -80,11 +81,28 @@ def prewarm_lessons(
         term=int(payload.term),
         topic_ids=list(payload.topic_ids),
     )
+    queued_job_ids: list[str] = []
+    queued_lesson_job = PrewarmJobService.enqueue_lesson_related_job(
+        student_id=payload.student_id,
+        subject=payload.subject,
+        sss_level=payload.sss_level,
+        term=int(payload.term),
+        topic_ids=list(payload.topic_ids),
+    )
+    if queued_lesson_job:
+        queued_job_ids.append(str(queued_lesson_job))
     CourseExperienceService.prewarm_scope(
         student_id=payload.student_id,
         subject=payload.subject,
         term=int(payload.term),
     )
+    queued_scope_job = PrewarmJobService.enqueue_course_scope_job(
+        student_id=payload.student_id,
+        subject=payload.subject,
+        term=int(payload.term),
+    )
+    if queued_scope_job:
+        queued_job_ids.append(str(queued_scope_job))
     DashboardExperienceService.prewarm(
         student_id=payload.student_id,
         subject=payload.subject,
@@ -94,4 +112,5 @@ def prewarm_lessons(
         warmed_topic_ids=result["warmed_topic_ids"],
         cache_hit_topic_ids=result["cache_hit_topic_ids"],
         failed_topic_ids=result["failed_topic_ids"],
+        queued_job_ids=queued_job_ids,
     )

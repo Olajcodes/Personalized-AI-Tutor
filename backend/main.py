@@ -43,6 +43,7 @@ from backend.endpoints.teachers import router as teachers_router
 from backend.endpoints.admin_curriculum import router as admin_curriculum_router
 from backend.endpoints.admin_governance import router as admin_governance_router
 from backend.endpoints.internal_rag import router as internal_rag_router
+from backend.services.prewarm_job_service import start_prewarm_worker, stop_prewarm_worker
 
 API_PREFIX = "/api/v1"
 
@@ -94,6 +95,16 @@ app.include_router(teachers_router, prefix=API_PREFIX)
 app.include_router(admin_curriculum_router, prefix=API_PREFIX)
 app.include_router(admin_governance_router, prefix=API_PREFIX)
 app.include_router(internal_rag_router, prefix=API_PREFIX)
+
+
+@app.on_event("startup")
+def _startup_prewarm_worker():
+    start_prewarm_worker()
+
+
+@app.on_event("shutdown")
+def _shutdown_prewarm_worker():
+    stop_prewarm_worker()
 
 @app.get("/")
 async def root():

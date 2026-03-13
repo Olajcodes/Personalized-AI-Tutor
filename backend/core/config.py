@@ -76,6 +76,10 @@ class Settings(BaseModel):
     )
     internal_graph_timeout_seconds: float = float(os.getenv("INTERNAL_GRAPH_TIMEOUT_SECONDS", "5"))
     internal_graph_max_retries: int = int(os.getenv("INTERNAL_GRAPH_MAX_RETRIES", "2"))
+    prewarm_queue_enabled: bool = _parse_bool(os.getenv("PREWARM_QUEUE_ENABLED"), default=True)
+    prewarm_worker_enabled: bool = _parse_bool(os.getenv("PREWARM_WORKER_ENABLED"), default=True)
+    prewarm_worker_poll_seconds: float = float(os.getenv("PREWARM_WORKER_POLL_SECONDS", "5"))
+    prewarm_worker_batch_size: int = int(os.getenv("PREWARM_WORKER_BATCH_SIZE", "3"))
 
 
 settings = Settings()

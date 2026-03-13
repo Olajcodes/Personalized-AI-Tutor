@@ -61,3 +61,4 @@ class LessonPrewarmOut(BaseModel):
     warmed_topic_ids: list[str] = Field(default_factory=list)
     cache_hit_topic_ids: list[str] = Field(default_factory=list)
     failed_topic_ids: list[str] = Field(default_factory=list)
+    queued_job_ids: list[str] = Field(default_factory=list)

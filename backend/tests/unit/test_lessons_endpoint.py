@@ -37,6 +37,8 @@ def test_lesson_prewarm_endpoint_requires_matching_student_id(monkeypatch):
 def test_lesson_prewarm_endpoint_returns_warm_result(monkeypatch):
     student_id = uuid4()
     calls = {"course": 0, "dashboard": 0}
+    queued_job_id = uuid4()
+    queued_scope_job_id = uuid4()
 
     monkeypatch.setattr(
         "backend.endpoints.lessons.LessonExperienceService.prewarm_related_topics",
@@ -53,6 +55,14 @@ def test_lesson_prewarm_endpoint_returns_warm_result(monkeypatch):
     monkeypatch.setattr(
         "backend.endpoints.lessons.DashboardExperienceService.prewarm",
         lambda **kwargs: calls.__setitem__("dashboard", calls["dashboard"] + 1) or True,
+    )
+    monkeypatch.setattr(
+        "backend.endpoints.lessons.PrewarmJobService.enqueue_lesson_related_job",
+        lambda **kwargs: queued_job_id,
+    )
+    monkeypatch.setattr(
+        "backend.endpoints.lessons.PrewarmJobService.enqueue_course_scope_job",
+        lambda **kwargs: queued_scope_job_id,
     )
 
     client = TestClient(app)
@@ -75,5 +85,6 @@ def test_lesson_prewarm_endpoint_returns_warm_result(monkeypatch):
     body = response.json()
     assert body["requested_topic_ids"] == [str(topic_id)]
     assert body["warmed_topic_ids"] == [str(topic_id)]
+    assert body["queued_job_ids"] == [str(queued_job_id), str(queued_scope_job_id)]
     assert calls["course"] == 1
     assert calls["dashboard"] == 1
