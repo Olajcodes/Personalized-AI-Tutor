@@ -160,6 +160,7 @@ Notes:
 - If LLM is unavailable or output is invalid, ingestion falls back safely and logs fallback mode.
 - Use `--disable-llm` only for deterministic fallback-only runs.
 - Add `--full-db-reset` if you want to truncate all public application tables before reseeding.
+- If you include demo learners, the seed flow now creates identity/profile scope only. It does not fabricate concept mastery.
 
 ### 7) Run services
 
