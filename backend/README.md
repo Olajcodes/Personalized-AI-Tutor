@@ -23,6 +23,7 @@ DATABASE_URL=postgresql://postgres:password@localhost:5432/mastery_ai
 JWT_SECRET=change_me
 AI_CORE_BASE_URL=http://127.0.0.1:10000
 CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000
+INTERNAL_SERVICE_KEY=replace_with_shared_secret
 ```
 
 Recommended graph/vector/LLM ingestion settings:
@@ -44,6 +45,15 @@ GROQ_API_KEY=<your-groq-key>
 CURRICULUM_CONCEPT_USE_LLM=true
 CURRICULUM_CONCEPT_EXTRACT_USE_LLM=true
 CURRICULUM_PREREQ_USE_LLM=true
+```
+
+Prewarm queue/worker defaults:
+
+```env
+PREWARM_QUEUE_ENABLED=true
+PREWARM_WORKER_ENABLED=true
+PREWARM_WORKER_POLL_SECONDS=5
+PREWARM_WORKER_BATCH_SIZE=3
 ```
 
 ## Installation
@@ -127,6 +137,11 @@ Health:
 
 - `http://127.0.0.1:8000/api/v1/system/health`
 
+The backend health payload now includes:
+
+- `checks.internal_service_auth`
+- `checks.prewarm_queue`
+
 ## API Surface (Base Prefix: `/api/v1`)
 
 Major route groups:
@@ -180,9 +195,21 @@ ORDER BY j.created_at DESC;
 - Verify `DATABASE_URL` host and SSL mode.
 - For Supabase pooler, use `?sslmode=require`.
 
+5. Internal adapter calls returning `401` or `503`:
+- Ensure the same `INTERNAL_SERVICE_KEY` is set in both `backend/.env` and `ai_core/.env`.
+- `401` means the key is missing or mismatched.
+- `503` means the backend internal auth was not configured at all.
+
+6. Prewarm queue not moving:
+- Check `GET /api/v1/system/health` and inspect `checks.prewarm_queue`.
+- Ensure `PREWARM_QUEUE_ENABLED=true` and `PREWARM_WORKER_ENABLED=true`.
+- If you deploy multiple backend instances, each instance can run the in-process worker. Keep batch size conservative.
+
 ## Production Guidance
 
 - Set strict `CORS_ORIGINS` (no wildcard).
 - Keep `JWT_SECRET` and DB keys in secret manager.
+- Keep `INTERNAL_SERVICE_KEY` identical across backend and ai-core.
 - Restrict admin endpoints to authorized users only.
 - Keep ingestion/approval workflows auditable via job logs.
+- Keep `PREWARM_QUEUE_ENABLED=true` if you want durable warm jobs. Disable only for debugging.

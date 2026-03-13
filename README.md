@@ -118,8 +118,10 @@ Set required secrets/URLs, especially:
   - `JWT_SECRET`
   - `AI_CORE_BASE_URL` (local default: `http://127.0.0.1:10000`)
   - `CORS_ORIGINS` (include local frontend + production frontend domain)
+  - `INTERNAL_SERVICE_KEY` (must match ai-core)
 - `ai_core/.env`
   - `GROQ_API_KEY` or `LLM_API_KEY`
+  - `INTERNAL_SERVICE_KEY` (must match backend)
   - `POSTGRES_DSN`
   - `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION`
   - `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`
@@ -191,7 +193,9 @@ npm run dev
 - Keep `AI_CORE_ALLOW_FALLBACK=false` in strict production environments if you want hard failure when AI Core is unreachable.
 - Configure `CORS_ORIGINS` explicitly; avoid `*` in production.
 - Keep secrets only in secret managers (Render/CI/CD), not in git-tracked files.
+- Keep the same `INTERNAL_SERVICE_KEY` on backend and ai-core so internal adapters stay locked down.
 - Keep curriculum ingestion and approval as an admin-only workflow.
+- Backend runs an in-process prewarm worker by default. Keep `PREWARM_QUEUE_ENABLED=true` unless you are deliberately debugging cache behavior.
 
 ## Deployment
 
@@ -204,8 +208,10 @@ At minimum configure:
   - `JWT_SECRET`
   - `AI_CORE_BASE_URL`
   - `CORS_ORIGINS`
+  - `INTERNAL_SERVICE_KEY`
 - AI Core:
   - `GROQ_API_KEY` or `LLM_API_KEY`
+  - `INTERNAL_SERVICE_KEY`
   - datastore credentials (`POSTGRES_DSN`, `QDRANT_*`, `NEO4J_*`)
 
 ## Service-Specific Documentation

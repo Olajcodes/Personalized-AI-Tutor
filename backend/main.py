@@ -3,6 +3,8 @@
 Logic:
 - Wires routers under /api/v1
 """
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -47,7 +49,17 @@ from backend.services.prewarm_job_service import start_prewarm_worker, stop_prew
 
 API_PREFIX = "/api/v1"
 
-app = FastAPI(title="Mastery AI Backend", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    start_prewarm_worker()
+    try:
+        yield
+    finally:
+        stop_prewarm_worker()
+
+
+app = FastAPI(title="Mastery AI Backend", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -95,16 +107,6 @@ app.include_router(teachers_router, prefix=API_PREFIX)
 app.include_router(admin_curriculum_router, prefix=API_PREFIX)
 app.include_router(admin_governance_router, prefix=API_PREFIX)
 app.include_router(internal_rag_router, prefix=API_PREFIX)
-
-
-@app.on_event("startup")
-def _startup_prewarm_worker():
-    start_prewarm_worker()
-
-
-@app.on_event("shutdown")
-def _shutdown_prewarm_worker():
-    stop_prewarm_worker()
 
 @app.get("/")
 async def root():
