@@ -7,6 +7,7 @@ from uuid import UUID
 import httpx
 
 from backend.core.config import settings
+from backend.core.telemetry import log_timed_event, now_ms
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,7 @@ async def generate_quiz_questions(
     num_questions: int,
 ) -> list[dict[str, Any]]:
     """Fetch quiz questions from ai-core with strict response validation."""
+    started_at = now_ms()
     base_url = settings.ai_core_base_url.rstrip("/")
     if not base_url:
         raise AICoreUnavailableError("AI_CORE_BASE_URL is not configured")
@@ -105,6 +107,17 @@ async def generate_quiz_questions(
             response.raise_for_status()
             data = response.json()
     except httpx.HTTPError as exc:
+        log_timed_event(
+            logger,
+            "ai_core.quiz.generate",
+            started_at,
+            log_level=logging.WARNING,
+            outcome="http_error",
+            student_id=student_id or "none",
+            topic_id=topic_id,
+            subject=subject,
+            detail=str(exc),
+        )
         raise AICoreProviderError(f"ai-core /quiz/generate failed: {exc}") from exc
 
     questions = data.get("questions") if isinstance(data, dict) else None
@@ -116,11 +129,22 @@ async def generate_quiz_questions(
         normalized_questions = normalized_questions[:num_questions]
     if not normalized_questions:
         raise AICoreContractError("ai-core /quiz/generate produced no valid questions after validation")
+    log_timed_event(
+        logger,
+        "ai_core.quiz.generate",
+        started_at,
+        outcome="success",
+        student_id=student_id or "none",
+        topic_id=topic_id,
+        subject=subject,
+        questions=len(normalized_questions),
+    )
     return normalized_questions
 
 
 async def generate_quiz_insights(quiz_id, attempt_id) -> list[str]:
     """Fetch insight text from ai-core, returning no insights when unavailable."""
+    started_at = now_ms()
     base_url = settings.ai_core_base_url.rstrip("/")
     if not base_url:
         logger.warning("ai-core insights unavailable: AI_CORE_BASE_URL is not configured")
@@ -137,6 +161,23 @@ async def generate_quiz_insights(quiz_id, attempt_id) -> list[str]:
 
     insights = data.get("insights") if isinstance(data, dict) else None
     if isinstance(insights, list) and insights:
+        log_timed_event(
+            logger,
+            "ai_core.quiz.insights",
+            started_at,
+            outcome="success",
+            quiz_id=quiz_id,
+            attempt_id=attempt_id,
+            insights=len(insights),
+        )
         return [str(item) for item in insights]
 
+    log_timed_event(
+        logger,
+        "ai_core.quiz.insights",
+        started_at,
+        outcome="empty",
+        quiz_id=quiz_id,
+        attempt_id=attempt_id,
+    )
     return []

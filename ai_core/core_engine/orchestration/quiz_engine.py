@@ -22,6 +22,7 @@ from ai_core.core_engine.integrations.internal_api import (
 )
 from ai_core.core_engine.llm.client import LLMClient, LLMClientError
 from ai_core.core_engine.observability.logging import get_logger
+from ai_core.core_engine.observability.telemetry import log_timed_event, now_ms
 
 logger = get_logger(__name__)
 
@@ -476,6 +477,7 @@ async def generate_quiz_questions(
     difficulty: str,
     num_questions: int,
 ) -> list[dict[str, Any]]:
+    started_at = now_ms()
     try:
         lesson_context = _internal_lesson_context(student_id=student_id, topic_id=topic_id)
     except Exception as exc:
@@ -494,11 +496,33 @@ async def generate_quiz_questions(
         logger.warning("quiz.rag_context unavailable topic_id=%s error=%s", topic_id, exc)
         rag_chunks = []
     if not rag_chunks and not _lesson_context_has_substance(lesson_context):
+        log_timed_event(
+            logger,
+            "quiz.generate",
+            started_at,
+            log_level=30,
+            outcome="no_context",
+            topic_id=topic_id,
+            subject=subject,
+            lesson_context=False,
+            rag_chunks=0,
+        )
         raise QuizGenerationError("No approved curriculum context found for grounded quiz generation.")
 
     topic_title = _topic_title(lesson_context=lesson_context, rag_chunks=rag_chunks, topic_id=topic_id)
     concept_pool = _collect_concepts(lesson_context=lesson_context, rag_chunks=rag_chunks)
     if not concept_pool:
+        log_timed_event(
+            logger,
+            "quiz.generate",
+            started_at,
+            log_level=30,
+            outcome="no_concepts",
+            topic_id=topic_id,
+            subject=subject,
+            lesson_context=bool(lesson_context),
+            rag_chunks=len(rag_chunks),
+        )
         raise QuizGenerationError("No valid concept coverage found for this lesson/topic.")
 
     prompt = _build_quiz_prompt(
@@ -517,11 +541,33 @@ async def generate_quiz_questions(
     try:
         raw = _llm_generate(prompt)
     except (LLMClientError, Exception) as exc:
+        log_timed_event(
+            logger,
+            "quiz.generate",
+            started_at,
+            log_level=30,
+            outcome="llm_error",
+            topic_id=topic_id,
+            subject=subject,
+            rag_chunks=len(rag_chunks),
+            concepts=len(concept_pool),
+            detail=str(exc),
+        )
         raise QuizGenerationError(f"Quiz LLM generation failed: {exc}") from exc
 
     parsed = _extract_json_object(raw)
     if not parsed:
         preview = _normalize_text(raw)[:220]
+        log_timed_event(
+            logger,
+            "quiz.generate",
+            started_at,
+            log_level=30,
+            outcome="invalid_json",
+            topic_id=topic_id,
+            subject=subject,
+            preview=preview,
+        )
         raise QuizGenerationError(f"Quiz LLM returned invalid JSON. preview={preview!r}")
 
     questions = _validate_generated_questions(
@@ -531,16 +577,20 @@ async def generate_quiz_questions(
         num_questions=num_questions,
     )
     questions = _rebalance_answer_positions(questions, topic_id=topic_id)
-    logger.info(
-        "quiz.generate.success topic_id=%s subject=%s level=%s term=%s questions=%s concepts=%s rag_chunks=%s lesson_context=%s",
-        topic_id,
-        subject,
-        sss_level,
-        term,
-        len(questions),
-        len(concept_pool),
-        len(rag_chunks),
-        bool(lesson_context),
+    log_timed_event(
+        logger,
+        "quiz.generate",
+        started_at,
+        outcome="success",
+        topic_id=topic_id,
+        subject=subject,
+        sss_level=sss_level,
+        term=term,
+        questions=len(questions),
+        concepts=len(concept_pool),
+        rag_chunks=len(rag_chunks),
+        lesson_context=bool(lesson_context),
+        lesson_context_source=str((lesson_context or {}).get("context_source") or "none"),
     )
     return questions
 

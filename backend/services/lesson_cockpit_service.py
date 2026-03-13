@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import time
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from backend.repositories.graph_repo import GraphRepository
+from backend.core.telemetry import log_timed_event, now_ms
 from backend.schemas.graph_learning_schema import WhyThisTopicOut
 from backend.schemas.lesson_cockpit_schema import LessonCockpitBootstrapIn, LessonCockpitBootstrapOut
 from backend.schemas.tutor_schema import TutorSessionBootstrapIn
@@ -18,6 +20,7 @@ from backend.services.prewarm_job_service import PrewarmJobService
 
 COCKPIT_CACHE_TTL_SECONDS = 30.0
 _LESSON_COCKPIT_CACHE: dict[str, tuple[float, LessonCockpitBootstrapOut]] = {}
+logger = logging.getLogger(__name__)
 
 
 class LessonCockpitService:
@@ -137,6 +140,7 @@ class LessonCockpitService:
         )
 
     def bootstrap(self, payload: LessonCockpitBootstrapIn) -> LessonCockpitBootstrapOut:
+        started_at = now_ms()
         mastery_signature = self._scope_mastery_signature(
             db=self.db,
             student_id=payload.student_id,
@@ -155,6 +159,17 @@ class LessonCockpitService:
         )
         cached = self._read_cached_bootstrap(cache_key=cache_key)
         if cached is not None:
+            log_timed_event(
+                logger,
+                "lesson.cockpit.bootstrap",
+                started_at,
+                cache_hit=True,
+                student_id=payload.student_id,
+                topic_id=payload.topic_id,
+                subject=payload.subject,
+                term=int(payload.term),
+                warmed_topics=len(list(cached.warmed_topic_ids or [])),
+            )
             return cached
 
         course_bootstrap = self.course_service.bootstrap(
@@ -223,7 +238,7 @@ class LessonCockpitService:
         )
         why_topic_detail = self._why_topic_detail(payload=payload, tutor_bootstrap=tutor_bootstrap)
 
-        return self._write_cached_bootstrap(
+        output = self._write_cached_bootstrap(
             cache_key=cache_key,
             payload=LessonCockpitBootstrapOut(
                 student_id=payload.student_id,
@@ -243,3 +258,19 @@ class LessonCockpitService:
                 failed_topic_ids=prewarm["failed_topic_ids"],
             ),
         )
+        log_timed_event(
+            logger,
+            "lesson.cockpit.bootstrap",
+            started_at,
+            cache_hit=False,
+            student_id=payload.student_id,
+            topic_id=payload.topic_id,
+            subject=payload.subject,
+            term=int(payload.term),
+            warmed_topics=len(list(output.warmed_topic_ids or [])),
+            cache_hit_topics=len(list(output.cache_hit_topic_ids or [])),
+            failed_topics=len(list(output.failed_topic_ids or [])),
+            prerequisites=len(list(output.tutor_bootstrap.graph_context.prerequisite_concepts or [])),
+            downstream=len(list(output.tutor_bootstrap.graph_context.downstream_concepts or [])),
+        )
+        return output

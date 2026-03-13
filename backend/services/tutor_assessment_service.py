@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 import re
+import logging
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from backend.core.telemetry import log_timed_event, now_ms
 from backend.repositories.activity_repo import ActivityRepository
 from backend.repositories.quiz_repo import QuizRepository
 from backend.repositories.tutor_session_repo import TutorSessionRepository
@@ -30,6 +32,7 @@ from backend.services.tutor_orchestration_service import (
 )
 
 _ASSESSMENT_PREFIX = "TUTOR_ASSESSMENT_STATE::"
+logger = logging.getLogger(__name__)
 
 
 class TutorAssessmentService:
@@ -178,6 +181,7 @@ class TutorAssessmentService:
         )
 
     async def start_assessment(self, payload: TutorAssessmentStartIn) -> TutorAssessmentStartOut:
+        started_at = now_ms()
         ai_out = await self.orchestration.assessment_start(payload)
         assessment_id = uuid4()
         state = {
@@ -204,9 +208,22 @@ class TutorAssessmentService:
             role="assistant",
             content=f"Check question: {ai_out.question}",
         )
-        return ai_out.model_copy(update={"assessment_id": assessment_id})
+        response = ai_out.model_copy(update={"assessment_id": assessment_id})
+        log_timed_event(
+            logger,
+            "tutor.assessment.start",
+            started_at,
+            outcome="success",
+            student_id=payload.student_id,
+            session_id=payload.session_id,
+            topic_id=payload.topic_id,
+            focus_concept_id=payload.focus_concept_id or response.concept_id,
+            citations=len(list(response.citations or [])),
+        )
+        return response
 
     async def submit_assessment(self, payload: TutorAssessmentSubmitIn) -> TutorAssessmentSubmitOut:
+        started_at = now_ms()
         match = self._find_pending_state(session_id=payload.session_id, assessment_id=payload.assessment_id)
         if match is None:
             raise HTTPException(
@@ -308,7 +325,7 @@ class TutorAssessmentService:
             term=int(payload.term),
         )
         DashboardExperienceService.invalidate_student_cache(student_id=payload.student_id)
-        return ai_out.model_copy(
+        response = ai_out.model_copy(
             update={
                 "assessment_id": payload.assessment_id,
                 "mastery_updated": mastery_updated,
@@ -323,3 +340,17 @@ class TutorAssessmentService:
                 "graph_remediation": graph_remediation,
             }
         )
+        log_timed_event(
+            logger,
+            "tutor.assessment.submit",
+            started_at,
+            outcome="success",
+            student_id=payload.student_id,
+            session_id=payload.session_id,
+            topic_id=payload.topic_id,
+            concept_id=ai_out.concept_id,
+            score=ai_out.score,
+            mastery_updated=mastery_updated,
+            recommended_topic_id=recommended_topic_id or "none",
+        )
+        return response

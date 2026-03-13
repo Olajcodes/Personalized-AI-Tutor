@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.core.database import SessionLocal
+from backend.core.telemetry import log_timed_event, now_ms
 from backend.models.mastery_update_event import MasteryUpdateEvent
 from backend.models.personalized_lesson import PersonalizedLesson
 from backend.models.student import StudentProfile, StudentSubject
@@ -409,6 +410,7 @@ class CourseExperienceService:
         subject: str,
         term: int,
     ) -> CourseBootstrapOut:
+        started_at = now_ms()
         student_profile = self.db.execute(
             select(StudentProfile).where(StudentProfile.student_id == student_id)
         ).scalar_one_or_none()
@@ -431,6 +433,18 @@ class CourseExperienceService:
         )
         cached = self._read_cached_bootstrap(cache_key=cache_key)
         if cached is not None:
+            log_timed_event(
+                logger,
+                "course.bootstrap",
+                started_at,
+                cache_hit=True,
+                student_id=student_id,
+                subject=subject,
+                term=term,
+                topics=len(list(cached.topics or [])),
+                map_nodes=len(list(cached.nodes or [])),
+                timeline=len(list(cached.intervention_timeline or [])),
+            )
             return cached
 
         enrolled_subject_ids = [
@@ -604,4 +618,24 @@ class CourseExperienceService:
             cache_hit_topic_ids=cache_hit_topic_ids,
             failed_topic_ids=failed_topic_ids,
         )
-        return self._write_cached_bootstrap(cache_key=cache_key, payload=payload)
+        output = self._write_cached_bootstrap(cache_key=cache_key, payload=payload)
+        log_timed_event(
+            logger,
+            "course.bootstrap",
+            started_at,
+            cache_hit=False,
+            student_id=student_id,
+            subject=subject,
+            term=term,
+            topics=len(topics),
+            ready_topics=sum(1 for item in topics if item.lesson_ready),
+            map_nodes=len(list(output.nodes or [])),
+            map_edges=len(list(output.edges or [])),
+            next_step=output.next_step.recommended_topic_id if output.next_step else "none",
+            prewarm_candidates=len(prewarm_topic_ids),
+            warmed_topics=len(warmed_topic_ids),
+            cache_hit_topics=len(cache_hit_topic_ids),
+            failed_topics=len(failed_topic_ids),
+            map_error=bool(map_error),
+        )
+        return output

@@ -41,6 +41,7 @@ from ai_core.core_engine.integrations.internal_api import (
 )
 from ai_core.core_engine.llm.client import LLMClient, LLMClientError
 from ai_core.core_engine.observability.logging import get_logger
+from ai_core.core_engine.observability.telemetry import log_timed_event, now_ms
 from ai_core.core_engine.safety.injection import sanitize_user_text
 from ai_core.core_engine.safety.moderation import ModerationError, basic_moderate
 
@@ -1059,12 +1060,24 @@ def _run_structured_tutor_mode(
     mode: str,
     user_goal: str,
 ) -> TutorChatResponse:
+    started_at = now_ms()
     citations, profile_context, history_context, lesson_context, graph_context, actions = _collect_tutor_context(request)
     if request.focus_concept_label or request.focus_concept_id:
         actions.append("USED_GRAPH_SELECTED_FOCUS")
 
     if not citations and not _lesson_context_available(lesson_context):
         topic_part = f", topic_id={request.topic_id}" if request.topic_id else ""
+        log_timed_event(
+            logger,
+            "tutor.mode",
+            started_at,
+            log_level=30,
+            outcome="no_context",
+            mode=mode,
+            subject=request.subject,
+            term=request.term,
+            topic_id=request.topic_id or "none",
+        )
         return TutorChatResponse(
             assistant_message=(
                 "Tutor unavailable: no lesson-aware context found for "
@@ -1092,6 +1105,18 @@ def _run_structured_tutor_mode(
     except (LLMClientError, Exception) as exc:
         detail = str(exc) or "unknown model error"
         logger.warning("tutor.mode llm generation failed mode=%s detail=%s", mode, detail)
+        log_timed_event(
+            logger,
+            "tutor.mode",
+            started_at,
+            log_level=30,
+            outcome="llm_error",
+            mode=mode,
+            subject=request.subject,
+            term=request.term,
+            topic_id=request.topic_id or "none",
+            detail=detail,
+        )
         return TutorChatResponse(
             assistant_message=f"Tutor unavailable: model generation failed: {detail}",
             citations=citations,
@@ -1121,17 +1146,22 @@ def _run_structured_tutor_mode(
             graph_context=graph_context,
             lesson_context=lesson_context,
         )
-    logger.info(
-        "tutor.mode success mode=%s subject=%s level=%s term=%s topic_id=%s lesson_context=%s context_source=%s covered_concepts=%s citations=%s",
-        mode,
-        request.subject,
-        request.sss_level,
-        request.term,
-        request.topic_id,
-        _lesson_context_available(lesson_context),
-        _lesson_context_source(lesson_context) or "none",
-        len(_lesson_covered_concept_ids(lesson_context)),
-        len(citations),
+    log_timed_event(
+        logger,
+        "tutor.mode",
+        started_at,
+        outcome="success",
+        mode=mode,
+        subject=request.subject,
+        sss_level=request.sss_level,
+        term=request.term,
+        topic_id=request.topic_id or "none",
+        lesson_context=_lesson_context_available(lesson_context),
+        context_source=_lesson_context_source(lesson_context) or "none",
+        covered_concepts=len(_lesson_covered_concept_ids(lesson_context)),
+        citations=len(citations),
+        graph_context=bool(graph_context),
+        history_messages=len(list((history_context or {}).get("messages") or [])),
     )
     return response
 
@@ -1320,6 +1350,7 @@ def run_tutor_study_plan(request: TutorStudyPlanRequest) -> TutorChatResponse:
 
 
 def run_tutor_assessment_start(request: TutorAssessmentStartRequest) -> TutorAssessmentStartResponse:
+    started_at = now_ms()
     try:
         profile_context = _internal_profile_context(
             TutorChatRequest(
@@ -1385,6 +1416,16 @@ def run_tutor_assessment_start(request: TutorAssessmentStartRequest) -> TutorAss
         citations = []
 
     if not citations and not _lesson_context_available(lesson_context):
+        log_timed_event(
+            logger,
+            "tutor.assessment.start",
+            started_at,
+            log_level=30,
+            outcome="no_context",
+            subject=request.subject,
+            term=request.term,
+            topic_id=request.topic_id or "none",
+        )
         raise RuntimeError(
             "No lesson-aware assessment context found. Generate the lesson and ensure approved curriculum chunks exist."
         )
@@ -1397,6 +1438,16 @@ def run_tutor_assessment_start(request: TutorAssessmentStartRequest) -> TutorAss
         requested_focus_concept_label=request.focus_concept_label,
     )
     if target is None:
+        log_timed_event(
+            logger,
+            "tutor.assessment.start",
+            started_at,
+            log_level=30,
+            outcome="no_target_concept",
+            subject=request.subject,
+            term=request.term,
+            topic_id=request.topic_id or "none",
+        )
         raise RuntimeError("No valid target concept found for tutor assessment.")
     concept_id, concept_label = target
 
@@ -1411,6 +1462,18 @@ def run_tutor_assessment_start(request: TutorAssessmentStartRequest) -> TutorAss
     try:
         raw = _llm_generate(prompt)
     except (LLMClientError, Exception) as exc:
+        log_timed_event(
+            logger,
+            "tutor.assessment.start",
+            started_at,
+            log_level=30,
+            outcome="llm_error",
+            subject=request.subject,
+            term=request.term,
+            topic_id=request.topic_id or "none",
+            concept_id=concept_id,
+            detail=str(exc),
+        )
         raise RuntimeError(f"assessment question generation failed: {exc}") from exc
 
     parsed = _extract_json_object(raw)
@@ -1428,10 +1491,26 @@ def run_tutor_assessment_start(request: TutorAssessmentStartRequest) -> TutorAss
     actions.append("ASSESSMENT_TARGET_CONCEPT")
     if request.focus_concept_id or request.focus_concept_label:
         actions.append("USED_GRAPH_SELECTED_FOCUS")
-    return out.model_copy(update={"actions": actions})
+    response = out.model_copy(update={"actions": actions})
+    log_timed_event(
+        logger,
+        "tutor.assessment.start",
+        started_at,
+        outcome="success",
+        subject=request.subject,
+        term=request.term,
+        topic_id=request.topic_id or "none",
+        concept_id=response.concept_id,
+        citations=len(response.citations),
+        lesson_context=_lesson_context_available(lesson_context),
+        graph_context=bool(graph_context),
+        focus_selected=bool(request.focus_concept_id or request.focus_concept_label),
+    )
+    return response
 
 
 def run_tutor_assessment_submit(request: TutorAssessmentSubmitRequest) -> TutorAssessmentSubmitResponse:
+    started_at = now_ms()
     try:
         lesson_context = _internal_lesson_context(
             TutorChatRequest(
@@ -1479,6 +1558,17 @@ def run_tutor_assessment_submit(request: TutorAssessmentSubmitRequest) -> TutorA
         citations = []
 
     if not citations and not _lesson_context_available(lesson_context):
+        log_timed_event(
+            logger,
+            "tutor.assessment.submit",
+            started_at,
+            log_level=30,
+            outcome="no_context",
+            subject=request.subject,
+            term=request.term,
+            topic_id=request.topic_id or "none",
+            concept_id=request.concept_id,
+        )
         raise RuntimeError(
             "No lesson-aware assessment context found. Generate the lesson and ensure approved curriculum chunks exist."
         )
@@ -1492,10 +1582,37 @@ def run_tutor_assessment_submit(request: TutorAssessmentSubmitRequest) -> TutorA
     try:
         raw = _llm_generate(prompt)
     except (LLMClientError, Exception) as exc:
+        log_timed_event(
+            logger,
+            "tutor.assessment.submit",
+            started_at,
+            log_level=30,
+            outcome="llm_error",
+            subject=request.subject,
+            term=request.term,
+            topic_id=request.topic_id or "none",
+            concept_id=request.concept_id,
+            detail=str(exc),
+        )
         raise RuntimeError(f"assessment answer evaluation failed: {exc}") from exc
 
     parsed = _extract_json_object(raw)
-    return _validate_assessment_submit_payload(parsed, request=request, citations=citations)
+    response = _validate_assessment_submit_payload(parsed, request=request, citations=citations)
+    log_timed_event(
+        logger,
+        "tutor.assessment.submit",
+        started_at,
+        outcome="success",
+        subject=request.subject,
+        term=request.term,
+        topic_id=request.topic_id or "none",
+        concept_id=request.concept_id,
+        score=response.score,
+        citations=len(response.citations),
+        lesson_context=_lesson_context_available(lesson_context),
+        graph_context=bool(graph_context),
+    )
+    return response
 
 
 def run_tutor_hint(request: TutorHintRequest) -> TutorHintResponse:

@@ -10,6 +10,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from backend.core.database import SessionLocal
+from backend.core.telemetry import log_timed_event, now_ms
 from backend.repositories.graph_repo import GraphRepository
 from backend.repositories.tutor_session_repo import TutorSessionRepository
 from backend.schemas.tutor_schema import (
@@ -498,6 +499,7 @@ class LessonExperienceService:
         )
 
     def bootstrap(self, payload: TutorSessionBootstrapIn) -> TutorSessionBootstrapOut:
+        started_at = now_ms()
         preview = None
         if payload.session_id is None:
             preview = self._read_cached_bootstrap(
@@ -514,6 +516,18 @@ class LessonExperienceService:
         cache_key = self._cache_key(payload=payload, session_id=session_id)
         cached = self._read_cached_bootstrap(cache_key=cache_key)
         if cached is not None:
+            log_timed_event(
+                logger,
+                "lesson.bootstrap",
+                started_at,
+                cache_hit=True,
+                source="session_cache",
+                student_id=payload.student_id,
+                session_id=session_id,
+                topic_id=payload.topic_id,
+                session_started=session_started,
+                assessment_ready=bool(cached.assessment_ready),
+            )
             if session_started:
                 return cached.model_copy(update={"session_started": True, "session_id": session_id})
             return cached
@@ -538,9 +552,22 @@ class LessonExperienceService:
                     "pending_assessment": pending_assessment,
                 }
             )
+            log_timed_event(
+                logger,
+                "lesson.bootstrap",
+                started_at,
+                cache_hit=False,
+                source="preview_cache",
+                student_id=payload.student_id,
+                session_id=session_id,
+                topic_id=payload.topic_id,
+                session_started=session_started,
+                pending_assessment=bool(pending_assessment),
+                graph_nodes=len(list(bootstrap.graph_nodes or [])),
+            )
             return self._write_cached_bootstrap(cache_key=cache_key, payload=bootstrap)
 
-        snapshot, _ = self._build_topic_snapshot(
+        snapshot, snapshot_source = self._build_topic_snapshot(
             db=self.db,
             student_id=payload.student_id,
             subject=payload.subject,
@@ -556,7 +583,24 @@ class LessonExperienceService:
             snapshot=snapshot,
             pending_assessment=pending_assessment,
         )
-        return self._write_cached_bootstrap(cache_key=cache_key, payload=bootstrap)
+        output = self._write_cached_bootstrap(cache_key=cache_key, payload=bootstrap)
+        log_timed_event(
+            logger,
+            "lesson.bootstrap",
+            started_at,
+            cache_hit=False,
+            source=snapshot_source,
+            student_id=payload.student_id,
+            session_id=session_id,
+            topic_id=payload.topic_id,
+            session_started=session_started,
+            pending_assessment=bool(pending_assessment),
+            graph_nodes=len(list(output.graph_nodes or [])),
+            graph_edges=len(list(output.graph_edges or [])),
+            assessment_ready=bool(output.assessment_ready),
+            lesson_context_source=str(output.lesson.get("context_source") or "unknown"),
+        )
+        return output
 
 
 lesson_experience_service = LessonExperienceService

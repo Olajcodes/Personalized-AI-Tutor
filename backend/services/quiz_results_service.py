@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import logging
 import re
 from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from backend.core.telemetry import log_timed_event, now_ms
 from backend.core.ai_core_client import generate_quiz_insights
 from backend.repositories.quiz_repo import QuizRepository
 from backend.schemas.learning_path_schema import PathNextIn
@@ -16,6 +18,8 @@ from backend.schemas.quiz_schema import (
     QuizResultsResponse,
 )
 from backend.services.learning_path_service import learning_path_service
+
+logger = logging.getLogger(__name__)
 
 
 class QuizResultsService:
@@ -47,6 +51,7 @@ class QuizResultsService:
         return token.title() if token else str(fallback_topic_title or "Untitled Concept").strip()
 
     async def get_results(self, quiz_id: UUID, student_id: UUID, attempt_id: UUID) -> QuizResultsResponse:
+        started_at = now_ms()
         attempt = self.repo.get_attempt_with_answers(attempt_id)
         if not attempt or attempt.quiz_id != quiz_id or attempt.student_id != student_id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found")
@@ -130,7 +135,7 @@ class QuizResultsService:
                 insights=insights,
             )
 
-        return QuizResultsResponse(
+        response = QuizResultsResponse(
             score=float(attempt.score or 0.0),
             concept_breakdown=concept_breakdown,
             insights=insights,
@@ -139,6 +144,19 @@ class QuizResultsService:
             graph_remediation=graph_remediation,
             recommendation_story=recommendation_story,
         )
+        log_timed_event(
+            logger,
+            "quiz.results",
+            started_at,
+            outcome="success",
+            student_id=student_id,
+            quiz_id=quiz_id,
+            attempt_id=attempt_id,
+            concept_breakdown=len(concept_breakdown),
+            insights=len(insights),
+            recommended_topic_id=recommended_topic or "none",
+        )
+        return response
 
     def _build_graph_remediation(
         self,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -9,9 +11,11 @@ from backend.core.ai_core_client import (
     AICoreUnavailableError,
     generate_quiz_questions,
 )
+from backend.core.telemetry import log_timed_event, now_ms
 from backend.repositories.quiz_repo import QuizRepository
 from backend.schemas.quiz_schema import QuestionSchema, QuizGenerateRequest, QuizGenerateResponse
 
+logger = logging.getLogger(__name__)
 _PLACEHOLDER_MARKERS = (
     "which option best demonstrates understanding of",
     "a common misconception students make",
@@ -43,6 +47,7 @@ class QuizGenerateService:
         self.repo = QuizRepository(db)
 
     async def generate_quiz(self, request: QuizGenerateRequest) -> QuizGenerateResponse:
+        started_at = now_ms()
         try:
             questions_data = await generate_quiz_questions(
                 student_id=request.student_id,
@@ -55,16 +60,49 @@ class QuizGenerateService:
                 num_questions=request.num_questions,
             )
         except AICoreContractError as exc:
+            log_timed_event(
+                logger,
+                "quiz.generate",
+                started_at,
+                log_level=logging.WARNING,
+                outcome="contract_error",
+                student_id=request.student_id,
+                topic_id=request.topic_id,
+                subject=request.subject,
+                detail=str(exc),
+            )
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"AI generation contract error: {exc}",
             ) from exc
         except (AICoreProviderError, AICoreUnavailableError) as exc:
+            log_timed_event(
+                logger,
+                "quiz.generate",
+                started_at,
+                log_level=logging.WARNING,
+                outcome="provider_error",
+                student_id=request.student_id,
+                topic_id=request.topic_id,
+                subject=request.subject,
+                detail=str(exc),
+            )
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"AI generation failed: {exc}",
             ) from exc
         except Exception as exc:
+            log_timed_event(
+                logger,
+                "quiz.generate",
+                started_at,
+                log_level=logging.WARNING,
+                outcome="unexpected_error",
+                student_id=request.student_id,
+                topic_id=request.topic_id,
+                subject=request.subject,
+                detail=str(exc),
+            )
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"AI generation failed: {exc}",
@@ -128,4 +166,16 @@ class QuizGenerateService:
             self.repo.db.rollback()
             raise
 
-        return QuizGenerateResponse(quiz_id=quiz.id, questions=response_questions)
+        response = QuizGenerateResponse(quiz_id=quiz.id, questions=response_questions)
+        log_timed_event(
+            logger,
+            "quiz.generate",
+            started_at,
+            outcome="success",
+            student_id=request.student_id,
+            topic_id=request.topic_id,
+            subject=request.subject,
+            questions=len(response.questions),
+            difficulty=request.difficulty,
+        )
+        return response

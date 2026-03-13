@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.core.database import SessionLocal
+from backend.core.telemetry import log_timed_event, now_ms
 from backend.models.student import StudentProfile, StudentSubject
 from backend.models.subject import Subject
 from backend.schemas.dashboard_schema import DashboardBootstrapOut
@@ -121,6 +122,7 @@ class DashboardExperienceService:
         student_id: UUID,
         subject: Literal["math", "english", "civic"] | None = None,
     ) -> DashboardBootstrapOut:
+        started_at = now_ms()
         profile, available_subjects = self._profile_and_subjects(student_id=student_id)
         profile_signature = self._profile_signature(profile=profile, subjects=available_subjects)
         cache_key = self._cache_key(
@@ -130,16 +132,28 @@ class DashboardExperienceService:
         )
         cached = self._read_cached_bootstrap(cache_key=cache_key)
         if cached is not None:
+            log_timed_event(
+                logger,
+                "dashboard.bootstrap",
+                started_at,
+                cache_hit=True,
+                student_id=student_id,
+                requested_subject=subject or "auto",
+                active_subject=cached.active_subject or "none",
+                warmed_subjects=len(list(cached.warmed_subjects or [])),
+            )
             return cached
 
         course_bootstrap = None
         active_subject = subject if subject in available_subjects else None
+        course_bootstrap_source = "none"
 
         if active_subject is None:
             latest = self.course_service.latest_intervention_bootstrap(student_id=student_id)
             if latest is not None:
                 course_bootstrap = latest
                 active_subject = latest.subject
+                course_bootstrap_source = "latest_intervention"
 
         if active_subject is None and available_subjects:
             active_subject = available_subjects[0]
@@ -150,6 +164,7 @@ class DashboardExperienceService:
                 subject=active_subject,
                 term=int(profile.active_term),
             )
+            course_bootstrap_source = "scope_bootstrap"
 
         warmed_subjects: list[Literal["math", "english", "civic"]] = []
         failed_subjects: list[Literal["math", "english", "civic"]] = []
@@ -180,4 +195,17 @@ class DashboardExperienceService:
             failed_subjects=failed_subjects,
             course_bootstrap=course_bootstrap,
         )
-        return self._write_cached_bootstrap(cache_key=cache_key, payload=payload)
+        output = self._write_cached_bootstrap(cache_key=cache_key, payload=payload)
+        log_timed_event(
+            logger,
+            "dashboard.bootstrap",
+            started_at,
+            cache_hit=False,
+            student_id=student_id,
+            requested_subject=subject or "auto",
+            active_subject=active_subject or "none",
+            course_bootstrap_source=course_bootstrap_source,
+            warmed_subjects=len(warmed_subjects),
+            failed_subjects=len(failed_subjects),
+        )
+        return output

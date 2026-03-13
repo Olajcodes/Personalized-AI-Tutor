@@ -9,6 +9,7 @@ Public endpoints for tutor chat and guided assistance modes:
 
 import json
 import logging
+import time
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
@@ -17,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
+from backend.core.telemetry import log_timed_event
 from backend.repositories.tutor_session_repo import TutorSessionRepository
 from backend.schemas.tutor_schema import (
     TutorAssessmentStartIn,
@@ -72,6 +74,7 @@ def tutor_session_bootstrap(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    started_at = time.perf_counter()
     if payload.student_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -103,6 +106,17 @@ def tutor_session_bootstrap(
                 term=int(payload.term),
                 topic_ids=warm_topic_ids,
             )
+        log_timed_event(
+            logger,
+            "tutor.session.bootstrap",
+            started_at,
+            outcome="success",
+            student_id=payload.student_id,
+            session_id=response.session_id,
+            topic_id=payload.topic_id,
+            session_started=response.session_started,
+            graph_nodes=len(list(response.graph_nodes or [])),
+        )
         return response
     except TutorProviderUnavailableError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
@@ -132,6 +146,7 @@ async def tutor_chat(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found for this student.")
 
     repo.add_message(session_id=payload.session_id, role="student", content=payload.message)
+    started_at = time.perf_counter()
 
     try:
         response = await _service().chat(payload)
@@ -143,12 +158,25 @@ async def tutor_chat(
         if hasattr(response, "assistant_message")
         else str(response.get("assistant_message", ""))
     )
+    citations = list(response.citations or []) if hasattr(response, "citations") else list(response.get("citations") or [])
+    actions = list(response.actions or []) if hasattr(response, "actions") else list(response.get("actions") or [])
     repo.add_message(session_id=payload.session_id, role="assistant", content=assistant_message)
     logger.info(
         "Tutor chat completed without direct mastery write; awaiting evidence-based assessment flow. student_id=%s session_id=%s topic_id=%s",
         payload.student_id,
         payload.session_id,
         payload.topic_id,
+    )
+    log_timed_event(
+        logger,
+        "tutor.chat",
+        started_at,
+        outcome="success",
+        student_id=payload.student_id,
+        session_id=payload.session_id,
+        topic_id=payload.topic_id,
+        citations=len(citations),
+        actions=len(actions),
     )
     return response
 
@@ -170,6 +198,7 @@ async def tutor_chat_stream(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found for this student.")
 
     repo.add_message(session_id=payload.session_id, role="student", content=payload.message)
+    started_at = time.perf_counter()
 
     async def event_stream():
         yield "event: status\ndata: " + json.dumps({"phase": "retrieving_context"}) + "\n\n"
@@ -184,7 +213,20 @@ async def tutor_chat_stream(
             if hasattr(response, "assistant_message")
             else str(response.get("assistant_message", ""))
         )
+        citations = list(response.citations or []) if hasattr(response, "citations") else list(response.get("citations") or [])
+        actions = list(response.actions or []) if hasattr(response, "actions") else list(response.get("actions") or [])
         repo.add_message(session_id=payload.session_id, role="assistant", content=assistant_message)
+        log_timed_event(
+            logger,
+            "tutor.chat.stream",
+            started_at,
+            outcome="success",
+            student_id=payload.student_id,
+            session_id=payload.session_id,
+            topic_id=payload.topic_id,
+            citations=len(citations),
+            actions=len(actions),
+        )
         yield "event: status\ndata: " + json.dumps({"phase": "composing_response"}) + "\n\n"
         yield "event: message\ndata: " + json.dumps(response.model_dump()) + "\n\n"
         yield "event: done\ndata: {}\n\n"

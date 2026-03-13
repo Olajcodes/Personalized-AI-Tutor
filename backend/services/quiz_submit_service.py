@@ -1,17 +1,21 @@
 from __future__ import annotations
 
+import logging
 import inspect
 from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from backend.core.telemetry import log_timed_event, now_ms
 from backend.repositories.activity_repo import ActivityRepository
 from backend.repositories.quiz_repo import QuizRepository
 from backend.schemas.activity_schema import ActivityLogCreate
 from backend.schemas.quiz_schema import ConceptBreakdownItem, QuizSubmitRequest, QuizSubmitResponse
 from backend.services.activity_service import ActivityService
 from backend.services.graph_mastery_update_service import GraphMasteryUpdateService
+
+logger = logging.getLogger(__name__)
 
 
 class QuizSubmitService:
@@ -36,6 +40,7 @@ class QuizSubmitService:
         return None
 
     async def submit_quiz(self, quiz_id: UUID, request: QuizSubmitRequest) -> QuizSubmitResponse:
+        started_at = now_ms()
         quiz = self.repo.get_quiz_with_questions(quiz_id)
         if not quiz:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quiz not found")
@@ -171,4 +176,17 @@ class QuizSubmitService:
         )
         DashboardExperienceService.invalidate_student_cache(student_id=request.student_id)
 
-        return QuizSubmitResponse(attempt_id=attempt.id, score=score, xp_awarded=xp)
+        response = QuizSubmitResponse(attempt_id=attempt.id, score=score, xp_awarded=xp)
+        log_timed_event(
+            logger,
+            "quiz.submit",
+            started_at,
+            outcome="success",
+            student_id=request.student_id,
+            quiz_id=quiz_id,
+            topic_id=quiz.topic_id,
+            subject=quiz.subject,
+            score=score,
+            concept_updates=len(concept_breakdown),
+        )
+        return response
