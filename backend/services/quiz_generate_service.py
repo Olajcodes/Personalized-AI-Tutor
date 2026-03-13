@@ -100,7 +100,7 @@ class QuizGenerateService:
                     "text": question.get("text") or question.get("question_text"),
                     "options": question.get("options") or [],
                     "correct_answer": question.get("correct_answer"),
-                    "concept_id": question.get("concept_id") or str(request.topic_id),
+                    "concept_id": question.get("concept_id"),
                     "explanation": question.get("explanation"),
                     "topic_id": request.topic_id,
                     "order": idx,
@@ -118,6 +118,12 @@ class QuizGenerateService:
                     )
                 )
             self.repo.db.commit()
+        except ValueError as exc:
+            self.repo.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"AI generation returned invalid quiz content: {exc}",
+            ) from exc
         except Exception:
             self.repo.db.rollback()
             raise

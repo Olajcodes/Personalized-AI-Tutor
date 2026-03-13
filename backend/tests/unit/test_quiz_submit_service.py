@@ -79,6 +79,34 @@ async def test_submit_quiz_success(
     service.repo.create_attempt.assert_called_once()
     service.activity_service.log_activity.assert_awaited_once()
     service.graph_service.send_update.assert_awaited_once()
+    sent_payload = service.graph_service.send_update.await_args.kwargs["concept_breakdown"]
+    assert len(sent_payload) == 1
+    assert sent_payload[0].concept_id == str(mock_question.concept_id)
+
+
+@pytest.mark.anyio
+async def test_submit_quiz_skips_unmapped_questions_for_mastery_update(
+    mock_db, quiz_id, student_id, submit_request, mock_quiz
+):
+    question = MagicMock(spec=QuizQuestion)
+    question.id = submit_request.answers[0].question_id
+    question.quiz_id = quiz_id
+    question.correct_answer = "A"
+    question.concept_id = None
+
+    service = QuizSubmitService(mock_db)
+    service.repo.get_quiz_with_questions = MagicMock(return_value=mock_quiz)
+    service.repo.get_questions_for_quiz = MagicMock(return_value=[question])
+    service.repo.create_attempt = MagicMock(return_value=MagicMock(id=uuid4()))
+    service.repo.save_answers = MagicMock()
+    service.repo.update_attempt_score = MagicMock()
+    service.activity_service.log_activity = AsyncMock()
+    service.graph_service.send_update = AsyncMock()
+
+    response = await service.submit_quiz(quiz_id, submit_request)
+
+    assert response.score == 100.0
+    service.graph_service.send_update.assert_not_awaited()
 
 
 @pytest.mark.anyio

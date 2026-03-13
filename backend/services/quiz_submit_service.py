@@ -70,9 +70,10 @@ class QuizSubmitService:
             if is_correct:
                 correct_count += 1
 
-            concept_id = str(getattr(question, "concept_id", "")).strip()
+            raw_concept_id = getattr(question, "concept_id", None)
+            concept_id = str(raw_concept_id).strip() if raw_concept_id not in (None, "") else ""
             if not concept_id:
-                concept_id = str(quiz.topic_id or question.id)
+                continue
             concept_results.append((concept_id, is_correct))
 
         score = round((correct_count / total_questions) * 100, 2) if total_questions > 0 else 0.0
@@ -132,16 +133,17 @@ class QuizSubmitService:
             for concept_id, is_correct in concept_results
         ]
 
-        await self.graph_service.send_update(
-            student_id=request.student_id,
-            quiz_id=quiz_id,
-            attempt_id=attempt.id,
-            subject=quiz.subject,
-            sss_level=quiz.sss_level,
-            term=quiz.term,
-            source=source,
-            concept_breakdown=concept_breakdown,
-        )
+        if concept_breakdown:
+            await self.graph_service.send_update(
+                student_id=request.student_id,
+                quiz_id=quiz_id,
+                attempt_id=attempt.id,
+                subject=quiz.subject,
+                sss_level=quiz.sss_level,
+                term=quiz.term,
+                source=source,
+                concept_breakdown=concept_breakdown,
+            )
 
         from backend.services.lesson_cockpit_service import LessonCockpitService
         from backend.services.lesson_experience_service import LessonExperienceService

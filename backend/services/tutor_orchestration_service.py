@@ -66,14 +66,18 @@ class TutorOrchestrationService:
 
     @staticmethod
     def _fallback_assessment_start(payload: TutorAssessmentStartIn) -> TutorAssessmentStartOut:
+        if not payload.focus_concept_id:
+            raise TutorProviderUnavailableError(
+                "Tutor assessment fallback requires a concrete graph-selected focus concept."
+            )
         return TutorAssessmentStartOut(
             assessment_id=UUID("00000000-0000-0000-0000-000000000000"),
             question=(
                 f"Briefly explain one key idea you have learned in {payload.subject.upper()} "
                 f"({payload.sss_level} term {payload.term})."
             ),
-            concept_id=payload.focus_concept_id or str(payload.topic_id),
-            concept_label=payload.focus_concept_label or "current lesson concept",
+            concept_id=payload.focus_concept_id,
+            concept_label=payload.focus_concept_label or "selected lesson concept",
             ideal_answer="State the rule clearly and give one correct example from the lesson.",
             hint="State the main rule first, then give one example.",
             citations=[],
@@ -81,15 +85,20 @@ class TutorOrchestrationService:
         )
 
     @staticmethod
-    def _fallback_assessment_submit(payload: TutorAssessmentSubmitIn) -> TutorAssessmentSubmitOut:
+    def _fallback_assessment_submit(
+        payload: TutorAssessmentSubmitIn,
+        *,
+        concept_id: str,
+        concept_label: str,
+    ) -> TutorAssessmentSubmitOut:
         return TutorAssessmentSubmitOut(
             assessment_id=payload.assessment_id,
             is_correct=False,
             score=0.0,
             feedback="Assessment provider unavailable. No mastery update was applied.",
             ideal_answer="",
-            concept_id=str(payload.topic_id),
-            concept_label="current lesson concept",
+            concept_id=concept_id,
+            concept_label=concept_label,
             mastery_updated=False,
             new_mastery=None,
             actions=["ASSESSMENT_FALLBACK"],
@@ -237,7 +246,11 @@ class TutorOrchestrationService:
         except (TutorProviderUnavailableError, TutorProviderContractError):
             if not self.allow_fallback:
                 raise
-            return self._fallback_assessment_submit(payload)
+            return self._fallback_assessment_submit(
+                payload,
+                concept_id=concept_id,
+                concept_label=concept_label,
+            )
 
     async def hint(self, payload: TutorHintIn) -> TutorHintOut:
         request_payload = {

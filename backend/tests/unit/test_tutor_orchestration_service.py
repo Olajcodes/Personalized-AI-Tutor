@@ -3,7 +3,12 @@ from uuid import uuid4
 import pytest
 
 from backend.core.config import settings
-from backend.schemas.tutor_schema import TutorChatIn, TutorExplainMistakeIn, TutorHintIn
+from backend.schemas.tutor_schema import (
+    TutorAssessmentStartIn,
+    TutorChatIn,
+    TutorExplainMistakeIn,
+    TutorHintIn,
+)
 from backend.services.tutor_orchestration_service import (
     TutorOrchestrationService,
     TutorProviderUnavailableError,
@@ -77,3 +82,27 @@ async def test_explain_mistake_fallback_response(monkeypatch):
 
     assert "expected answer" in out.explanation.lower()
     assert out.improvement_tip
+
+
+@pytest.mark.anyio
+async def test_assessment_start_fallback_requires_graph_focus(monkeypatch):
+    monkeypatch.setattr(settings, "ai_core_base_url", "")
+    monkeypatch.setattr(settings, "ai_core_allow_fallback", True)
+
+    service = TutorOrchestrationService()
+
+    with pytest.raises(
+        TutorProviderUnavailableError,
+        match="concrete graph-selected focus concept",
+    ):
+        await service.assessment_start(
+            TutorAssessmentStartIn(
+                student_id=uuid4(),
+                session_id=uuid4(),
+                subject="math",
+                sss_level="SSS2",
+                term=1,
+                topic_id=uuid4(),
+                difficulty="medium",
+            )
+        )

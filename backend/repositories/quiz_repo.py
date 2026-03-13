@@ -68,8 +68,7 @@ class QuizRepository:
         raw_concept_id = question_data.get("concept_id")
         concept_id = str(raw_concept_id).strip() if raw_concept_id is not None else ""
         if not concept_id:
-            fallback_topic_id = question_data.get("topic_id")
-            concept_id = str(fallback_topic_id or question_id)
+            raise ValueError("Question payload must include a mapped concept_id")
 
         question = QuizQuestion(
             id=question_id,
