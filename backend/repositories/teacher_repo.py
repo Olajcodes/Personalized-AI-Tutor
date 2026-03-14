@@ -10,11 +10,14 @@ from sqlalchemy.orm import Session
 
 from backend.models.activity import ActivityLog
 from backend.models.class_enrollment import ClassEnrollment
+from backend.models.curriculum_topic_map import CurriculumTopicMap
+from backend.models.curriculum_version import CurriculumVersion
 from backend.models.mastery_update_event import MasteryUpdateEvent
 from backend.models.student_concept_mastery import StudentConceptMastery
 from backend.models.teacher_assignment import TeacherAssignment
 from backend.models.teacher_class import TeacherClass
 from backend.models.teacher_intervention import TeacherIntervention
+from backend.models.topic import Topic
 from backend.models.tutor_session import TutorSession
 from backend.models.user import User
 
@@ -251,6 +254,38 @@ class TeacherRepository:
                 "concept_id": str(row.concept_id),
                 "avg_score": float(row.avg_score),
                 "student_count": int(row.student_count),
+            }
+            for row in rows
+        ]
+
+    def get_scope_concept_rows(self, *, subject: str, sss_level: str, term: int) -> list[dict]:
+        rows = (
+            self.db.query(
+                CurriculumTopicMap.concept_id,
+                CurriculumTopicMap.prereq_concept_ids,
+                Topic.id.label("topic_id"),
+                Topic.title.label("topic_title"),
+            )
+            .join(Topic, Topic.id == CurriculumTopicMap.topic_id)
+            .join(CurriculumVersion, CurriculumVersion.id == CurriculumTopicMap.version_id)
+            .filter(
+                Topic.is_approved.is_(True),
+                Topic.sss_level == sss_level,
+                Topic.term == term,
+                CurriculumVersion.subject == subject,
+                CurriculumVersion.sss_level == sss_level,
+                CurriculumVersion.term == term,
+                CurriculumVersion.status == "published",
+            )
+            .order_by(Topic.created_at.asc(), Topic.title.asc(), CurriculumTopicMap.concept_id.asc())
+            .all()
+        )
+        return [
+            {
+                "concept_id": str(row.concept_id),
+                "prereq_concept_ids": [str(value).strip() for value in list(row.prereq_concept_ids or []) if str(value).strip()],
+                "topic_id": row.topic_id,
+                "topic_title": str(row.topic_title or "").strip() or None,
             }
             for row in rows
         ]

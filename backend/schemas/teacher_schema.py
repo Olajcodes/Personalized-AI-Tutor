@@ -77,6 +77,44 @@ class TeacherClassHeatmapOut(BaseModel):
     points: list[TeacherHeatmapPointOut]
 
 
+class TeacherGraphMetricsOut(BaseModel):
+    mapped_concepts: int = 0
+    blocked_concepts: int = 0
+    weak_concepts: int = 0
+    mastered_concepts: int = 0
+    unassessed_concepts: int = 0
+
+
+class TeacherGraphConceptNodeOut(BaseModel):
+    concept_id: str
+    concept_label: str
+    topic_id: UUID | None = None
+    topic_title: str | None = None
+    avg_score: float
+    student_count: int = 0
+    status: Literal["blocked", "needs_attention", "mastered", "unassessed"]
+    prerequisite_labels: list[str] = Field(default_factory=list)
+    blocking_prerequisite_labels: list[str] = Field(default_factory=list)
+    recommended_action: str
+
+
+class TeacherGraphSignalOut(BaseModel):
+    status: Literal["repair_prerequisite", "strengthen_cluster", "advance_class", "insufficient_data"]
+    headline: str
+    supporting_reason: str
+    focus_concept_label: str | None = None
+    blocking_prerequisite_label: str | None = None
+    recommended_action: str
+
+
+class TeacherClassGraphOut(BaseModel):
+    class_id: UUID
+    metrics: TeacherGraphMetricsOut
+    graph_signal: TeacherGraphSignalOut
+    weakest_blockers: list[TeacherGraphConceptNodeOut] = Field(default_factory=list)
+    ready_to_push: list[TeacherGraphConceptNodeOut] = Field(default_factory=list)
+
+
 class TeacherAlertOut(BaseModel):
     alert_type: Literal["inactivity", "rapid_decline", "prereq_failure"]
     severity: Severity

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import re
 from uuid import UUID
 
 from backend.repositories.teacher_repo import TeacherRepository
@@ -9,7 +10,11 @@ from backend.schemas.teacher_schema import (
     TeacherAlertOut,
     TeacherAlertsOut,
     TeacherClassDashboardOut,
+    TeacherClassGraphOut,
     TeacherClassHeatmapOut,
+    TeacherGraphConceptNodeOut,
+    TeacherGraphMetricsOut,
+    TeacherGraphSignalOut,
     TeacherHeatmapPointOut,
     TeacherStudentTimelineOut,
     TeacherTimelineEventOut,
@@ -26,11 +31,24 @@ RAPID_DECLINE_HIGH_THRESHOLD = -0.2
 RAPID_DECLINE_MEDIUM_THRESHOLD = -0.1
 LOW_MASTERY_THRESHOLD = 0.4
 LOW_MASTERY_HIGH_SEVERITY = 0.3
+GRAPH_MASTERY_THRESHOLD = 0.7
+GRAPH_WEAK_THRESHOLD = 0.5
 
 
 class TeacherAnalyticsService:
     def __init__(self, repo: TeacherRepository):
         self.repo = repo
+
+    @staticmethod
+    def _readable_concept_label(concept_id: str | None, *, fallback: str | None = None) -> str:
+        value = str(concept_id or "").strip()
+        if not value:
+            return str(fallback or "Concept").strip()
+        token = value.rsplit(":", 1)[-1].strip()
+        token = re.sub(r"-(\d+)$", "", token)
+        token = re.sub(r"[_-]+", " ", token)
+        token = re.sub(r"\s+", " ", token).strip()
+        return token.title() if token else str(fallback or "Concept").strip()
 
     def _require_teacher_user(self, teacher_id: UUID):
         user = self.repo.get_user(teacher_id)
@@ -132,6 +150,153 @@ class TeacherAnalyticsService:
                 )
                 for row in points
             ],
+        )
+
+    def get_class_graph_summary(self, *, teacher_id: UUID, class_id: UUID) -> TeacherClassGraphOut:
+        self._require_teacher_user(teacher_id)
+        teacher_class = self._require_teacher_class(teacher_id=teacher_id, class_id=class_id)
+
+        heatmap_rows = self.repo.get_heatmap_points(
+            class_id=class_id,
+            subject=teacher_class.subject,
+            term=teacher_class.term,
+        )
+        scope_rows = self.repo.get_scope_concept_rows(
+            subject=teacher_class.subject,
+            sss_level=teacher_class.sss_level,
+            term=teacher_class.term,
+        )
+
+        heatmap_map = {
+            str(row["concept_id"]): {
+                "avg_score": float(row["avg_score"]),
+                "student_count": int(row["student_count"]),
+            }
+            for row in heatmap_rows
+        }
+        concept_rows_by_id = {
+            str(row["concept_id"]): row
+            for row in scope_rows
+            if str(row.get("concept_id") or "").strip()
+        }
+
+        nodes: list[TeacherGraphConceptNodeOut] = []
+        for concept_id, row in concept_rows_by_id.items():
+            stat = heatmap_map.get(concept_id, {"avg_score": 0.0, "student_count": 0})
+            prereq_ids = [item for item in list(row.get("prereq_concept_ids") or []) if item]
+            blocking_prereqs = [
+                prereq_id
+                for prereq_id in prereq_ids
+                if float(heatmap_map.get(prereq_id, {"avg_score": 0.0})["avg_score"]) < GRAPH_MASTERY_THRESHOLD
+            ]
+            avg_score = float(stat["avg_score"])
+            student_count = int(stat["student_count"])
+
+            if student_count <= 0:
+                status = "unassessed"
+                recommended_action = "Assign a checkpoint or quiz so this concept enters the graph."
+            elif blocking_prereqs:
+                status = "blocked"
+                recommended_action = "Repair the weakest prerequisite before pushing this concept."
+            elif avg_score < GRAPH_MASTERY_THRESHOLD:
+                status = "needs_attention"
+                recommended_action = "Strengthen this concept cluster with guided practice."
+            else:
+                status = "mastered"
+                recommended_action = "Use this concept to unlock the next cluster."
+
+            nodes.append(
+                TeacherGraphConceptNodeOut(
+                    concept_id=concept_id,
+                    concept_label=self._readable_concept_label(concept_id, fallback=row.get("topic_title")),
+                    topic_id=row.get("topic_id"),
+                    topic_title=row.get("topic_title"),
+                    avg_score=round(avg_score, 4),
+                    student_count=student_count,
+                    status=status,
+                    prerequisite_labels=[
+                        self._readable_concept_label(prereq_id, fallback=concept_rows_by_id.get(prereq_id, {}).get("topic_title"))
+                        for prereq_id in prereq_ids
+                    ],
+                    blocking_prerequisite_labels=[
+                        self._readable_concept_label(prereq_id, fallback=concept_rows_by_id.get(prereq_id, {}).get("topic_title"))
+                        for prereq_id in blocking_prereqs
+                    ],
+                    recommended_action=recommended_action,
+                )
+            )
+
+        blocked_nodes = sorted(
+            [node for node in nodes if node.status == "blocked"],
+            key=lambda item: (item.avg_score, item.concept_label),
+        )
+        weak_nodes = sorted(
+            [node for node in nodes if node.status == "needs_attention"],
+            key=lambda item: (item.avg_score, item.concept_label),
+        )
+        mastered_nodes = sorted(
+            [node for node in nodes if node.status == "mastered"],
+            key=lambda item: (-item.avg_score, item.concept_label),
+        )
+        unassessed_nodes = sorted(
+            [node for node in nodes if node.status == "unassessed"],
+            key=lambda item: (item.concept_label, item.topic_title or ""),
+        )
+
+        metrics = TeacherGraphMetricsOut(
+            mapped_concepts=len(nodes),
+            blocked_concepts=len(blocked_nodes),
+            weak_concepts=len(weak_nodes),
+            mastered_concepts=len(mastered_nodes),
+            unassessed_concepts=len(unassessed_nodes),
+        )
+
+        if blocked_nodes:
+            focus = blocked_nodes[0]
+            graph_signal = TeacherGraphSignalOut(
+                status="repair_prerequisite",
+                headline=f"Repair {focus.blocking_prerequisite_labels[0]} before pushing {focus.concept_label}.",
+                supporting_reason="The class is hitting a prerequisite barrier in the current graph scope.",
+                focus_concept_label=focus.concept_label,
+                blocking_prerequisite_label=focus.blocking_prerequisite_labels[0] if focus.blocking_prerequisite_labels else None,
+                recommended_action="Revisit the blocker and assign a prerequisite-focused drill.",
+            )
+        elif weak_nodes:
+            focus = weak_nodes[0]
+            graph_signal = TeacherGraphSignalOut(
+                status="strengthen_cluster",
+                headline=f"Strengthen {focus.concept_label} before unlocking the next concept cluster.",
+                supporting_reason="Prerequisites are mostly in place, but the active concept cluster is still below mastery.",
+                focus_concept_label=focus.concept_label,
+                blocking_prerequisite_label=None,
+                recommended_action="Run a focused checkpoint or quiz on this concept.",
+            )
+        elif mastered_nodes:
+            focus = mastered_nodes[0]
+            graph_signal = TeacherGraphSignalOut(
+                status="advance_class",
+                headline=f"The class is ready to push beyond {focus.concept_label}.",
+                supporting_reason="Current concept mastery is healthy enough to unlock the next lesson cluster.",
+                focus_concept_label=focus.concept_label,
+                blocking_prerequisite_label=None,
+                recommended_action="Advance the class to the next mapped lesson and monitor the new weak node.",
+            )
+        else:
+            graph_signal = TeacherGraphSignalOut(
+                status="insufficient_data",
+                headline="The class graph is still sparse.",
+                supporting_reason="There is not enough mastery evidence yet to recommend the next graph move confidently.",
+                focus_concept_label=None,
+                blocking_prerequisite_label=None,
+                recommended_action="Collect more quiz or tutor checkpoint evidence for this scope.",
+            )
+
+        return TeacherClassGraphOut(
+            class_id=class_id,
+            metrics=metrics,
+            graph_signal=graph_signal,
+            weakest_blockers=(blocked_nodes[:6] or weak_nodes[:6] or unassessed_nodes[:6]),
+            ready_to_push=mastered_nodes[:6],
         )
 
     def get_class_alerts(self, *, teacher_id: UUID, class_id: UUID) -> TeacherAlertsOut:

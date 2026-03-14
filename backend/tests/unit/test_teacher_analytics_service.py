@@ -58,8 +58,30 @@ class FakeTeacherAnalyticsRepo:
 
     def get_heatmap_points(self, *, class_id, subject, term):
         return [
-            {"concept_id": "c1", "avg_score": 0.2, "student_count": 2},
-            {"concept_id": "c2", "avg_score": 0.7, "student_count": 1},
+            {"concept_id": "math:sss2:t1:fractions", "avg_score": 0.2, "student_count": 2},
+            {"concept_id": "math:sss2:t1:ratio", "avg_score": 0.7, "student_count": 1},
+        ]
+
+    def get_scope_concept_rows(self, *, subject, sss_level, term):
+        return [
+            {
+                "concept_id": "math:sss2:t1:fractions",
+                "prereq_concept_ids": ["math:sss2:t1:number-sense"],
+                "topic_id": uuid4(),
+                "topic_title": "Fractions",
+            },
+            {
+                "concept_id": "math:sss2:t1:number-sense",
+                "prereq_concept_ids": [],
+                "topic_id": uuid4(),
+                "topic_title": "Number Sense",
+            },
+            {
+                "concept_id": "math:sss2:t1:ratio",
+                "prereq_concept_ids": [],
+                "topic_id": uuid4(),
+                "topic_title": "Ratio",
+            },
         ]
 
     def get_negative_mastery_delta_by_student(self, *, class_id, subject, term, since):
@@ -104,7 +126,20 @@ def test_teacher_analytics_heatmap_points():
     out = service.get_class_heatmap(teacher_id=repo.teacher_id, class_id=repo.class_id)
     assert out.class_id == repo.class_id
     assert len(out.points) == 2
-    assert out.points[0].concept_id == "c1"
+    assert out.points[0].concept_id == "math:sss2:t1:fractions"
+
+
+def test_teacher_analytics_graph_summary_prioritises_blockers():
+    repo = FakeTeacherAnalyticsRepo()
+    service = TeacherAnalyticsService(repo)
+
+    out = service.get_class_graph_summary(teacher_id=repo.teacher_id, class_id=repo.class_id)
+
+    assert out.class_id == repo.class_id
+    assert out.metrics.mapped_concepts == 3
+    assert out.metrics.blocked_concepts >= 1
+    assert out.graph_signal.status == "repair_prerequisite"
+    assert out.weakest_blockers[0].concept_label in {"Fractions", "Number Sense"}
 
 
 def test_teacher_analytics_alerts_include_expected_types():
