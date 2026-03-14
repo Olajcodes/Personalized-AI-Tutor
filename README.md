@@ -126,7 +126,9 @@ Set required secrets/URLs, especially:
   - `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION`
   - `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`
 - `frontend/.env`
-  - backend base URL and auth-related variables used by your UI.
+  - `VITE_API_URL=http://127.0.0.1:8000/api/v1`
+  - `VITE_AI_CORE_URL=http://127.0.0.1:10000`
+  - any auth-related frontend variables already used by your UI
 
 ### 5) Apply database migrations
 
@@ -188,6 +190,39 @@ npm run dev
 - Backend Swagger: `http://127.0.0.1:8000/docs`
 - Backend health: `http://127.0.0.1:8000/api/v1/system/health`
 - AI Core health: `http://127.0.0.1:10000/health`
+
+Health payloads now expose runtime visibility, not only dependency checks:
+
+- Backend `/api/v1/system/health`
+  - `checks.prewarm_queue`
+  - `runtime.telemetry`
+  - `runtime.caches`
+- AI Core `/health`
+  - `runtime.telemetry`
+
+## Demo Runtime Dock
+
+Student routes now include a collapsible runtime dock for presentation/debug use.
+
+- Open the dock with the floating `Live runtime` button
+- Keyboard shortcut: `Shift + D`
+- The dock shows:
+  - latest graph intervention summary
+  - backend prewarm queue state
+  - lesson/course/dashboard cache counts
+  - hottest backend and ai-core graph-first paths
+
+If ai-core runtime is not visible in the dock, set:
+
+```env
+VITE_AI_CORE_URL=http://127.0.0.1:10000
+```
+
+You can also override it temporarily in the browser:
+
+```js
+localStorage.setItem('mastery_ai_core_url', 'http://127.0.0.1:10000')
+```
 
 ## Production Notes
 

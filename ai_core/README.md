@@ -97,6 +97,18 @@ Health check:
 
 - `http://127.0.0.1:10000/health`
 
+The ai-core health payload now includes:
+
+- `checks.*` configuration readiness
+- `runtime.telemetry`
+
+`runtime.telemetry.events` exposes rolling timing snapshots for ai-core graph-first work such as:
+
+- `quiz.generate`
+- `tutor.mode`
+- `tutor.assessment.start`
+- `tutor.assessment.submit`
+
 ## Backend Integration
 
 Backend should point to ai-core with:

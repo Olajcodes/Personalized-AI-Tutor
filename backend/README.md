@@ -142,6 +142,21 @@ The backend health payload now includes:
 
 - `checks.internal_service_auth`
 - `checks.prewarm_queue`
+- `runtime.telemetry`
+- `runtime.caches`
+
+`runtime.telemetry.events` now tracks rolling timing snapshots for graph-first flows such as:
+
+- `dashboard.bootstrap`
+- `course.bootstrap`
+- `lesson.bootstrap`
+- `lesson.cockpit.bootstrap`
+- `quiz.generate`
+- `quiz.submit`
+- `quiz.results`
+- `tutor.chat`
+- `tutor.assessment.start`
+- `tutor.assessment.submit`
 
 ## API Surface (Base Prefix: `/api/v1`)
 
