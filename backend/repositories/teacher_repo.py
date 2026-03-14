@@ -217,6 +217,46 @@ class TeacherRepository:
             .all()
         )
 
+    def get_class_assignments(
+        self,
+        *,
+        class_id: UUID,
+        subject: str,
+        term: int,
+        limit: int = 50,
+    ) -> list[TeacherAssignment]:
+        return (
+            self.db.query(TeacherAssignment)
+            .filter(
+                TeacherAssignment.class_id == class_id,
+                TeacherAssignment.subject == subject,
+                TeacherAssignment.term == term,
+            )
+            .order_by(TeacherAssignment.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+    def get_class_assignments(
+        self,
+        *,
+        class_id: UUID,
+        subject: str,
+        term: int,
+        limit: int = 50,
+    ) -> list[TeacherAssignment]:
+        return (
+            self.db.query(TeacherAssignment)
+            .filter(
+                TeacherAssignment.class_id == class_id,
+                TeacherAssignment.subject == subject,
+                TeacherAssignment.term == term,
+            )
+            .order_by(TeacherAssignment.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
     def get_active_student_ids(self, *, class_id: UUID) -> list[UUID]:
         rows = (
             self.db.query(ClassEnrollment.student_id)
@@ -553,5 +593,49 @@ class TeacherRepository:
                 MasteryUpdateEvent.created_at >= since,
             )
             .order_by(MasteryUpdateEvent.created_at.desc())
+            .all()
+        )
+
+    def get_activity_rows_for_students_since(
+        self,
+        *,
+        student_ids: list[UUID],
+        subject: str,
+        term: int,
+        since: datetime,
+    ) -> list[ActivityLog]:
+        if not student_ids:
+            return []
+        return (
+            self.db.query(ActivityLog)
+            .filter(
+                ActivityLog.student_id.in_(student_ids),
+                ActivityLog.subject == subject,
+                ActivityLog.term == term,
+                ActivityLog.created_at >= since,
+            )
+            .order_by(ActivityLog.created_at.desc())
+            .all()
+        )
+
+    def get_activity_rows_for_students_since(
+        self,
+        *,
+        student_ids: list[UUID],
+        subject: str,
+        term: int,
+        since: datetime,
+    ) -> list[ActivityLog]:
+        if not student_ids:
+            return []
+        return (
+            self.db.query(ActivityLog)
+            .filter(
+                ActivityLog.student_id.in_(student_ids),
+                ActivityLog.subject == subject,
+                ActivityLog.term == term,
+                ActivityLog.created_at >= since,
+            )
+            .order_by(ActivityLog.created_at.desc())
             .all()
         )

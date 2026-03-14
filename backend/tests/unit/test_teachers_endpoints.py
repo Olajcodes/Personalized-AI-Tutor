@@ -261,6 +261,34 @@ def test_teachers_endpoints_success(monkeypatch):
                 ],
             }
 
+        def get_assignment_outcomes(self, *, teacher_id, class_id):
+            return {
+                "class_id": str(class_id),
+                "total_assignments": 1,
+                "open_assignments": 1,
+                "improving_assignments": 1,
+                "declining_assignments": 0,
+                "no_evidence_assignments": 0,
+                "avg_net_mastery_delta": 0.12,
+                "outcomes": [
+                    {
+                        "assignment_id": str(uuid4()),
+                        "title": "Fractions Repair Pack",
+                        "assignment_type": "revision",
+                        "status": "assigned",
+                        "ref_id": "fractions-repair-pack",
+                        "target_scope": "student",
+                        "target_student_count": 1,
+                        "engaged_student_count": 1,
+                        "evidence_event_count": 1,
+                        "outcome_status": "improving",
+                        "net_mastery_delta": 0.12,
+                        "due_at": None,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                ],
+            }
+
         def get_repeat_risk_summary(self, *, teacher_id, class_id):
             return {
                 "class_id": str(class_id),
@@ -388,6 +416,7 @@ def test_teachers_endpoints_success(monkeypatch):
     playbook_resp = client.get(f"/api/v1/teachers/classes/{class_id}/graph-playbook")
     alerts_resp = client.get(f"/api/v1/teachers/classes/{class_id}/alerts")
     outcomes_resp = client.get(f"/api/v1/teachers/classes/{class_id}/intervention-outcomes")
+    assignment_outcomes_resp = client.get(f"/api/v1/teachers/classes/{class_id}/assignment-outcomes")
     repeat_risk_resp = client.get(f"/api/v1/teachers/classes/{class_id}/repeat-risk")
     risk_matrix_resp = client.get(f"/api/v1/teachers/classes/{class_id}/risk-matrix")
     concept_students_resp = client.get(f"/api/v1/teachers/classes/{class_id}/concepts/math:sss2:t1:fractions/students")
@@ -467,6 +496,7 @@ def test_teachers_endpoints_success(monkeypatch):
     assert playbook_resp.status_code == 200
     assert alerts_resp.status_code == 200
     assert outcomes_resp.status_code == 200
+    assert assignment_outcomes_resp.status_code == 200
     assert repeat_risk_resp.status_code == 200
     assert risk_matrix_resp.status_code == 200
     assert concept_students_resp.status_code == 200

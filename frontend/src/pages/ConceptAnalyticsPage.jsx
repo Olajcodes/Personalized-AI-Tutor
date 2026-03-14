@@ -80,6 +80,7 @@ const ConceptAnalyticsPage = () => {
   const [selectedConceptId, setSelectedConceptId] = useState('');
   const [conceptStudents, setConceptStudents] = useState(null);
   const [interventionOutcomes, setInterventionOutcomes] = useState(null);
+  const [assignmentOutcomes, setAssignmentOutcomes] = useState(null);
   const [repeatRisk, setRepeatRisk] = useState(null);
   const [riskMatrix, setRiskMatrix] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -140,6 +141,7 @@ const ConceptAnalyticsPage = () => {
         setSelectedConceptId('');
         setConceptStudents(null);
         setInterventionOutcomes(null);
+        setAssignmentOutcomes(null);
         setRepeatRisk(null);
         setRiskMatrix(null);
         setSelectedStudent(null);
@@ -151,30 +153,32 @@ const ConceptAnalyticsPage = () => {
       try {
         setIsLoadingDetails(true);
         setError('');
-        const [dashboardRes, heatmapRes, graphRes, playbookRes, alertsRes, outcomesRes, repeatRiskRes, riskMatrixRes] = await Promise.all([
+        const [dashboardRes, heatmapRes, graphRes, playbookRes, alertsRes, outcomesRes, assignmentOutcomesRes, repeatRiskRes, riskMatrixRes] = await Promise.all([
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/dashboard`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/heatmap`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/graph-summary`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/graph-playbook`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/alerts`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/intervention-outcomes`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${apiUrl}/teachers/classes/${activeClassId}/assignment-outcomes`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/repeat-risk`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/risk-matrix`, { headers: { Authorization: `Bearer ${token}` } }),
         ]);
 
-        if (!dashboardRes.ok || !heatmapRes.ok || !graphRes.ok || !playbookRes.ok || !alertsRes.ok || !outcomesRes.ok || !repeatRiskRes.ok || !riskMatrixRes.ok) {
-          const firstFailure = [dashboardRes, heatmapRes, graphRes, playbookRes, alertsRes, outcomesRes, repeatRiskRes, riskMatrixRes].find((response) => !response.ok);
+        if (!dashboardRes.ok || !heatmapRes.ok || !graphRes.ok || !playbookRes.ok || !alertsRes.ok || !outcomesRes.ok || !assignmentOutcomesRes.ok || !repeatRiskRes.ok || !riskMatrixRes.ok) {
+          const firstFailure = [dashboardRes, heatmapRes, graphRes, playbookRes, alertsRes, outcomesRes, assignmentOutcomesRes, repeatRiskRes, riskMatrixRes].find((response) => !response.ok);
           const detail = await firstFailure.json().catch(() => null);
           throw new Error(detail?.detail || 'Failed to load teacher analytics.');
         }
 
-        const [dashboardData, heatmapData, graphData, playbookData, alertsData, outcomesData, repeatRiskData, riskMatrixData] = await Promise.all([
+        const [dashboardData, heatmapData, graphData, playbookData, alertsData, outcomesData, assignmentOutcomesData, repeatRiskData, riskMatrixData] = await Promise.all([
           dashboardRes.json(),
           heatmapRes.json(),
           graphRes.json(),
           playbookRes.json(),
           alertsRes.json(),
           outcomesRes.json(),
+          assignmentOutcomesRes.json(),
           repeatRiskRes.json(),
           riskMatrixRes.json(),
         ]);
@@ -190,6 +194,7 @@ const ConceptAnalyticsPage = () => {
         );
         setConceptStudents(null);
         setInterventionOutcomes(outcomesData || null);
+        setAssignmentOutcomes(assignmentOutcomesData || null);
         setRepeatRisk(repeatRiskData || null);
         setRiskMatrix(riskMatrixData || null);
         setSelectedStudent(null);
@@ -203,6 +208,7 @@ const ConceptAnalyticsPage = () => {
         setSelectedConceptId('');
         setConceptStudents(null);
         setInterventionOutcomes(null);
+        setAssignmentOutcomes(null);
         setRepeatRisk(null);
         setRiskMatrix(null);
         setSelectedStudent(null);
@@ -1218,6 +1224,72 @@ const ConceptAnalyticsPage = () => {
                     </table>
                   </div>
                 )}
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="flex items-center gap-2 text-lg font-bold text-slate-800">
+                  <NotebookPen className="h-5 w-5 text-indigo-500" />
+                  Assignment Outcomes
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">Whether teacher assignments are followed by real student engagement and mastery movement.</p>
+
+                <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Improving</p>
+                    <p className="mt-2 text-2xl font-black text-emerald-600">{assignmentOutcomes?.improving_assignments ?? 0}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">No evidence</p>
+                    <p className="mt-2 text-2xl font-black text-amber-600">{assignmentOutcomes?.no_evidence_assignments ?? 0}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Declining</p>
+                    <p className="mt-2 text-2xl font-black text-rose-600">{assignmentOutcomes?.declining_assignments ?? 0}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Avg mastery delta</p>
+                    <p className="mt-2 text-2xl font-black text-slate-900">
+                      {Number(assignmentOutcomes?.avg_net_mastery_delta || 0).toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6 space-y-3">
+                  {assignmentOutcomes?.outcomes?.length ? (
+                    assignmentOutcomes.outcomes.slice(0, 6).map((outcome) => (
+                      <div key={outcome.assignment_id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-bold text-slate-900">{outcome.title}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {outcome.assignment_type} • {outcome.target_scope} assignment • {outcome.status}
+                            </p>
+                          </div>
+                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
+                            outcome.outcome_status === 'improving'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : outcome.outcome_status === 'declining'
+                                ? 'bg-rose-100 text-rose-700'
+                                : outcome.outcome_status === 'no_evidence'
+                                  ? 'bg-amber-100 text-amber-700'
+                                  : 'bg-slate-200 text-slate-700'
+                          }`}>
+                            {outcome.outcome_status.replace('_', ' ')}
+                          </span>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-3 text-[11px] font-medium text-slate-500">
+                          <span>{outcome.engaged_student_count}/{outcome.target_student_count} students engaged</span>
+                          <span>{outcome.evidence_event_count} mastery event{outcome.evidence_event_count === 1 ? '' : 's'}</span>
+                          <span>Net delta {Number(outcome.net_mastery_delta || 0).toFixed(2)}</span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-400">
+                      No assignment outcomes are available for this class yet.
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

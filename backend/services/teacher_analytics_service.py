@@ -9,6 +9,8 @@ from backend.schemas.teacher_schema import (
     CompletionDistributionOut,
     TeacherAlertOut,
     TeacherAlertsOut,
+    TeacherAssignmentOutcomeOut,
+    TeacherAssignmentOutcomeSummaryOut,
     TeacherClassDashboardOut,
     TeacherConceptStudentDrilldownOut,
     TeacherConceptStudentOut,
@@ -638,6 +640,115 @@ class TeacherAnalyticsService:
                 )
                 for item in timeline
             ],
+        )
+
+    def get_assignment_outcomes(self, *, teacher_id: UUID, class_id: UUID) -> TeacherAssignmentOutcomeSummaryOut:
+        self._require_teacher_user(teacher_id)
+        teacher_class = self._require_teacher_class(teacher_id=teacher_id, class_id=class_id)
+
+        assignments = self.repo.get_class_assignments(
+            class_id=class_id,
+            subject=teacher_class.subject,
+            term=teacher_class.term,
+            limit=50,
+        )
+        if not assignments:
+            return TeacherAssignmentOutcomeSummaryOut(class_id=class_id)
+
+        class_student_ids = self.repo.get_active_student_ids(class_id=class_id)
+        oldest_created_at = min((row.created_at for row in assignments), default=datetime.now(timezone.utc))
+        mastery_events = self.repo.get_mastery_events_for_students_since(
+            student_ids=class_student_ids,
+            subject=teacher_class.subject,
+            term=teacher_class.term,
+            since=oldest_created_at,
+        )
+        activity_rows = self.repo.get_activity_rows_for_students_since(
+            student_ids=class_student_ids,
+            subject=teacher_class.subject,
+            term=teacher_class.term,
+            since=oldest_created_at,
+        )
+
+        mastery_by_student: dict[UUID, list] = {}
+        for event in mastery_events:
+            mastery_by_student.setdefault(event.student_id, []).append(event)
+
+        activity_by_student: dict[UUID, list] = {}
+        for row in activity_rows:
+            activity_by_student.setdefault(row.student_id, []).append(row)
+
+        outcomes: list[TeacherAssignmentOutcomeOut] = []
+        for row in assignments:
+            target_student_ids = [row.student_id] if row.student_id else class_student_ids
+            window_end = row.created_at + timedelta(days=INTERVENTION_OUTCOME_WINDOW_DAYS)
+
+            candidate_mastery = [
+                event
+                for student_id in target_student_ids
+                for event in mastery_by_student.get(student_id, [])
+                if row.created_at <= event.created_at <= window_end
+            ]
+            candidate_activity = [
+                activity
+                for student_id in target_student_ids
+                for activity in activity_by_student.get(student_id, [])
+                if row.created_at <= activity.created_at <= window_end
+            ]
+
+            net_delta = 0.0
+            for event in candidate_mastery:
+                for entry in list(event.new_mastery or []):
+                    net_delta += float(entry.get("delta", 0.0) or 0.0)
+
+            engaged_students = {event.student_id for event in candidate_mastery} | {
+                activity.student_id for activity in candidate_activity
+            }
+
+            if not engaged_students and not candidate_mastery:
+                outcome_status = "no_evidence"
+            elif net_delta > 0.05:
+                outcome_status = "improving"
+            elif net_delta < -0.02:
+                outcome_status = "declining"
+            else:
+                outcome_status = "flat"
+
+            outcomes.append(
+                TeacherAssignmentOutcomeOut(
+                    assignment_id=row.id,
+                    title=row.title,
+                    assignment_type=row.assignment_type,
+                    status=row.status,
+                    ref_id=row.ref_id,
+                    target_scope="student" if row.student_id else "class",
+                    target_student_count=len(target_student_ids),
+                    engaged_student_count=len(engaged_students),
+                    evidence_event_count=len(candidate_mastery),
+                    outcome_status=outcome_status,
+                    net_mastery_delta=round(net_delta, 4),
+                    due_at=row.due_at,
+                    created_at=row.created_at,
+                )
+            )
+
+        outcomes.sort(
+            key=lambda item: (
+                {"declining": 0, "no_evidence": 1, "flat": 2, "improving": 3}[item.outcome_status],
+                0 if item.target_scope == "student" else 1,
+                item.created_at,
+            )
+        )
+        evidence_outcomes = [item.net_mastery_delta for item in outcomes if item.evidence_event_count > 0]
+        return TeacherAssignmentOutcomeSummaryOut(
+            class_id=class_id,
+            total_assignments=len(outcomes),
+            open_assignments=sum(1 for item in outcomes if item.status == "assigned"),
+            improving_assignments=sum(1 for item in outcomes if item.outcome_status == "improving"),
+            declining_assignments=sum(1 for item in outcomes if item.outcome_status == "declining"),
+            no_evidence_assignments=sum(1 for item in outcomes if item.outcome_status == "no_evidence"),
+            avg_net_mastery_delta=round(sum(evidence_outcomes) / len(evidence_outcomes), 4) if evidence_outcomes else 0.0,
+            outcomes=outcomes[:12],
         )
 
     def get_intervention_outcomes(self, *, teacher_id: UUID, class_id: UUID) -> TeacherInterventionOutcomeSummaryOut:

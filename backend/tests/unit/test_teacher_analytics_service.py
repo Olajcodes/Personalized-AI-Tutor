@@ -26,6 +26,7 @@ class FakeTeacherAnalyticsRepo:
             term=1,
         )
         self.intervention_id = uuid4()
+        self.assignment_id = uuid4()
 
     def get_user(self, user_id):
         return self.users.get(user_id)
@@ -165,6 +166,22 @@ class FakeTeacherAnalyticsRepo:
             )
         ]
 
+    def get_class_assignments(self, *, class_id, subject, term, limit=50):
+        now = datetime.now(timezone.utc)
+        return [
+            SimpleNamespace(
+                id=self.assignment_id,
+                class_id=self.class_id,
+                student_id=self.student_a,
+                assignment_type="revision",
+                ref_id="fractions-repair-pack",
+                title="Fractions Repair Pack",
+                status="assigned",
+                due_at=None,
+                created_at=now - timedelta(days=3),
+            )
+        ]
+
     def get_mastery_events_for_students_since(self, *, student_ids, subject, term, since):
         now = datetime.now(timezone.utc)
         return [
@@ -172,6 +189,18 @@ class FakeTeacherAnalyticsRepo:
                 student_id=self.student_a,
                 created_at=now - timedelta(days=1),
                 new_mastery=[{"concept_id": "math:sss2:t1:fractions", "delta": 0.12}],
+            )
+        ]
+
+    def get_activity_rows_for_students_since(self, *, student_ids, subject, term, since):
+        now = datetime.now(timezone.utc)
+        return [
+            SimpleNamespace(
+                student_id=self.student_a,
+                created_at=now - timedelta(days=1),
+                event_type="lesson_viewed",
+                duration_seconds=420,
+                ref_id="fractions-repair-pack",
             )
         ]
 
@@ -280,6 +309,20 @@ def test_teacher_repeat_risk_identifies_multi_concept_student():
     assert out.students[0].blocked_concept_count >= 1
     assert out.students[0].flagged_concept_count >= 2
     assert out.students[0].driving_concepts[0].concept_label in {"Fractions", "Number Sense", "Ratio"}
+
+
+def test_teacher_assignment_outcomes_show_real_follow_through():
+    repo = FakeTeacherAnalyticsRepo()
+    service = TeacherAnalyticsService(repo)
+
+    out = service.get_assignment_outcomes(teacher_id=repo.teacher_id, class_id=repo.class_id)
+
+    assert out.class_id == repo.class_id
+    assert out.total_assignments == 1
+    assert out.improving_assignments == 1
+    assert out.outcomes[0].assignment_id == repo.assignment_id
+    assert out.outcomes[0].engaged_student_count == 1
+    assert out.outcomes[0].net_mastery_delta > 0
 
 
 def test_teacher_risk_matrix_returns_student_vs_concept_view():

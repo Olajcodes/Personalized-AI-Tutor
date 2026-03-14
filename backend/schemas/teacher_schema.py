@@ -215,6 +215,33 @@ class TeacherInterventionOutcomeSummaryOut(BaseModel):
     outcomes: list[TeacherInterventionOutcomeOut] = Field(default_factory=list)
 
 
+class TeacherAssignmentOutcomeOut(BaseModel):
+    assignment_id: UUID
+    title: str
+    assignment_type: AssignmentType
+    status: Literal["assigned", "completed", "cancelled"]
+    ref_id: str
+    target_scope: Literal["class", "student"]
+    target_student_count: int = 0
+    engaged_student_count: int = 0
+    evidence_event_count: int = 0
+    outcome_status: Literal["improving", "flat", "declining", "no_evidence"]
+    net_mastery_delta: float = 0.0
+    due_at: datetime | None = None
+    created_at: datetime
+
+
+class TeacherAssignmentOutcomeSummaryOut(BaseModel):
+    class_id: UUID
+    total_assignments: int = 0
+    open_assignments: int = 0
+    improving_assignments: int = 0
+    declining_assignments: int = 0
+    no_evidence_assignments: int = 0
+    avg_net_mastery_delta: float = 0.0
+    outcomes: list[TeacherAssignmentOutcomeOut] = Field(default_factory=list)
+
+
 class TeacherRepeatRiskConceptOut(BaseModel):
     concept_id: str
     concept_label: str
