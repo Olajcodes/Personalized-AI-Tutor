@@ -155,6 +155,14 @@ class TeacherRepository:
         self.db.refresh(row)
         return row
 
+    def create_interventions(self, payloads: list[dict[str, Any]]) -> list[TeacherIntervention]:
+        rows = [TeacherIntervention(**payload) for payload in payloads]
+        self.db.add_all(rows)
+        self.db.commit()
+        for row in rows:
+            self.db.refresh(row)
+        return rows
+
     def get_teacher_intervention(self, *, teacher_id: UUID, intervention_id: UUID) -> TeacherIntervention | None:
         return (
             self.db.query(TeacherIntervention)

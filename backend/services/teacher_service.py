@@ -8,6 +8,8 @@ from backend.repositories.teacher_repo import TeacherRepository
 from backend.schemas.teacher_schema import (
     TeacherAssignmentCreateIn,
     TeacherAssignmentOut,
+    TeacherBulkInterventionCreateIn,
+    TeacherBulkInterventionOut,
     TeacherClassCreateIn,
     TeacherClassEnrollIn,
     TeacherClassEnrollOut,
@@ -259,6 +261,73 @@ class TeacherService:
             resolved_at=row.resolved_at,
             created_at=row.created_at,
             updated_at=row.updated_at,
+        )
+
+    def create_bulk_interventions(
+        self,
+        *,
+        teacher_id: UUID,
+        payload: TeacherBulkInterventionCreateIn,
+    ) -> TeacherBulkInterventionOut:
+        self._require_teacher_user(teacher_id)
+
+        teacher_class = None
+        if payload.class_id:
+            teacher_class = self._require_teacher_class(teacher_id=teacher_id, class_id=payload.class_id)
+            if (
+                payload.subject != teacher_class.subject
+                or payload.sss_level != teacher_class.sss_level
+                or payload.term != teacher_class.term
+            ):
+                raise TeacherServiceValidationError(
+                    "Intervention scope (subject/sss_level/term) must match target class scope."
+                )
+
+        unique_student_ids = list(dict.fromkeys(payload.student_ids))
+        users_map = self.repo.get_users_by_ids(unique_student_ids)
+        missing_ids = [student_id for student_id in unique_student_ids if student_id not in users_map]
+        if missing_ids:
+            raise TeacherServiceValidationError(f"Unknown student_ids: {', '.join(map(str, missing_ids))}")
+
+        invalid_student_ids = [
+            student_id
+            for student_id in unique_student_ids
+            if users_map[student_id].role != "student" or not users_map[student_id].is_active
+        ]
+        if invalid_student_ids:
+            raise TeacherServiceValidationError(
+                f"Only active student accounts can receive interventions: {', '.join(map(str, invalid_student_ids))}"
+            )
+
+        if teacher_class:
+            active_students = set(self.repo.get_active_student_ids(class_id=teacher_class.id))
+            unenrolled_ids = [student_id for student_id in unique_student_ids if student_id not in active_students]
+            if unenrolled_ids:
+                raise TeacherServiceValidationError(
+                    "Some target students are not actively enrolled in the selected class."
+                )
+
+        rows = self.repo.create_interventions(
+            [
+                {
+                    "teacher_id": teacher_id,
+                    "class_id": payload.class_id,
+                    "student_id": student_id,
+                    "intervention_type": payload.intervention_type,
+                    "severity": payload.severity,
+                    "subject": payload.subject,
+                    "sss_level": payload.sss_level,
+                    "term": payload.term,
+                    "notes": payload.notes.strip(),
+                    "action_plan": payload.action_plan.strip() if payload.action_plan else None,
+                }
+                for student_id in unique_student_ids
+            ]
+        )
+        return TeacherBulkInterventionOut(
+            created_count=len(rows),
+            student_ids=[row.student_id for row in rows],
+            intervention_ids=[row.id for row in rows],
         )
 
     def update_intervention(

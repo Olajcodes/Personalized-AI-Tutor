@@ -88,6 +88,7 @@ const ConceptAnalyticsPage = () => {
   const [assignmentStatus, setAssignmentStatus] = useState({});
   const [interventionStatus, setInterventionStatus] = useState({});
   const [interventionUpdateStatus, setInterventionUpdateStatus] = useState({});
+  const [bulkInterventionStatus, setBulkInterventionStatus] = useState(null);
   const [isLoadingClasses, setIsLoadingClasses] = useState(true);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [isLoadingConceptStudents, setIsLoadingConceptStudents] = useState(false);
@@ -219,6 +220,7 @@ const ConceptAnalyticsPage = () => {
     const fetchConceptStudents = async () => {
       if (!token || !activeClassId || !selectedConceptId) {
         setConceptStudents(null);
+        setBulkInterventionStatus(null);
         setSelectedStudent(null);
         setStudentTimeline([]);
         return;
@@ -236,10 +238,12 @@ const ConceptAnalyticsPage = () => {
         }
         const data = await response.json();
         setConceptStudents(data || null);
+        setBulkInterventionStatus(null);
         setSelectedStudent(null);
         setStudentTimeline([]);
       } catch (err) {
         setConceptStudents(null);
+        setBulkInterventionStatus(null);
         setSelectedStudent(null);
         setStudentTimeline([]);
         setError(err.message || 'Failed to load concept student drilldown.');
@@ -426,6 +430,52 @@ const ConceptAnalyticsPage = () => {
       recent_study_time_seconds_7d: student?.recent_study_time_seconds_7d ?? 0,
       last_evaluated_at: student?.last_evaluated_at || null,
     });
+  };
+
+  const createBulkConceptInterventions = async () => {
+    if (!activeClassId || !activeClass || !token || !conceptStudents?.students?.length) return;
+    const targetStudents = conceptStudents.students.filter((student) =>
+      ['blocked', 'needs_attention'].includes(student.status),
+    );
+    if (targetStudents.length === 0) {
+      setBulkInterventionStatus({ state: 'error', message: 'No blocked or weak students are available for a bulk intervention.' });
+      return;
+    }
+
+    try {
+      setBulkInterventionStatus({ state: 'loading', message: 'Creating bulk intervention...' });
+      const response = await fetch(`${apiUrl}/teachers/interventions/bulk`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          class_id: activeClassId,
+          student_ids: targetStudents.map((student) => student.student_id),
+          intervention_type: 'support_plan',
+          severity: targetStudents.some((student) => student.status === 'blocked') ? 'high' : 'medium',
+          subject: activeClass.subject,
+          sss_level: activeClass.sss_level,
+          term: activeClass.term,
+          notes: `Target ${conceptStudents.concept_label} for ${targetStudents.length} at-risk students. Repair blockers before reteaching the concept.`,
+          action_plan: conceptStudents.students.some((student) => student.blocking_prerequisite_labels?.length)
+            ? `Repair prerequisite blockers before reteaching ${conceptStudents.concept_label}.`
+            : `Run a focused checkpoint and short support cycle on ${conceptStudents.concept_label}.`,
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.detail || 'Failed to create bulk interventions.');
+      }
+      const data = await response.json();
+      setBulkInterventionStatus({
+        state: 'success',
+        message: `Created ${data.created_count} interventions for ${conceptStudents.concept_label}.`,
+      });
+    } catch (err) {
+      setBulkInterventionStatus({ state: 'error', message: err.message || 'Failed to create bulk interventions.' });
+    }
   };
 
   const updateInterventionStatus = async (outcome, status) => {
@@ -768,13 +818,39 @@ const ConceptAnalyticsPage = () => {
 
             <section className="space-y-6">
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h2 className="flex items-center gap-2 text-lg font-bold text-slate-800">
-                  <UserRoundSearch className="h-5 w-5 text-indigo-500" />
-                  Students Driving This Node
-                </h2>
-                <p className="mt-1 text-xs text-slate-500">
-                  Student-level mastery and prerequisite evidence for the currently selected concept graph node.
-                </p>
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <h2 className="flex items-center gap-2 text-lg font-bold text-slate-800">
+                      <UserRoundSearch className="h-5 w-5 text-indigo-500" />
+                      Students Driving This Node
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Student-level mastery and prerequisite evidence for the currently selected concept graph node.
+                    </p>
+                  </div>
+                  {conceptStudents?.students?.some((student) => ['blocked', 'needs_attention'].includes(student.status)) ? (
+                    <button
+                      type="button"
+                      onClick={createBulkConceptInterventions}
+                      className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-white transition hover:bg-slate-800"
+                    >
+                      Bulk support this node
+                    </button>
+                  ) : null}
+                </div>
+                {bulkInterventionStatus ? (
+                  <p
+                    className={`mt-4 text-xs font-semibold ${
+                      bulkInterventionStatus.state === 'error'
+                        ? 'text-rose-600'
+                        : bulkInterventionStatus.state === 'success'
+                          ? 'text-emerald-600'
+                          : 'text-slate-500'
+                    }`}
+                  >
+                    {bulkInterventionStatus.message}
+                  </p>
+                ) : null}
 
                 <div className="mt-6 space-y-3">
                   {isLoadingConceptStudents ? (

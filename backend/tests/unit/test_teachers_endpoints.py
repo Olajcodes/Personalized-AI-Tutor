@@ -96,6 +96,13 @@ def test_teachers_endpoints_success(monkeypatch):
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
 
+        def create_bulk_interventions(self, *, teacher_id, payload):
+            return {
+                "created_count": len(payload.student_ids),
+                "student_ids": [str(item) for item in payload.student_ids],
+                "intervention_ids": [str(uuid4()) for _ in payload.student_ids],
+            }
+
         def update_intervention(self, *, teacher_id, intervention_id, payload):
             return {
                 "id": str(intervention_id),
@@ -407,6 +414,20 @@ def test_teachers_endpoints_success(monkeypatch):
             "action_plan": "Follow-up session",
         },
     )
+    bulk_intervention_resp = client.post(
+        "/api/v1/teachers/interventions/bulk",
+        json={
+            "class_id": str(class_id),
+            "student_ids": [str(student_id)],
+            "intervention_type": "support_plan",
+            "severity": "high",
+            "subject": "math",
+            "sss_level": "SSS2",
+            "term": 1,
+            "notes": "Target repeated prerequisite blockers.",
+            "action_plan": "Repair the blocker before reteaching the concept.",
+        },
+    )
     update_intervention_resp = client.patch(
         f"/api/v1/teachers/interventions/{uuid4()}",
         json={"status": "resolved"},
@@ -430,6 +451,7 @@ def test_teachers_endpoints_success(monkeypatch):
     assert timeline_resp.status_code == 200
     assert assignment_resp.status_code == 201
     assert intervention_resp.status_code == 201
+    assert bulk_intervention_resp.status_code == 201
     assert update_intervention_resp.status_code == 200
     assert delete_resp.status_code == 204
 

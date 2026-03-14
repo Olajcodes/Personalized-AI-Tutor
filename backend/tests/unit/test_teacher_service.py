@@ -8,6 +8,7 @@ import pytest
 
 from backend.schemas.teacher_schema import (
     TeacherAssignmentCreateIn,
+    TeacherBulkInterventionCreateIn,
     TeacherClassCreateIn,
     TeacherClassEnrollIn,
     TeacherInterventionCreateIn,
@@ -124,6 +125,30 @@ class FakeTeacherRepo:
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
         )
+
+    def create_interventions(self, payloads):
+        rows = []
+        for payload in payloads:
+            rows.append(
+                SimpleNamespace(
+                    id=uuid4(),
+                    teacher_id=payload["teacher_id"],
+                    class_id=payload.get("class_id"),
+                    student_id=payload["student_id"],
+                    intervention_type=payload["intervention_type"],
+                    severity=payload["severity"],
+                    subject=payload["subject"],
+                    sss_level=payload["sss_level"],
+                    term=payload["term"],
+                    notes=payload["notes"],
+                    action_plan=payload.get("action_plan"),
+                    status="open",
+                    resolved_at=None,
+                    created_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(timezone.utc),
+                )
+            )
+        return rows
 
     def get_teacher_intervention(self, *, teacher_id, intervention_id):
         if teacher_id != self.teacher_id or intervention_id != self.intervention_id:
@@ -268,3 +293,29 @@ def test_teacher_service_update_intervention_resolved():
 
     assert out.status == "resolved"
     assert out.resolved_at is not None
+
+
+def test_teacher_service_create_bulk_interventions_success():
+    repo = FakeTeacherRepo()
+    second_student_id = uuid4()
+    repo.users[second_student_id] = SimpleNamespace(id=second_student_id, role="student", is_active=True)
+    repo.active_students.add(second_student_id)
+    service = TeacherService(repo)
+
+    out = service.create_bulk_interventions(
+        teacher_id=repo.teacher_id,
+        payload=TeacherBulkInterventionCreateIn(
+            class_id=repo.class_id,
+            student_ids=[repo.student_id, second_student_id],
+            intervention_type="support_plan",
+            severity="high",
+            subject="math",
+            sss_level="SSS2",
+            term=1,
+            notes="Target repeated prerequisite blockers.",
+            action_plan="Repair the blocker before reteaching the concept.",
+        ),
+    )
+
+    assert out.created_count == 2
+    assert set(out.student_ids) == {repo.student_id, second_student_id}

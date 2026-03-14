@@ -322,6 +322,24 @@ class TeacherInterventionCreateIn(BaseModel):
     action_plan: str | None = Field(default=None, max_length=2000)
 
 
+class TeacherBulkInterventionCreateIn(BaseModel):
+    class_id: UUID | None = None
+    student_ids: list[UUID] = Field(min_length=1, max_length=500)
+    intervention_type: InterventionType
+    severity: Severity = "medium"
+    subject: Subject
+    sss_level: SSSLevel
+    term: Literal[1, 2, 3]
+    notes: str = Field(min_length=1, max_length=2000)
+    action_plan: str | None = Field(default=None, max_length=2000)
+
+
+class TeacherBulkInterventionOut(BaseModel):
+    created_count: int
+    student_ids: list[UUID]
+    intervention_ids: list[UUID]
+
+
 class TeacherInterventionUpdateIn(BaseModel):
     status: Literal["resolved", "dismissed"]
 

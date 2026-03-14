@@ -17,6 +17,8 @@ from backend.schemas.teacher_schema import (
     TeacherAlertsOut,
     TeacherAssignmentCreateIn,
     TeacherAssignmentOut,
+    TeacherBulkInterventionCreateIn,
+    TeacherBulkInterventionOut,
     TeacherClassCreateIn,
     TeacherClassDashboardOut,
     TeacherConceptStudentDrilldownOut,
@@ -325,6 +327,23 @@ def create_intervention(
     """Create intervention notes/flags for at-risk students."""
     try:
         return _teacher_service(db).create_intervention(teacher_id=current_user.id, payload=payload)
+    except TeacherServiceUnauthorizedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except TeacherServiceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except TeacherServiceValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.post("/interventions/bulk", response_model=TeacherBulkInterventionOut, status_code=status.HTTP_201_CREATED)
+def create_bulk_interventions(
+    payload: TeacherBulkInterventionCreateIn,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Create the same intervention across multiple target students in one request."""
+    try:
+        return _teacher_service(db).create_bulk_interventions(teacher_id=current_user.id, payload=payload)
     except TeacherServiceUnauthorizedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except TeacherServiceNotFoundError as exc:
