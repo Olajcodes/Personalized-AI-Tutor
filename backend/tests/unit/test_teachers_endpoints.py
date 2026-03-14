@@ -327,6 +327,8 @@ def test_teachers_endpoints_success(monkeypatch):
                         "status": "assigned",
                         "ref_id": "fractions-repair-pack",
                         "target_scope": "student",
+                        "student_id": str(student_id),
+                        "student_name": "Student One",
                         "target_student_count": 1,
                         "engaged_student_count": 1,
                         "evidence_event_count": 1,

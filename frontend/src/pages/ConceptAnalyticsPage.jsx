@@ -317,6 +317,32 @@ const ConceptAnalyticsPage = () => {
   const nextClusterTeachNext = Array.isArray(nextClusterPlan?.teach_next) ? nextClusterPlan.teach_next : [];
   const nextClusterWatchlist = Array.isArray(nextClusterPlan?.watchlist) ? nextClusterPlan.watchlist : [];
   const nextClusterActions = Array.isArray(nextClusterPlan?.suggested_actions) ? nextClusterPlan.suggested_actions : [];
+  const filteredAssignmentOutcomeRows = useMemo(() => {
+    const rows = Array.isArray(assignmentOutcomes?.outcomes) ? assignmentOutcomes.outcomes : [];
+    if (!selectedStudent?.student_id) return rows;
+    return rows.filter((item) => item.student_id === selectedStudent.student_id);
+  }, [assignmentOutcomes?.outcomes, selectedStudent?.student_id]);
+  const filteredInterventionOutcomeRows = useMemo(() => {
+    const rows = Array.isArray(interventionOutcomes?.outcomes) ? interventionOutcomes.outcomes : [];
+    if (!selectedStudent?.student_id) return rows;
+    return rows.filter((item) => item.student_id === selectedStudent.student_id);
+  }, [interventionOutcomes?.outcomes, selectedStudent?.student_id]);
+  const filteredAssignmentOutcomeSummary = useMemo(() => ({
+    improving: filteredAssignmentOutcomeRows.filter((item) => item.outcome_status === 'improving').length,
+    noEvidence: filteredAssignmentOutcomeRows.filter((item) => item.outcome_status === 'no_evidence').length,
+    declining: filteredAssignmentOutcomeRows.filter((item) => item.outcome_status === 'declining').length,
+    avgDelta: filteredAssignmentOutcomeRows.length
+      ? Number(filteredAssignmentOutcomeRows.reduce((sum, item) => sum + Number(item.net_mastery_delta || 0), 0) / filteredAssignmentOutcomeRows.length).toFixed(2)
+      : Number(0).toFixed(2),
+  }), [filteredAssignmentOutcomeRows]);
+  const filteredInterventionOutcomeSummary = useMemo(() => ({
+    improving: filteredInterventionOutcomeRows.filter((item) => item.outcome_status === 'improving').length,
+    noEvidence: filteredInterventionOutcomeRows.filter((item) => item.outcome_status === 'no_evidence').length,
+    declining: filteredInterventionOutcomeRows.filter((item) => item.outcome_status === 'declining').length,
+    avgDelta: filteredInterventionOutcomeRows.length
+      ? Number(filteredInterventionOutcomeRows.reduce((sum, item) => sum + Number(item.net_mastery_delta || 0), 0) / filteredInterventionOutcomeRows.length).toFixed(2)
+      : Number(0).toFixed(2),
+  }), [filteredInterventionOutcomeRows]);
 
   const createSuggestedAssignment = async (action) => {
     if (!activeClassId || !activeClass || !token) return;
@@ -1384,31 +1410,36 @@ const ConceptAnalyticsPage = () => {
                   Assignment Outcomes
                 </h2>
                 <p className="mt-1 text-xs text-slate-500">Whether teacher assignments are followed by real student engagement and mastery movement.</p>
+                {selectedStudent ? (
+                  <div className="mt-4 rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-xs font-semibold text-indigo-700">
+                    Showing student-targeted assignment outcomes for {selectedStudent.student_name}. Class-wide assignments are hidden in this focused view.
+                  </div>
+                ) : null}
 
                 <div className="mt-6 grid gap-3 sm:grid-cols-2">
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Improving</p>
-                    <p className="mt-2 text-2xl font-black text-emerald-600">{assignmentOutcomes?.improving_assignments ?? 0}</p>
+                    <p className="mt-2 text-2xl font-black text-emerald-600">{selectedStudent ? filteredAssignmentOutcomeSummary.improving : (assignmentOutcomes?.improving_assignments ?? 0)}</p>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">No evidence</p>
-                    <p className="mt-2 text-2xl font-black text-amber-600">{assignmentOutcomes?.no_evidence_assignments ?? 0}</p>
+                    <p className="mt-2 text-2xl font-black text-amber-600">{selectedStudent ? filteredAssignmentOutcomeSummary.noEvidence : (assignmentOutcomes?.no_evidence_assignments ?? 0)}</p>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Declining</p>
-                    <p className="mt-2 text-2xl font-black text-rose-600">{assignmentOutcomes?.declining_assignments ?? 0}</p>
+                    <p className="mt-2 text-2xl font-black text-rose-600">{selectedStudent ? filteredAssignmentOutcomeSummary.declining : (assignmentOutcomes?.declining_assignments ?? 0)}</p>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Avg mastery delta</p>
                     <p className="mt-2 text-2xl font-black text-slate-900">
-                      {Number(assignmentOutcomes?.avg_net_mastery_delta || 0).toFixed(2)}
+                      {selectedStudent ? filteredAssignmentOutcomeSummary.avgDelta : Number(assignmentOutcomes?.avg_net_mastery_delta || 0).toFixed(2)}
                     </p>
                   </div>
                 </div>
 
                 <div className="mt-6 space-y-3">
-                  {assignmentOutcomes?.outcomes?.length ? (
-                    assignmentOutcomes.outcomes.slice(0, 6).map((outcome) => (
+                  {filteredAssignmentOutcomeRows.length ? (
+                    filteredAssignmentOutcomeRows.slice(0, 6).map((outcome) => (
                       <div key={outcome.assignment_id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div>
@@ -1416,6 +1447,7 @@ const ConceptAnalyticsPage = () => {
                             <p className="mt-1 text-xs text-slate-500">
                               {outcome.assignment_type} • {outcome.target_scope} assignment • {outcome.status}
                             </p>
+                            {outcome.student_name ? <p className="mt-1 text-[11px] font-semibold text-indigo-600">{outcome.student_name}</p> : null}
                           </div>
                           <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
                             outcome.outcome_status === 'improving'
@@ -1438,7 +1470,7 @@ const ConceptAnalyticsPage = () => {
                     ))
                   ) : (
                     <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-400">
-                      No assignment outcomes are available for this class yet.
+                      {selectedStudent ? `No student-targeted assignment outcomes are available for ${selectedStudent.student_name} yet.` : 'No assignment outcomes are available for this class yet.'}
                     </div>
                   )}
                 </div>
@@ -1450,31 +1482,36 @@ const ConceptAnalyticsPage = () => {
                   Intervention Outcomes
                 </h2>
                 <p className="mt-1 text-xs text-slate-500">Whether recent teacher interventions are followed by real mastery movement.</p>
+                {selectedStudent ? (
+                  <div className="mt-4 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-700">
+                    Showing intervention outcomes for {selectedStudent.student_name}.
+                  </div>
+                ) : null}
 
                 <div className="mt-6 grid gap-3 sm:grid-cols-2">
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Improving</p>
-                    <p className="mt-2 text-2xl font-black text-emerald-600">{interventionOutcomes?.improving_interventions ?? 0}</p>
+                    <p className="mt-2 text-2xl font-black text-emerald-600">{selectedStudent ? filteredInterventionOutcomeSummary.improving : (interventionOutcomes?.improving_interventions ?? 0)}</p>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">No evidence</p>
-                    <p className="mt-2 text-2xl font-black text-amber-600">{interventionOutcomes?.no_evidence_interventions ?? 0}</p>
+                    <p className="mt-2 text-2xl font-black text-amber-600">{selectedStudent ? filteredInterventionOutcomeSummary.noEvidence : (interventionOutcomes?.no_evidence_interventions ?? 0)}</p>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Declining</p>
-                    <p className="mt-2 text-2xl font-black text-rose-600">{interventionOutcomes?.declining_interventions ?? 0}</p>
+                    <p className="mt-2 text-2xl font-black text-rose-600">{selectedStudent ? filteredInterventionOutcomeSummary.declining : (interventionOutcomes?.declining_interventions ?? 0)}</p>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Avg mastery delta</p>
                     <p className="mt-2 text-2xl font-black text-slate-900">
-                      {Number(interventionOutcomes?.avg_net_mastery_delta || 0).toFixed(2)}
+                      {selectedStudent ? filteredInterventionOutcomeSummary.avgDelta : Number(interventionOutcomes?.avg_net_mastery_delta || 0).toFixed(2)}
                     </p>
                   </div>
                 </div>
 
                 <div className="mt-6 space-y-3">
-                  {interventionOutcomes?.outcomes?.length ? (
-                    interventionOutcomes.outcomes.slice(0, 6).map((outcome) => (
+                  {filteredInterventionOutcomeRows.length ? (
+                    filteredInterventionOutcomeRows.slice(0, 6).map((outcome) => (
                       <div key={outcome.intervention_id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div>
@@ -1542,7 +1579,7 @@ const ConceptAnalyticsPage = () => {
                     ))
                   ) : (
                     <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-400">
-                      No intervention outcomes are available for this class yet.
+                      {selectedStudent ? `No intervention outcomes are available for ${selectedStudent.student_name} yet.` : 'No intervention outcomes are available for this class yet.'}
                     </div>
                   )}
                 </div>
@@ -1627,3 +1664,4 @@ const ConceptAnalyticsPage = () => {
 };
 
 export default ConceptAnalyticsPage;
+

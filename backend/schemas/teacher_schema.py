@@ -245,6 +245,8 @@ class TeacherAssignmentOutcomeOut(BaseModel):
     status: Literal["assigned", "completed", "cancelled"]
     ref_id: str
     target_scope: Literal["class", "student"]
+    student_id: UUID | None = None
+    student_name: str | None = None
     target_student_count: int = 0
     engaged_student_count: int = 0
     evidence_event_count: int = 0

@@ -334,6 +334,8 @@ def test_teacher_assignment_outcomes_show_real_follow_through():
     assert out.total_assignments == 1
     assert out.improving_assignments == 1
     assert out.outcomes[0].assignment_id == repo.assignment_id
+    assert out.outcomes[0].student_id == repo.student_a
+    assert out.outcomes[0].student_name == "Ada James"
     assert out.outcomes[0].engaged_student_count == 1
     assert out.outcomes[0].net_mastery_delta > 0
 

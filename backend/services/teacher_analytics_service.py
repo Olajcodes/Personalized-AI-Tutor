@@ -785,6 +785,8 @@ class TeacherAnalyticsService:
             return TeacherAssignmentOutcomeSummaryOut(class_id=class_id)
 
         class_student_ids = self.repo.get_active_student_ids(class_id=class_id)
+        targeted_student_ids = sorted({row.student_id for row in assignments if row.student_id})
+        targeted_users = self.repo.get_users_by_ids(targeted_student_ids)
         oldest_created_at = min((row.created_at for row in assignments), default=datetime.now(timezone.utc))
         mastery_events = self.repo.get_mastery_events_for_students_since(
             student_ids=class_student_ids,
@@ -851,6 +853,12 @@ class TeacherAnalyticsService:
                     status=row.status,
                     ref_id=row.ref_id,
                     target_scope="student" if row.student_id else "class",
+                    student_id=row.student_id,
+                    student_name=(
+                        self._display_name(targeted_users.get(row.student_id), fallback_id=row.student_id)
+                        if row.student_id
+                        else None
+                    ),
                     target_student_count=len(target_student_ids),
                     engaged_student_count=len(engaged_students),
                     evidence_event_count=len(candidate_mastery),
