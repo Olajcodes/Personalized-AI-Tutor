@@ -114,6 +114,24 @@ class LessonCockpitService:
             if session_token in cache_key:
                 _LESSON_COCKPIT_CACHE.pop(cache_key, None)
 
+    @classmethod
+    def cache_snapshot(cls) -> dict:
+        cls._prune_cache()
+        return {
+            "status": "ok",
+            "bootstrap_cache": {
+                "entries": len(_LESSON_COCKPIT_CACHE),
+                "ttl_seconds": COCKPIT_CACHE_TTL_SECONDS,
+            },
+        }
+
+    @classmethod
+    def _prune_cache(cls) -> None:
+        now = time.time()
+        for cache_key, (created_at, _payload) in list(_LESSON_COCKPIT_CACHE.items()):
+            if (now - created_at) > COCKPIT_CACHE_TTL_SECONDS:
+                _LESSON_COCKPIT_CACHE.pop(cache_key, None)
+
     @staticmethod
     def _why_topic_detail(*, payload: LessonCockpitBootstrapIn, tutor_bootstrap) -> WhyThisTopicOut:
         graph_context = tutor_bootstrap.graph_context

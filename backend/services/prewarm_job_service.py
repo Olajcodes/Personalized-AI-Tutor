@@ -239,6 +239,9 @@ class PrewarmJobService:
         return {
             "status": "ok" if settings.prewarm_queue_enabled else "disabled",
             "worker_enabled": settings.prewarm_worker_enabled,
+            "worker_alive": bool(_worker_thread and _worker_thread.is_alive()),
+            "poll_seconds": settings.prewarm_worker_poll_seconds,
+            "batch_size": settings.prewarm_worker_batch_size,
             "counts": counts,
         }
 

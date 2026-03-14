@@ -192,6 +192,33 @@ class LessonExperienceService:
             _BOOTSTRAP_CACHE.pop(key, None)
 
     @classmethod
+    def cache_snapshot(cls) -> dict:
+        cls._prune_cache()
+        preview_entries = sum(1 for key in _BOOTSTRAP_CACHE if key.endswith(":preview"))
+        return {
+            "status": "ok",
+            "bootstrap_cache": {
+                "entries": len(_BOOTSTRAP_CACHE),
+                "preview_entries": preview_entries,
+                "ttl_seconds": BOOTSTRAP_CACHE_TTL_SECONDS,
+            },
+            "topic_snapshot_cache": {
+                "entries": len(_TOPIC_SNAPSHOT_CACHE),
+                "ttl_seconds": TOPIC_SNAPSHOT_CACHE_TTL_SECONDS,
+            },
+        }
+
+    @classmethod
+    def _prune_cache(cls) -> None:
+        now = time.time()
+        for cache_key, (created_at, _payload) in list(_BOOTSTRAP_CACHE.items()):
+            if (now - created_at) > BOOTSTRAP_CACHE_TTL_SECONDS:
+                _BOOTSTRAP_CACHE.pop(cache_key, None)
+        for cache_key, (created_at, _payload) in list(_TOPIC_SNAPSHOT_CACHE.items()):
+            if (now - created_at) > TOPIC_SNAPSHOT_CACHE_TTL_SECONDS:
+                _TOPIC_SNAPSHOT_CACHE.pop(cache_key, None)
+
+    @classmethod
     def _build_topic_snapshot(
         cls,
         *,

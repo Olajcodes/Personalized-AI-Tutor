@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from backend.core.config import settings
 from backend.core.database import Base, get_db
+from backend.core.telemetry import reset_telemetry_snapshot
 from backend.main import app
 from backend.models.curriculum_topic_map import CurriculumTopicMap
 from backend.models.curriculum_version import CurriculumVersion
@@ -213,6 +214,7 @@ def test_section9_prewarm_queue_flow(setup_prewarm_scope, monkeypatch):
     _BOOTSTRAP_CACHE.clear()
     _COURSE_BOOTSTRAP_CACHE.clear()
     _DASHBOARD_BOOTSTRAP_CACHE.clear()
+    reset_telemetry_snapshot()
 
     client = TestClient(app)
     user_id, token = _register_and_login_student(client)
@@ -321,3 +323,33 @@ def test_section9_prewarm_queue_flow(setup_prewarm_scope, monkeypatch):
         headers=headers,
     )
     assert lesson_bootstrap.status_code == 200
+    lesson_bootstrap_json = lesson_bootstrap.json()
+
+    lesson_cockpit = client.post(
+        "/api/v1/learning/lesson/cockpit",
+        json={
+            "student_id": user_id,
+            "subject": subject,
+            "sss_level": sss_level,
+            "term": term,
+            "topic_id": str(target_topic_id),
+            "session_id": lesson_bootstrap_json["session_id"],
+        },
+        headers=headers,
+    )
+    assert lesson_cockpit.status_code == 200
+
+    health_runtime = client.get("/api/v1/system/health")
+    assert health_runtime.status_code == 200
+    health_runtime_json = health_runtime.json()
+    assert health_runtime_json["runtime"]["status"] == "ok"
+    assert int(health_runtime_json["runtime"]["telemetry"]["event_count"]) >= 3
+    runtime_events = health_runtime_json["runtime"]["telemetry"]["events"]
+    assert "course.bootstrap" in runtime_events
+    assert "dashboard.bootstrap" in runtime_events
+    assert "lesson.bootstrap" in runtime_events
+    assert "lesson.cockpit.bootstrap" in runtime_events
+    assert (
+        health_runtime_json["runtime"]["caches"]["lesson_experience"]["topic_snapshot_cache"]["entries"] >= 1
+    )
+    assert health_runtime_json["runtime"]["caches"]["lesson_cockpit"]["bootstrap_cache"]["entries"] >= 1

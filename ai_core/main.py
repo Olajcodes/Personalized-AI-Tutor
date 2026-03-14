@@ -18,6 +18,7 @@ from ai_core.core_engine.orchestration.quiz_engine import (
     QuizGenerationError,
 )
 from ai_core.core_engine.integrations.internal_api import internal_service_key_configured
+from ai_core.core_engine.observability.telemetry import telemetry_snapshot
 from ai_core.core_engine.orchestration.tutor_engine import (
     run_tutor_drill,
     run_tutor_assessment_start,
@@ -116,6 +117,10 @@ def health():
         "status": "ok",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "checks": checks,
+        "runtime": {
+            "status": "ok",
+            "telemetry": telemetry_snapshot(),
+        },
     }
 
 

@@ -9,6 +9,11 @@ from sqlalchemy import text
 
 from backend.core.config import settings
 from backend.core.database import engine
+from backend.core.telemetry import telemetry_snapshot
+from backend.services.course_experience_service import CourseExperienceService
+from backend.services.dashboard_experience_service import DashboardExperienceService
+from backend.services.lesson_cockpit_service import LessonCockpitService
+from backend.services.lesson_experience_service import LessonExperienceService
 from backend.services.prewarm_job_service import PrewarmJobService
 from backend.services.rag_retrieve_service import QdrantRuntimeConfig, QdrantVectorStore
 
@@ -107,4 +112,14 @@ class SystemHealthService:
             "status": overall_status,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "checks": checks,
+            "runtime": {
+                "status": "ok",
+                "telemetry": telemetry_snapshot(),
+                "caches": {
+                    "lesson_experience": LessonExperienceService.cache_snapshot(),
+                    "lesson_cockpit": LessonCockpitService.cache_snapshot(),
+                    "course_experience": CourseExperienceService.cache_snapshot(),
+                    "dashboard_experience": DashboardExperienceService.cache_snapshot(),
+                },
+            },
         }

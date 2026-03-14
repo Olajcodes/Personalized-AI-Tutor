@@ -355,6 +355,24 @@ class CourseExperienceService:
             _COURSE_BOOTSTRAP_CACHE.pop(cache_key, None)
 
     @classmethod
+    def cache_snapshot(cls) -> dict:
+        cls._prune_cache()
+        return {
+            "status": "ok",
+            "bootstrap_cache": {
+                "entries": len(_COURSE_BOOTSTRAP_CACHE),
+                "ttl_seconds": CACHE_TTL_SECONDS,
+            },
+        }
+
+    @classmethod
+    def _prune_cache(cls) -> None:
+        now = time.time()
+        for cache_key, (created_at, _payload) in list(_COURSE_BOOTSTRAP_CACHE.items()):
+            if (now - created_at) > CACHE_TTL_SECONDS:
+                _COURSE_BOOTSTRAP_CACHE.pop(cache_key, None)
+
+    @classmethod
     def prewarm_scope(
         cls,
         *,
