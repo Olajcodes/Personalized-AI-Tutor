@@ -584,6 +584,9 @@ class LessonExperienceService:
             pending_assessment=pending_assessment,
         )
         output = self._write_cached_bootstrap(cache_key=cache_key, payload=bootstrap)
+        lesson_context_source = None
+        if isinstance(snapshot.lesson, dict):
+            lesson_context_source = str(snapshot.lesson.get("context_source") or "").strip() or None
         log_timed_event(
             logger,
             "lesson.bootstrap",
@@ -598,7 +601,7 @@ class LessonExperienceService:
             graph_nodes=len(list(output.graph_nodes or [])),
             graph_edges=len(list(output.graph_edges or [])),
             assessment_ready=bool(output.assessment_ready),
-            lesson_context_source=str(output.lesson.get("context_source") or "unknown"),
+            lesson_context_source=lesson_context_source or "response_model",
         )
         return output
 
