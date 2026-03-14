@@ -211,6 +211,37 @@ class TeacherStudentTimelineOut(BaseModel):
     timeline: list[TeacherTimelineEventOut]
 
 
+class TeacherConceptTrendSnapshotOut(BaseModel):
+    concept_id: str
+    concept_label: str
+    role: Literal["focus", "prerequisite"]
+    current_score: float | None = None
+    last_evaluated_at: datetime | None = None
+
+
+class TeacherConceptTrendEventOut(BaseModel):
+    concept_id: str
+    concept_label: str
+    occurred_at: datetime
+    delta: float
+    source: str
+
+
+class TeacherStudentConceptTrendOut(BaseModel):
+    class_id: UUID
+    student_id: UUID
+    concept_id: str
+    concept_label: str
+    current_score: float | None = None
+    last_evaluated_at: datetime | None = None
+    status: Literal["blocked", "needs_attention", "mastered", "unassessed"]
+    blocking_prerequisite_labels: list[str] = Field(default_factory=list)
+    net_delta_30d: float = 0.0
+    evidence_event_count: int = 0
+    tracked_concepts: list[TeacherConceptTrendSnapshotOut] = Field(default_factory=list)
+    recent_events: list[TeacherConceptTrendEventOut] = Field(default_factory=list)
+
+
 class TeacherInterventionOutcomeOut(BaseModel):
     intervention_id: UUID
     student_id: UUID

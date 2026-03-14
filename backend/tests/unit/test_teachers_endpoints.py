@@ -445,6 +445,45 @@ def test_teachers_endpoints_success(monkeypatch):
         def get_student_timeline(self, *, teacher_id, class_id, student_id, limit):
             return {"class_id": str(class_id), "student_id": str(student_id), "timeline": []}
 
+        def get_student_concept_trend(self, *, teacher_id, class_id, student_id, concept_id, days):
+            return {
+                "class_id": str(class_id),
+                "student_id": str(student_id),
+                "concept_id": concept_id,
+                "concept_label": "Fractions",
+                "current_score": 0.31,
+                "last_evaluated_at": datetime.now(timezone.utc).isoformat(),
+                "status": "blocked",
+                "blocking_prerequisite_labels": ["Number Sense"],
+                "net_delta_30d": 0.12,
+                "evidence_event_count": 1,
+                "tracked_concepts": [
+                    {
+                        "concept_id": concept_id,
+                        "concept_label": "Fractions",
+                        "role": "focus",
+                        "current_score": 0.31,
+                        "last_evaluated_at": datetime.now(timezone.utc).isoformat(),
+                    },
+                    {
+                        "concept_id": "math:sss2:t1:number-sense",
+                        "concept_label": "Number Sense",
+                        "role": "prerequisite",
+                        "current_score": 0.3,
+                        "last_evaluated_at": datetime.now(timezone.utc).isoformat(),
+                    },
+                ],
+                "recent_events": [
+                    {
+                        "concept_id": concept_id,
+                        "concept_label": "Fractions",
+                        "occurred_at": datetime.now(timezone.utc).isoformat(),
+                        "delta": 0.12,
+                        "source": "practice",
+                    }
+                ],
+            }
+
     monkeypatch.setattr("backend.endpoints.teachers._teacher_service", lambda db: _TeacherService())
     monkeypatch.setattr("backend.endpoints.teachers._analytics_service", lambda db: _AnalyticsService())
 
@@ -473,6 +512,7 @@ def test_teachers_endpoints_success(monkeypatch):
     risk_matrix_resp = client.get(f"/api/v1/teachers/classes/{class_id}/risk-matrix")
     concept_students_resp = client.get(f"/api/v1/teachers/classes/{class_id}/concepts/math:sss2:t1:fractions/students")
     timeline_resp = client.get(f"/api/v1/teachers/classes/{class_id}/students/{student_id}/timeline")
+    concept_trend_resp = client.get(f"/api/v1/teachers/classes/{class_id}/students/{student_id}/concepts/math:sss2:t1:fractions/trend")
     assignment_resp = client.post(
         "/api/v1/teachers/assignments",
         json={
@@ -554,6 +594,7 @@ def test_teachers_endpoints_success(monkeypatch):
     assert risk_matrix_resp.status_code == 200
     assert concept_students_resp.status_code == 200
     assert timeline_resp.status_code == 200
+    assert concept_trend_resp.status_code == 200
     assert assignment_resp.status_code == 201
     assert bulk_assignment_resp.status_code == 201
     assert intervention_resp.status_code == 201

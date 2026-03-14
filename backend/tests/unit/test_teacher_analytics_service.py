@@ -188,6 +188,7 @@ class FakeTeacherAnalyticsRepo:
             SimpleNamespace(
                 student_id=self.student_a,
                 created_at=now - timedelta(days=1),
+                source="practice",
                 new_mastery=[{"concept_id": "math:sss2:t1:fractions", "delta": 0.12}],
             )
         ]
@@ -366,3 +367,26 @@ def test_teacher_analytics_student_timeline_mapping():
     assert out.student_id == repo.student_a
     assert len(out.timeline) == 2
     assert out.timeline[0].event_type in {"activity", "mastery_update"}
+
+
+def test_teacher_student_concept_trend_returns_current_scores_and_recent_deltas():
+    repo = FakeTeacherAnalyticsRepo()
+    service = TeacherAnalyticsService(repo)
+
+    out = service.get_student_concept_trend(
+        teacher_id=repo.teacher_id,
+        class_id=repo.class_id,
+        student_id=repo.student_a,
+        concept_id="math:sss2:t1:fractions",
+        days=30,
+    )
+
+    assert out.class_id == repo.class_id
+    assert out.student_id == repo.student_a
+    assert out.concept_label == "Fractions"
+    assert out.status == "blocked"
+    assert out.net_delta_30d == 0.12
+    assert out.evidence_event_count == 1
+    assert out.tracked_concepts[0].role == "focus"
+    assert any(item.role == "prerequisite" and item.concept_label == "Number Sense" for item in out.tracked_concepts)
+    assert out.recent_events[0].source == "practice"

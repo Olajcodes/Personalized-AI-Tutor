@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock3, MessageSquareMore, ShieldAlert, UserRound, X } from 'lucide-react';
+import { ArrowUpRight, Clock3, MessageSquareMore, ShieldAlert, TrendingUp, UserRound, X } from 'lucide-react';
 
 const formatDateTime = (value) => {
   if (!value) return 'Not available';
@@ -42,6 +42,8 @@ const TeacherStudentFocusDrawer = ({
   onClose,
   student,
   conceptLabel,
+  conceptTrend,
+  isLoadingTrend,
   timeline,
   isLoading,
 }) => {
@@ -84,6 +86,74 @@ const TeacherStudentFocusDrawer = ({
                 {student.overall_mastery_score == null ? 'Unassessed' : `${Math.round(Number(student.overall_mastery_score) * 100)}%`}
               </p>
             </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-slate-600">
+              <TrendingUp className="h-4 w-4 text-emerald-500" />
+              Concept trend
+            </h3>
+            {isLoadingTrend ? (
+              <p className="mt-4 text-sm text-slate-500">Loading concept trend...</p>
+            ) : !conceptTrend ? (
+              <p className="mt-4 text-sm text-slate-500">No concept trend evidence is available for this student yet.</p>
+            ) : (
+              <>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Net delta (30d)</p>
+                    <p className={`mt-2 text-xl font-black ${Number(conceptTrend.net_delta_30d || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {Number(conceptTrend.net_delta_30d || 0) >= 0 ? '+' : ''}{Number(conceptTrend.net_delta_30d || 0).toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Evidence events</p>
+                    <p className="mt-2 text-xl font-black text-slate-900">{conceptTrend.evidence_event_count}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {conceptTrend.tracked_concepts?.map((item) => (
+                    <div key={`${item.role}-${item.concept_id}`} className="rounded-xl border border-slate-200 bg-white p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-bold text-slate-900">{item.concept_label}</p>
+                          <p className="mt-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">{item.role === 'focus' ? 'Focus concept' : 'Prerequisite'}</p>
+                        </div>
+                        <span className="text-sm font-black text-slate-800">
+                          {item.current_score == null ? 'Unassessed' : `${Math.round(Number(item.current_score) * 100)}%`}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-[11px] text-slate-500">Last evaluated: {formatDateTime(item.last_evaluated_at)}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {conceptTrend.recent_events?.length ? (
+                  <div className="mt-4 space-y-2">
+                    {conceptTrend.recent_events.map((event, index) => (
+                      <div key={`${event.concept_id}-${event.occurred_at}-${index}`} className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">{event.concept_label}</p>
+                            <p className="mt-1 text-[11px] font-medium text-slate-500">{event.source}</p>
+                          </div>
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
+                            Number(event.delta || 0) >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                          }`}>
+                            <ArrowUpRight className={`h-3 w-3 ${Number(event.delta || 0) >= 0 ? '' : 'rotate-90'}`} />
+                            {Number(event.delta || 0) >= 0 ? '+' : ''}{Number(event.delta || 0).toFixed(2)}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-[11px] text-slate-500">{formatDateTime(event.occurred_at)}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-slate-500">No recent mastery deltas were recorded for this concept path in the selected window.</p>
+                )}
+              </>
+            )}
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">

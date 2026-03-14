@@ -86,6 +86,7 @@ const ConceptAnalyticsPage = () => {
   const [riskMatrix, setRiskMatrix] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [studentTimeline, setStudentTimeline] = useState([]);
+  const [studentConceptTrend, setStudentConceptTrend] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [assignmentStatus, setAssignmentStatus] = useState({});
   const [interventionStatus, setInterventionStatus] = useState({});
@@ -96,6 +97,7 @@ const ConceptAnalyticsPage = () => {
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [isLoadingConceptStudents, setIsLoadingConceptStudents] = useState(false);
   const [isLoadingStudentTimeline, setIsLoadingStudentTimeline] = useState(false);
+  const [isLoadingStudentConceptTrend, setIsLoadingStudentConceptTrend] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -148,6 +150,7 @@ const ConceptAnalyticsPage = () => {
         setRiskMatrix(null);
         setSelectedStudent(null);
         setStudentTimeline([]);
+        setStudentConceptTrend(null);
         setAlerts([]);
         return;
       }
@@ -204,6 +207,7 @@ const ConceptAnalyticsPage = () => {
         setRiskMatrix(riskMatrixData || null);
         setSelectedStudent(null);
         setStudentTimeline([]);
+        setStudentConceptTrend(null);
         setAlerts(Array.isArray(alertsData?.alerts) ? alertsData.alerts : []);
       } catch (err) {
         setDashboard(null);
@@ -219,6 +223,7 @@ const ConceptAnalyticsPage = () => {
         setRiskMatrix(null);
         setSelectedStudent(null);
         setStudentTimeline([]);
+        setStudentConceptTrend(null);
         setAlerts([]);
         setError(err.message || 'Teacher analytics is unavailable right now.');
       } finally {
@@ -237,6 +242,7 @@ const ConceptAnalyticsPage = () => {
         setBulkInterventionStatus(null);
         setSelectedStudent(null);
         setStudentTimeline([]);
+        setStudentConceptTrend(null);
         return;
       }
 
@@ -256,12 +262,14 @@ const ConceptAnalyticsPage = () => {
         setBulkInterventionStatus(null);
         setSelectedStudent(null);
         setStudentTimeline([]);
+        setStudentConceptTrend(null);
       } catch (err) {
         setConceptStudents(null);
         setBulkAssignmentStatus(null);
         setBulkInterventionStatus(null);
         setSelectedStudent(null);
         setStudentTimeline([]);
+        setStudentConceptTrend(null);
         setError(err.message || 'Failed to load concept student drilldown.');
       } finally {
         setIsLoadingConceptStudents(false);
@@ -299,6 +307,35 @@ const ConceptAnalyticsPage = () => {
 
     fetchStudentTimeline();
   }, [activeClassId, apiUrl, selectedStudent?.student_id, token]);
+
+  useEffect(() => {
+    const fetchStudentConceptTrend = async () => {
+      if (!token || !activeClassId || !selectedStudent?.student_id || !selectedConceptId) {
+        setStudentConceptTrend(null);
+        return;
+      }
+      try {
+        setIsLoadingStudentConceptTrend(true);
+        const response = await fetch(
+          `${apiUrl}/teachers/classes/${activeClassId}/students/${selectedStudent.student_id}/concepts/${encodeURIComponent(selectedConceptId)}/trend?days=30`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (!response.ok) {
+          const detail = await response.json().catch(() => null);
+          throw new Error(detail?.detail || 'Failed to load concept trend.');
+        }
+        const data = await response.json();
+        setStudentConceptTrend(data || null);
+      } catch (err) {
+        setStudentConceptTrend(null);
+        setError(err.message || 'Failed to load concept trend.');
+      } finally {
+        setIsLoadingStudentConceptTrend(false);
+      }
+    };
+
+    fetchStudentConceptTrend();
+  }, [activeClassId, apiUrl, selectedConceptId, selectedStudent?.student_id, token]);
 
   const activeClass = useMemo(
     () => classes.find((item) => item.id === activeClassId) || null,
@@ -454,6 +491,7 @@ const ConceptAnalyticsPage = () => {
     if (resolvedConcept?.concept_id) {
       setSelectedConceptId(resolvedConcept.concept_id);
     }
+    setStudentConceptTrend(null);
     setSelectedStudent({
       ...student,
       status: cell?.status || resolvedConcept?.status || student?.status || 'needs_attention',
@@ -1677,9 +1715,14 @@ const ConceptAnalyticsPage = () => {
 
       <TeacherStudentFocusDrawer
         isOpen={Boolean(selectedStudent)}
-        onClose={() => setSelectedStudent(null)}
+        onClose={() => {
+          setSelectedStudent(null);
+          setStudentConceptTrend(null);
+        }}
         student={selectedStudent}
         conceptLabel={conceptStudents?.concept_label || humanizeConceptId(selectedConceptId)}
+        conceptTrend={studentConceptTrend}
+        isLoadingTrend={isLoadingStudentConceptTrend}
         timeline={studentTimeline}
         isLoading={isLoadingStudentTimeline}
       />

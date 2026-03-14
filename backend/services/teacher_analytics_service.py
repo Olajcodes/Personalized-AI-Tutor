@@ -14,6 +14,8 @@ from backend.schemas.teacher_schema import (
     TeacherClassDashboardOut,
     TeacherConceptStudentDrilldownOut,
     TeacherConceptStudentOut,
+    TeacherConceptTrendEventOut,
+    TeacherConceptTrendSnapshotOut,
     TeacherClassGraphOut,
     TeacherGraphEdgeOut,
     TeacherInterventionOutcomeOut,
@@ -35,6 +37,7 @@ from backend.schemas.teacher_schema import (
     TeacherRiskMatrixOut,
     TeacherRiskMatrixStudentOut,
     TeacherStudentTimelineOut,
+    TeacherStudentConceptTrendOut,
     TeacherTimelineEventOut,
 )
 from backend.services.teacher_service import (
@@ -769,6 +772,119 @@ class TeacherAnalyticsService:
                 )
                 for item in timeline
             ],
+        )
+
+    def get_student_concept_trend(
+        self,
+        *,
+        teacher_id: UUID,
+        class_id: UUID,
+        student_id: UUID,
+        concept_id: str,
+        days: int = 30,
+    ) -> TeacherStudentConceptTrendOut:
+        self._require_teacher_user(teacher_id)
+        teacher_class = self._require_teacher_class(teacher_id=teacher_id, class_id=class_id)
+
+        student_user = self.repo.get_user(student_id)
+        if not student_user or student_user.role != "student":
+            raise TeacherServiceNotFoundError("Student not found.")
+
+        scope_rows = self.repo.get_scope_concept_rows(
+            subject=teacher_class.subject,
+            sss_level=teacher_class.sss_level,
+            term=teacher_class.term,
+        )
+        concept_rows_by_id = {
+            str(row["concept_id"]): row
+            for row in scope_rows
+            if str(row.get("concept_id") or "").strip()
+        }
+        target = concept_rows_by_id.get(concept_id)
+        if not target:
+            raise TeacherServiceNotFoundError("Concept is not mapped in this class scope.")
+
+        prereq_ids = [item for item in list(target.get("prereq_concept_ids") or []) if item]
+        tracked_ids = [concept_id, *prereq_ids]
+        concept_rows = self.repo.get_student_concept_rows(
+            class_id=class_id,
+            subject=teacher_class.subject,
+            term=teacher_class.term,
+            concept_ids=tracked_ids,
+        )
+        score_map = {row["concept_id"]: row for row in concept_rows if row["student_id"] == student_id}
+
+        blocking_prereqs: list[str] = []
+        for prereq_id in prereq_ids:
+            prereq_row = score_map.get(prereq_id)
+            prereq_score = float(prereq_row["mastery_score"]) if prereq_row else 0.0
+            if prereq_score < GRAPH_MASTERY_THRESHOLD:
+                blocking_prereqs.append(
+                    self._readable_concept_label(prereq_id, fallback=concept_rows_by_id.get(prereq_id, {}).get("topic_title"))
+                )
+
+        target_row = score_map.get(concept_id)
+        current_score = float(target_row["mastery_score"]) if target_row else None
+        status, _ = self._classify_concept_status(
+            concept_score=current_score,
+            blocking_prerequisite_labels=blocking_prereqs,
+        )
+
+        since = datetime.now(timezone.utc) - timedelta(days=max(1, min(days, 90)))
+        mastery_events = self.repo.get_mastery_events_for_students_since(
+            student_ids=[student_id],
+            subject=teacher_class.subject,
+            term=teacher_class.term,
+            since=since,
+        )
+        recent_events: list[TeacherConceptTrendEventOut] = []
+        net_delta = 0.0
+        for event in mastery_events:
+            for entry in list(event.new_mastery or []):
+                event_concept_id = str(entry.get("concept_id") or "").strip()
+                if event_concept_id not in tracked_ids:
+                    continue
+                delta = float(entry.get("delta", 0.0) or 0.0)
+                if event_concept_id == concept_id:
+                    net_delta += delta
+                recent_events.append(
+                    TeacherConceptTrendEventOut(
+                        concept_id=event_concept_id,
+                        concept_label=self._readable_concept_label(
+                            event_concept_id,
+                            fallback=concept_rows_by_id.get(event_concept_id, {}).get("topic_title"),
+                        ),
+                        occurred_at=event.created_at,
+                        delta=round(delta, 4),
+                        source=str(getattr(event, "source", "") or "unknown"),
+                    )
+                )
+
+        tracked_concepts = [
+            TeacherConceptTrendSnapshotOut(
+                concept_id=item_id,
+                concept_label=self._readable_concept_label(item_id, fallback=concept_rows_by_id.get(item_id, {}).get("topic_title")),
+                role="focus" if item_id == concept_id else "prerequisite",
+                current_score=round(float(score_map[item_id]["mastery_score"]), 4) if item_id in score_map else None,
+                last_evaluated_at=score_map[item_id]["last_evaluated_at"] if item_id in score_map else None,
+            )
+            for item_id in tracked_ids
+        ]
+
+        recent_events.sort(key=lambda item: item.occurred_at, reverse=True)
+        return TeacherStudentConceptTrendOut(
+            class_id=class_id,
+            student_id=student_id,
+            concept_id=concept_id,
+            concept_label=self._readable_concept_label(concept_id, fallback=target.get("topic_title")),
+            current_score=round(current_score, 4) if current_score is not None else None,
+            last_evaluated_at=target_row["last_evaluated_at"] if target_row else None,
+            status=status,
+            blocking_prerequisite_labels=blocking_prereqs,
+            net_delta_30d=round(net_delta, 4),
+            evidence_event_count=len(recent_events),
+            tracked_concepts=tracked_concepts,
+            recent_events=recent_events[:8],
         )
 
     def get_assignment_outcomes(self, *, teacher_id: UUID, class_id: UUID) -> TeacherAssignmentOutcomeSummaryOut:

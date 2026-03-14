@@ -40,6 +40,7 @@ from backend.schemas.teacher_schema import (
     TeacherRepeatRiskSummaryOut,
     TeacherRiskMatrixOut,
     TeacherStudentTimelineOut,
+    TeacherStudentConceptTrendOut,
 )
 from backend.services.teacher_analytics_service import TeacherAnalyticsService
 from backend.services.teacher_service import (
@@ -308,6 +309,30 @@ def student_timeline(
             class_id=class_id,
             student_id=student_id,
             limit=limit,
+        )
+    except TeacherServiceUnauthorizedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except TeacherServiceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+@router.get("/classes/{class_id}/students/{student_id}/concepts/{concept_id}/trend", response_model=TeacherStudentConceptTrendOut)
+def student_concept_trend(
+    class_id: UUID,
+    student_id: UUID,
+    concept_id: str,
+    days: int = Query(default=30, ge=7, le=90),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return current concept-path mastery and recent deltas for one student in the class graph."""
+    try:
+        return _analytics_service(db).get_student_concept_trend(
+            teacher_id=current_user.id,
+            class_id=class_id,
+            student_id=student_id,
+            concept_id=concept_id,
+            days=days,
         )
     except TeacherServiceUnauthorizedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
