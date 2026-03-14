@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import TeacherClassGraph from '../components/teacher/TeacherClassGraph';
+import TeacherStudentFocusDrawer from '../components/teacher/TeacherStudentFocusDrawer';
 
 const actionRefId = (action) => {
   const raw = String(action?.target_topic_id || action?.target_concept_label || action?.title || 'graph-action').trim().toLowerCase();
@@ -78,12 +79,15 @@ const ConceptAnalyticsPage = () => {
   const [graphPlaybook, setGraphPlaybook] = useState([]);
   const [selectedConceptId, setSelectedConceptId] = useState('');
   const [conceptStudents, setConceptStudents] = useState(null);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [studentTimeline, setStudentTimeline] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [assignmentStatus, setAssignmentStatus] = useState({});
   const [interventionStatus, setInterventionStatus] = useState({});
   const [isLoadingClasses, setIsLoadingClasses] = useState(true);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [isLoadingConceptStudents, setIsLoadingConceptStudents] = useState(false);
+  const [isLoadingStudentTimeline, setIsLoadingStudentTimeline] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -129,6 +133,8 @@ const ConceptAnalyticsPage = () => {
         setGraphPlaybook([]);
         setSelectedConceptId('');
         setConceptStudents(null);
+        setSelectedStudent(null);
+        setStudentTimeline([]);
         setAlerts([]);
         return;
       }
@@ -168,6 +174,8 @@ const ConceptAnalyticsPage = () => {
             ''
         );
         setConceptStudents(null);
+        setSelectedStudent(null);
+        setStudentTimeline([]);
         setAlerts(Array.isArray(alertsData?.alerts) ? alertsData.alerts : []);
       } catch (err) {
         setDashboard(null);
@@ -176,6 +184,8 @@ const ConceptAnalyticsPage = () => {
         setGraphPlaybook([]);
         setSelectedConceptId('');
         setConceptStudents(null);
+        setSelectedStudent(null);
+        setStudentTimeline([]);
         setAlerts([]);
         setError(err.message || 'Teacher analytics is unavailable right now.');
       } finally {
@@ -190,6 +200,8 @@ const ConceptAnalyticsPage = () => {
     const fetchConceptStudents = async () => {
       if (!token || !activeClassId || !selectedConceptId) {
         setConceptStudents(null);
+        setSelectedStudent(null);
+        setStudentTimeline([]);
         return;
       }
 
@@ -205,8 +217,12 @@ const ConceptAnalyticsPage = () => {
         }
         const data = await response.json();
         setConceptStudents(data || null);
+        setSelectedStudent(null);
+        setStudentTimeline([]);
       } catch (err) {
         setConceptStudents(null);
+        setSelectedStudent(null);
+        setStudentTimeline([]);
         setError(err.message || 'Failed to load concept student drilldown.');
       } finally {
         setIsLoadingConceptStudents(false);
@@ -215,6 +231,35 @@ const ConceptAnalyticsPage = () => {
 
     fetchConceptStudents();
   }, [activeClassId, apiUrl, selectedConceptId, token]);
+
+  useEffect(() => {
+    const fetchStudentTimeline = async () => {
+      if (!token || !activeClassId || !selectedStudent?.student_id) {
+        setStudentTimeline([]);
+        return;
+      }
+      try {
+        setIsLoadingStudentTimeline(true);
+        const response = await fetch(
+          `${apiUrl}/teachers/classes/${activeClassId}/students/${selectedStudent.student_id}/timeline?limit=20`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (!response.ok) {
+          const detail = await response.json().catch(() => null);
+          throw new Error(detail?.detail || 'Failed to load student timeline.');
+        }
+        const data = await response.json();
+        setStudentTimeline(Array.isArray(data?.timeline) ? data.timeline : []);
+      } catch (err) {
+        setStudentTimeline([]);
+        setError(err.message || 'Failed to load student timeline.');
+      } finally {
+        setIsLoadingStudentTimeline(false);
+      }
+    };
+
+    fetchStudentTimeline();
+  }, [activeClassId, apiUrl, selectedStudent?.student_id, token]);
 
   const activeClass = useMemo(
     () => classes.find((item) => item.id === activeClassId) || null,
@@ -664,6 +709,13 @@ const ConceptAnalyticsPage = () => {
                         <div className="mt-4 flex flex-wrap items-center gap-3">
                           <button
                             type="button"
+                            onClick={() => setSelectedStudent(student)}
+                            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-100"
+                          >
+                            View student
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => createStudentIntervention(student)}
                             className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-white transition hover:bg-indigo-500"
                           >
@@ -754,6 +806,15 @@ const ConceptAnalyticsPage = () => {
           </div>
         </>
       )}
+
+      <TeacherStudentFocusDrawer
+        isOpen={Boolean(selectedStudent)}
+        onClose={() => setSelectedStudent(null)}
+        student={selectedStudent}
+        conceptLabel={conceptStudents?.concept_label || humanizeConceptId(selectedConceptId)}
+        timeline={studentTimeline}
+        isLoading={isLoadingStudentTimeline}
+      />
     </main>
   );
 };

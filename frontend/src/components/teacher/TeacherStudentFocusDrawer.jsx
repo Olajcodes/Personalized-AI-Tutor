@@ -1,0 +1,151 @@
+import React from 'react';
+import { Clock3, MessageSquareMore, ShieldAlert, UserRound, X } from 'lucide-react';
+
+const formatDateTime = (value) => {
+  if (!value) return 'Not available';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Not available';
+  return date.toLocaleString();
+};
+
+const formatDuration = (seconds) => {
+  const total = Number(seconds || 0);
+  if (!total) return '0m';
+  const minutes = Math.round(total / 60);
+  const hours = Math.floor(minutes / 60);
+  const remaining = minutes % 60;
+  return hours > 0 ? `${hours}h ${remaining}m` : `${remaining}m`;
+};
+
+const timelineTitle = (event) => {
+  if (event.event_type === 'activity') return event.details?.activity_type?.replace(/_/g, ' ') || 'activity';
+  if (event.event_type === 'mastery_update') return 'mastery update';
+  if (event.event_type === 'tutor_session') return 'tutor session';
+  return event.event_type?.replace(/_/g, ' ') || 'event';
+};
+
+const timelineSummary = (event) => {
+  if (event.event_type === 'activity') {
+    return `${event.details?.ref_id || 'scope item'} • ${formatDuration(event.details?.duration_seconds)}`;
+  }
+  if (event.event_type === 'mastery_update') {
+    return `${event.details?.source || 'unknown source'} • ${event.details?.updated_concepts || 0} concepts`;
+  }
+  if (event.event_type === 'tutor_session') {
+    return `${event.details?.status || 'unknown status'} • ${formatDuration(event.details?.duration_seconds)}`;
+  }
+  return 'No extra details';
+};
+
+const TeacherStudentFocusDrawer = ({
+  isOpen,
+  onClose,
+  student,
+  conceptLabel,
+  timeline,
+  isLoading,
+}) => {
+  if (!isOpen || !student) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/35 backdrop-blur-sm">
+      <div className="flex h-full w-full max-w-xl flex-col border-l border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-start justify-between border-b border-slate-200 px-6 py-5">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-600">
+              <UserRound className="h-3.5 w-3.5" />
+              Student focus
+            </div>
+            <h2 className="mt-3 text-2xl font-black text-slate-900">{student.student_name}</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              {student.status.replace('_', ' ')} on {conceptLabel}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Concept mastery</p>
+              <p className="mt-2 text-2xl font-black text-slate-900">
+                {student.concept_score == null ? 'Unassessed' : `${Math.round(Number(student.concept_score) * 100)}%`}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Overall mastery</p>
+              <p className="mt-2 text-2xl font-black text-slate-900">
+                {student.overall_mastery_score == null ? 'Unassessed' : `${Math.round(Number(student.overall_mastery_score) * 100)}%`}
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-slate-600">
+              <ShieldAlert className="h-4 w-4 text-amber-500" />
+              Blocking prerequisites
+            </h3>
+            {student.blocking_prerequisite_labels?.length ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {student.blocking_prerequisite_labels.map((label) => (
+                  <span key={label} className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-amber-700 shadow-sm">
+                    {label}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-slate-500">No blocking prerequisite is currently holding this student back on this concept.</p>
+            )}
+            <p className="mt-4 text-sm leading-6 text-slate-600">{student.recommended_action}</p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-slate-600">
+              <Clock3 className="h-4 w-4 text-indigo-500" />
+              Recent activity
+            </h3>
+            <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold text-slate-600">
+              <span className="rounded-full bg-white px-3 py-1 shadow-sm">{student.recent_activity_count_7d} activities in 7d</span>
+              <span className="rounded-full bg-white px-3 py-1 shadow-sm">{formatDuration(student.recent_study_time_seconds_7d)} study time</span>
+              <span className="rounded-full bg-white px-3 py-1 shadow-sm">Last evaluated: {formatDateTime(student.last_evaluated_at)}</span>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-slate-600">
+              <MessageSquareMore className="h-4 w-4 text-emerald-500" />
+              Timeline
+            </h3>
+            {isLoading ? (
+              <p className="mt-4 text-sm text-slate-500">Loading student timeline...</p>
+            ) : !timeline?.length ? (
+              <p className="mt-4 text-sm text-slate-500">No timeline events are available for this student yet.</p>
+            ) : (
+              <div className="mt-4 space-y-3">
+                {timeline.map((event, index) => (
+                  <div key={`${event.event_type}-${event.occurred_at}-${index}`} className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-bold capitalize text-slate-900">{timelineTitle(event)}</p>
+                        <p className="mt-1 text-xs text-slate-500">{timelineSummary(event)}</p>
+                      </div>
+                      <span className="text-[11px] font-semibold text-slate-400">{formatDateTime(event.occurred_at)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default TeacherStudentFocusDrawer;
