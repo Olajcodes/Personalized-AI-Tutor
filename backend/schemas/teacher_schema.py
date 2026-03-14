@@ -123,6 +123,24 @@ class TeacherClassGraphOut(BaseModel):
     ready_to_push: list[TeacherGraphConceptNodeOut] = Field(default_factory=list)
 
 
+class TeacherGraphPlaybookActionOut(BaseModel):
+    action_type: Literal["repair_prerequisite", "run_checkpoint", "advance_cluster", "support_students"]
+    title: str
+    summary: str
+    severity: Severity
+    target_concept_label: str | None = None
+    target_topic_id: UUID | None = None
+    target_topic_title: str | None = None
+    suggested_assignment_type: AssignmentType | None = None
+    suggested_intervention_type: InterventionType | None = None
+    affected_student_count: int | None = None
+
+
+class TeacherGraphPlaybookOut(BaseModel):
+    class_id: UUID
+    actions: list[TeacherGraphPlaybookActionOut] = Field(default_factory=list)
+
+
 class TeacherAlertOut(BaseModel):
     alert_type: Literal["inactivity", "rapid_decline", "prereq_failure"]
     severity: Severity

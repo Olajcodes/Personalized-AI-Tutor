@@ -25,6 +25,7 @@ from backend.schemas.teacher_schema import (
     TeacherClassHeatmapOut,
     TeacherClassListOut,
     TeacherClassOut,
+    TeacherGraphPlaybookOut,
     TeacherInterventionCreateIn,
     TeacherInterventionOut,
     TeacherStudentTimelineOut,
@@ -170,6 +171,21 @@ def class_graph_summary(
     """Return graph-backed concept blockers and next class move for a teacher-owned class."""
     try:
         return _analytics_service(db).get_class_graph_summary(teacher_id=current_user.id, class_id=class_id)
+    except TeacherServiceUnauthorizedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except TeacherServiceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+@router.get("/classes/{class_id}/graph-playbook", response_model=TeacherGraphPlaybookOut)
+def class_graph_playbook(
+    class_id: UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return recommended teacher actions derived from graph blockers, weak clusters, and active alerts."""
+    try:
+        return _analytics_service(db).get_class_graph_playbook(teacher_id=current_user.id, class_id=class_id)
     except TeacherServiceUnauthorizedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except TeacherServiceNotFoundError as exc:

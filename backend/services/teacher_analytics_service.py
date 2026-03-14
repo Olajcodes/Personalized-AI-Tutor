@@ -12,6 +12,8 @@ from backend.schemas.teacher_schema import (
     TeacherClassDashboardOut,
     TeacherClassGraphOut,
     TeacherGraphEdgeOut,
+    TeacherGraphPlaybookActionOut,
+    TeacherGraphPlaybookOut,
     TeacherClassHeatmapOut,
     TeacherGraphConceptNodeOut,
     TeacherGraphMetricsOut,
@@ -385,6 +387,84 @@ class TeacherAnalyticsService:
             reverse=True,
         )
         return TeacherAlertsOut(class_id=class_id, alerts=sorted_alerts)
+
+    def get_class_graph_playbook(self, *, teacher_id: UUID, class_id: UUID) -> TeacherGraphPlaybookOut:
+        graph = self.get_class_graph_summary(teacher_id=teacher_id, class_id=class_id)
+        alerts = self.get_class_alerts(teacher_id=teacher_id, class_id=class_id)
+
+        actions: list[TeacherGraphPlaybookActionOut] = []
+        focus_blocker = graph.weakest_blockers[0] if graph.weakest_blockers else None
+        if focus_blocker:
+            actions.append(
+                TeacherGraphPlaybookActionOut(
+                    action_type="repair_prerequisite",
+                    title=f"Repair {focus_blocker.concept_label} through its blocker first",
+                    summary=(
+                        f"Start with {focus_blocker.blocking_prerequisite_labels[0]} before reteaching {focus_blocker.concept_label}."
+                        if focus_blocker.blocking_prerequisite_labels
+                        else f"Reinforce the prerequisite path feeding into {focus_blocker.concept_label}."
+                    ),
+                    severity="high" if focus_blocker.status == "blocked" else "medium",
+                    target_concept_label=focus_blocker.concept_label,
+                    target_topic_id=focus_blocker.topic_id,
+                    target_topic_title=focus_blocker.topic_title,
+                    suggested_assignment_type="revision",
+                    suggested_intervention_type="support_plan",
+                    affected_student_count=focus_blocker.student_count,
+                )
+            )
+
+        weak_focus = next((node for node in graph.nodes if node.status == "needs_attention"), None)
+        if weak_focus:
+            actions.append(
+                TeacherGraphPlaybookActionOut(
+                    action_type="run_checkpoint",
+                    title=f"Run a focused checkpoint on {weak_focus.concept_label}",
+                    summary="The class has the prerequisites, but mastery on this concept cluster is still below target.",
+                    severity="medium",
+                    target_concept_label=weak_focus.concept_label,
+                    target_topic_id=weak_focus.topic_id,
+                    target_topic_title=weak_focus.topic_title,
+                    suggested_assignment_type="quiz",
+                    suggested_intervention_type="note",
+                    affected_student_count=weak_focus.student_count,
+                )
+            )
+
+        advance_focus = graph.ready_to_push[0] if graph.ready_to_push else None
+        if advance_focus:
+            actions.append(
+                TeacherGraphPlaybookActionOut(
+                    action_type="advance_cluster",
+                    title=f"Advance from {advance_focus.concept_label} into the next lesson cluster",
+                    summary="This concept is strong enough to anchor the next class move without overloading weak prerequisites.",
+                    severity="low",
+                    target_concept_label=advance_focus.concept_label,
+                    target_topic_id=advance_focus.topic_id,
+                    target_topic_title=advance_focus.topic_title,
+                    suggested_assignment_type="topic",
+                    suggested_intervention_type="note",
+                    affected_student_count=advance_focus.student_count,
+                )
+            )
+
+        if alerts.alerts:
+            high_count = sum(1 for alert in alerts.alerts if alert.severity == "high")
+            medium_count = sum(1 for alert in alerts.alerts if alert.severity == "medium")
+            actions.append(
+                TeacherGraphPlaybookActionOut(
+                    action_type="support_students",
+                    title="Open targeted support for at-risk students",
+                    summary=f"{high_count} high-severity and {medium_count} medium-severity alerts are active in this class.",
+                    severity="high" if high_count > 0 else "medium",
+                    target_concept_label=graph.graph_signal.focus_concept_label,
+                    suggested_assignment_type="revision",
+                    suggested_intervention_type="support_plan",
+                    affected_student_count=len({alert.student_id for alert in alerts.alerts}),
+                )
+            )
+
+        return TeacherGraphPlaybookOut(class_id=class_id, actions=actions)
 
     def get_student_timeline(
         self,

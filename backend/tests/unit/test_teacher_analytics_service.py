@@ -155,6 +155,18 @@ def test_teacher_analytics_alerts_include_expected_types():
     assert "prereq_failure" in kinds
 
 
+def test_teacher_analytics_graph_playbook_returns_actionable_steps():
+    repo = FakeTeacherAnalyticsRepo()
+    service = TeacherAnalyticsService(repo)
+
+    out = service.get_class_graph_playbook(teacher_id=repo.teacher_id, class_id=repo.class_id)
+
+    assert out.class_id == repo.class_id
+    assert len(out.actions) >= 2
+    assert out.actions[0].action_type in {"repair_prerequisite", "run_checkpoint"}
+    assert any(action.action_type == "support_students" for action in out.actions)
+
+
 def test_teacher_analytics_student_timeline_mapping():
     repo = FakeTeacherAnalyticsRepo()
     service = TeacherAnalyticsService(repo)

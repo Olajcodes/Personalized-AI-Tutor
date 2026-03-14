@@ -178,6 +178,25 @@ def test_teachers_endpoints_success(monkeypatch):
                 "ready_to_push": [],
             }
 
+        def get_class_graph_playbook(self, *, teacher_id, class_id):
+            return {
+                "class_id": str(class_id),
+                "actions": [
+                    {
+                        "action_type": "repair_prerequisite",
+                        "title": "Repair Fractions through its blocker first",
+                        "summary": "Start with Number Sense before reteaching Fractions.",
+                        "severity": "high",
+                        "target_concept_label": "Fractions",
+                        "target_topic_id": str(class_id),
+                        "target_topic_title": "Fractions",
+                        "suggested_assignment_type": "revision",
+                        "suggested_intervention_type": "support_plan",
+                        "affected_student_count": 1,
+                    }
+                ],
+            }
+
         def get_class_alerts(self, *, teacher_id, class_id):
             return {"class_id": str(class_id), "alerts": []}
 
@@ -203,6 +222,7 @@ def test_teachers_endpoints_success(monkeypatch):
     dashboard_resp = client.get(f"/api/v1/teachers/classes/{class_id}/dashboard")
     heatmap_resp = client.get(f"/api/v1/teachers/classes/{class_id}/heatmap")
     graph_resp = client.get(f"/api/v1/teachers/classes/{class_id}/graph-summary")
+    playbook_resp = client.get(f"/api/v1/teachers/classes/{class_id}/graph-playbook")
     alerts_resp = client.get(f"/api/v1/teachers/classes/{class_id}/alerts")
     timeline_resp = client.get(f"/api/v1/teachers/classes/{class_id}/students/{student_id}/timeline")
     assignment_resp = client.post(
@@ -244,6 +264,7 @@ def test_teachers_endpoints_success(monkeypatch):
     assert dashboard_resp.status_code == 200
     assert heatmap_resp.status_code == 200
     assert graph_resp.status_code == 200
+    assert playbook_resp.status_code == 200
     assert alerts_resp.status_code == 200
     assert timeline_resp.status_code == 200
     assert assignment_resp.status_code == 201

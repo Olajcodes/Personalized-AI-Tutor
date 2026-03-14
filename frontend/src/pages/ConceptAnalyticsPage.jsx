@@ -8,6 +8,7 @@ import {
   Flame,
   GitBranch,
   Loader2,
+  NotebookPen,
   Route,
   ShieldAlert,
   Users,
@@ -68,6 +69,7 @@ const ConceptAnalyticsPage = () => {
   const [dashboard, setDashboard] = useState(null);
   const [heatmap, setHeatmap] = useState([]);
   const [graphSummary, setGraphSummary] = useState(null);
+  const [graphPlaybook, setGraphPlaybook] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [isLoadingClasses, setIsLoadingClasses] = useState(true);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
@@ -113,6 +115,7 @@ const ConceptAnalyticsPage = () => {
         setDashboard(null);
         setHeatmap([]);
         setGraphSummary(null);
+        setGraphPlaybook([]);
         setAlerts([]);
         return;
       }
@@ -120,34 +123,38 @@ const ConceptAnalyticsPage = () => {
       try {
         setIsLoadingDetails(true);
         setError('');
-        const [dashboardRes, heatmapRes, graphRes, alertsRes] = await Promise.all([
+        const [dashboardRes, heatmapRes, graphRes, playbookRes, alertsRes] = await Promise.all([
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/dashboard`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/heatmap`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/graph-summary`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${apiUrl}/teachers/classes/${activeClassId}/graph-playbook`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/alerts`, { headers: { Authorization: `Bearer ${token}` } }),
         ]);
 
-        if (!dashboardRes.ok || !heatmapRes.ok || !graphRes.ok || !alertsRes.ok) {
-          const firstFailure = [dashboardRes, heatmapRes, graphRes, alertsRes].find((response) => !response.ok);
+        if (!dashboardRes.ok || !heatmapRes.ok || !graphRes.ok || !playbookRes.ok || !alertsRes.ok) {
+          const firstFailure = [dashboardRes, heatmapRes, graphRes, playbookRes, alertsRes].find((response) => !response.ok);
           const detail = await firstFailure.json().catch(() => null);
           throw new Error(detail?.detail || 'Failed to load teacher analytics.');
         }
 
-        const [dashboardData, heatmapData, graphData, alertsData] = await Promise.all([
+        const [dashboardData, heatmapData, graphData, playbookData, alertsData] = await Promise.all([
           dashboardRes.json(),
           heatmapRes.json(),
           graphRes.json(),
+          playbookRes.json(),
           alertsRes.json(),
         ]);
 
         setDashboard(dashboardData);
         setHeatmap(Array.isArray(heatmapData?.points) ? heatmapData.points : []);
         setGraphSummary(graphData || null);
+        setGraphPlaybook(Array.isArray(playbookData?.actions) ? playbookData.actions : []);
         setAlerts(Array.isArray(alertsData?.alerts) ? alertsData.alerts : []);
       } catch (err) {
         setDashboard(null);
         setHeatmap([]);
         setGraphSummary(null);
+        setGraphPlaybook([]);
         setAlerts([]);
         setError(err.message || 'Teacher analytics is unavailable right now.');
       } finally {
@@ -284,6 +291,63 @@ const ConceptAnalyticsPage = () => {
                 </div>
 
                 <TeacherClassGraph graphSummary={graphSummary} />
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="mb-6 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-800">Recommended Teacher Playbook</h2>
+                    <p className="text-xs text-slate-500">Graph-derived next actions for this class based on blockers, weak clusters, and active alerts.</p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                    {graphPlaybook.length} actions
+                  </span>
+                </div>
+
+                {graphPlaybook.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm font-semibold text-slate-400">
+                    No graph playbook actions are available for this class yet.
+                  </div>
+                ) : (
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    {graphPlaybook.map((action, index) => (
+                      <div key={`${action.action_type}-${index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
+                              action.severity === 'high'
+                                ? 'bg-rose-100 text-rose-700'
+                                : action.severity === 'medium'
+                                  ? 'bg-amber-100 text-amber-700'
+                                  : 'bg-emerald-100 text-emerald-700'
+                            }`}>
+                              <NotebookPen className="h-3.5 w-3.5" />
+                              {action.action_type.replace('_', ' ')}
+                            </div>
+                            <h3 className="mt-3 text-base font-bold text-slate-900">{action.title}</h3>
+                            <p className="mt-2 text-sm leading-6 text-slate-600">{action.summary}</p>
+                          </div>
+                          <span className="rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500 shadow-sm">
+                            {action.severity}
+                          </span>
+                        </div>
+
+                        <div className="mt-4 grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
+                          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                            <p className="font-black uppercase tracking-[0.16em] text-slate-400">Concept</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-800">{action.target_concept_label || 'Class scope'}</p>
+                          </div>
+                          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                            <p className="font-black uppercase tracking-[0.16em] text-slate-400">Suggested move</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-800">
+                              {[action.suggested_assignment_type, action.suggested_intervention_type].filter(Boolean).join(' + ') || 'Teacher follow-up'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
