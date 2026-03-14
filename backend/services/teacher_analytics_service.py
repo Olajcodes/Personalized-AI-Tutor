@@ -23,6 +23,8 @@ from backend.schemas.teacher_schema import (
     TeacherClassHeatmapOut,
     TeacherGraphConceptNodeOut,
     TeacherGraphMetricsOut,
+    TeacherNextLessonClusterConceptOut,
+    TeacherNextLessonClusterPlanOut,
     TeacherGraphSignalOut,
     TeacherHeatmapPointOut,
     TeacherRepeatRiskConceptOut,
@@ -96,6 +98,20 @@ class TeacherAnalyticsService:
         if concept_score < GRAPH_MASTERY_THRESHOLD:
             return "needs_attention", "Assign focused practice and a short checkpoint on this concept."
         return "mastered", "Use this student as a readiness signal for advancing the class."
+
+    @staticmethod
+    def _to_cluster_concept(node: TeacherGraphConceptNodeOut) -> TeacherNextLessonClusterConceptOut:
+        return TeacherNextLessonClusterConceptOut(
+            concept_id=node.concept_id,
+            concept_label=node.concept_label,
+            topic_id=node.topic_id,
+            topic_title=node.topic_title,
+            status=node.status,
+            avg_score=node.avg_score,
+            student_count=node.student_count,
+            blocking_prerequisite_labels=list(node.blocking_prerequisite_labels or []),
+            recommended_action=node.recommended_action,
+        )
 
     def _require_teacher_user(self, teacher_id: UUID):
         user = self.repo.get_user(teacher_id)
@@ -509,6 +525,119 @@ class TeacherAnalyticsService:
             )
 
         return TeacherGraphPlaybookOut(class_id=class_id, actions=actions)
+
+    def get_next_lesson_cluster_plan(self, *, teacher_id: UUID, class_id: UUID) -> TeacherNextLessonClusterPlanOut:
+        graph = self.get_class_graph_summary(teacher_id=teacher_id, class_id=class_id)
+        playbook = self.get_class_graph_playbook(teacher_id=teacher_id, class_id=class_id)
+
+        nodes_by_id = {node.concept_id: node for node in graph.nodes}
+        inbound_edges: dict[str, list[TeacherGraphEdgeOut]] = {}
+        for edge in graph.edges:
+            inbound_edges.setdefault(edge.target_concept_id, []).append(edge)
+
+        blocked_nodes = [node for node in graph.nodes if node.status == "blocked"]
+        weak_nodes = [node for node in graph.nodes if node.status == "needs_attention"]
+        mastered_nodes = [node for node in graph.nodes if node.status == "mastered"]
+        unassessed_nodes = [node for node in graph.nodes if node.status == "unassessed"]
+
+        if blocked_nodes:
+            repair_nodes: list[TeacherGraphConceptNodeOut] = []
+            seen_ids: set[str] = set()
+            for blocker in blocked_nodes[:3]:
+                for edge in inbound_edges.get(blocker.concept_id, []):
+                    if edge.status != "blocked":
+                        continue
+                    source = nodes_by_id.get(edge.source_concept_id)
+                    if not source or source.concept_id in seen_ids:
+                        continue
+                    repair_nodes.append(source)
+                    seen_ids.add(source.concept_id)
+
+            repair_first = [self._to_cluster_concept(node) for node in repair_nodes[:3]]
+            teach_next = [self._to_cluster_concept(node) for node in blocked_nodes[:3]]
+            watchlist = [self._to_cluster_concept(node) for node in weak_nodes[:3]]
+            top_blocker = blocked_nodes[0]
+            repair_label = (
+                repair_first[0].concept_label
+                if repair_first
+                else (top_blocker.blocking_prerequisite_labels[0] if top_blocker.blocking_prerequisite_labels else "the prerequisite path")
+            )
+            return TeacherNextLessonClusterPlanOut(
+                class_id=class_id,
+                plan_status="repair_first",
+                headline=f"Repair {repair_label} before reteaching {top_blocker.concept_label}.",
+                rationale="The next lesson cluster is not teachable yet because prerequisite mastery is still blocking the class graph.",
+                repair_first=repair_first,
+                teach_next=teach_next,
+                watchlist=watchlist,
+                suggested_actions=[
+                    action
+                    for action in playbook.actions
+                    if action.action_type in {"repair_prerequisite", "run_checkpoint", "support_students"}
+                ][:3],
+            )
+
+        if weak_nodes:
+            watchlist: list[TeacherNextLessonClusterConceptOut] = []
+            for node in unassessed_nodes:
+                incoming = inbound_edges.get(node.concept_id, [])
+                if incoming and any(edge.status == "blocked" for edge in incoming):
+                    continue
+                watchlist.append(self._to_cluster_concept(node))
+                if len(watchlist) >= 3:
+                    break
+            focus = weak_nodes[0]
+            return TeacherNextLessonClusterPlanOut(
+                class_id=class_id,
+                plan_status="stabilize_cluster",
+                headline=f"Stabilize {focus.concept_label} before moving the class forward.",
+                rationale="Prerequisites are mostly in place, but the current concept cluster is still below the mastery bar for a confident advance.",
+                repair_first=[],
+                teach_next=[self._to_cluster_concept(node) for node in weak_nodes[:3]],
+                watchlist=watchlist,
+                suggested_actions=[
+                    action
+                    for action in playbook.actions
+                    if action.action_type in {"run_checkpoint", "support_students", "advance_cluster"}
+                ][:3],
+            )
+
+        unlocked_next: list[TeacherGraphConceptNodeOut] = []
+        for node in unassessed_nodes:
+            incoming = inbound_edges.get(node.concept_id, [])
+            if any(edge.status == "blocked" for edge in incoming):
+                continue
+            unlocked_next.append(node)
+
+        if unlocked_next or mastered_nodes:
+            teach_next_nodes = unlocked_next[:3] or mastered_nodes[:1]
+            watchlist_nodes = unlocked_next[3:6] or weak_nodes[:3]
+            focus = teach_next_nodes[0]
+            return TeacherNextLessonClusterPlanOut(
+                class_id=class_id,
+                plan_status="advance_cluster",
+                headline=f"Advance into {focus.concept_label} as the next lesson cluster.",
+                rationale="The class graph shows enough readiness on the current prerequisite chain to move into the next mapped lesson cluster.",
+                repair_first=[],
+                teach_next=[self._to_cluster_concept(node) for node in teach_next_nodes],
+                watchlist=[self._to_cluster_concept(node) for node in watchlist_nodes],
+                suggested_actions=[
+                    action
+                    for action in playbook.actions
+                    if action.action_type in {"advance_cluster", "run_checkpoint", "support_students"}
+                ][:3],
+            )
+
+        return TeacherNextLessonClusterPlanOut(
+            class_id=class_id,
+            plan_status="collect_evidence",
+            headline="Collect more evidence before locking the next lesson cluster.",
+            rationale="The class graph is still too sparse to recommend the next cluster confidently. More checkpoints or quiz evidence are needed first.",
+            repair_first=[],
+            teach_next=[],
+            watchlist=[],
+            suggested_actions=playbook.actions[:2],
+        )
 
     def get_concept_student_drilldown(
         self,

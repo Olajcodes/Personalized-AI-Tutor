@@ -141,6 +141,29 @@ class TeacherGraphPlaybookOut(BaseModel):
     actions: list[TeacherGraphPlaybookActionOut] = Field(default_factory=list)
 
 
+class TeacherNextLessonClusterConceptOut(BaseModel):
+    concept_id: str
+    concept_label: str
+    topic_id: UUID | None = None
+    topic_title: str | None = None
+    status: Literal["blocked", "needs_attention", "mastered", "unassessed"]
+    avg_score: float | None = None
+    student_count: int = 0
+    blocking_prerequisite_labels: list[str] = Field(default_factory=list)
+    recommended_action: str
+
+
+class TeacherNextLessonClusterPlanOut(BaseModel):
+    class_id: UUID
+    plan_status: Literal["repair_first", "stabilize_cluster", "advance_cluster", "collect_evidence"]
+    headline: str
+    rationale: str
+    repair_first: list[TeacherNextLessonClusterConceptOut] = Field(default_factory=list)
+    teach_next: list[TeacherNextLessonClusterConceptOut] = Field(default_factory=list)
+    watchlist: list[TeacherNextLessonClusterConceptOut] = Field(default_factory=list)
+    suggested_actions: list[TeacherGraphPlaybookActionOut] = Field(default_factory=list)
+
+
 class TeacherConceptStudentOut(BaseModel):
     student_id: UUID
     student_name: str

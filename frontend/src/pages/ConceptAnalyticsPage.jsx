@@ -77,6 +77,7 @@ const ConceptAnalyticsPage = () => {
   const [heatmap, setHeatmap] = useState([]);
   const [graphSummary, setGraphSummary] = useState(null);
   const [graphPlaybook, setGraphPlaybook] = useState([]);
+  const [nextClusterPlan, setNextClusterPlan] = useState(null);
   const [selectedConceptId, setSelectedConceptId] = useState('');
   const [conceptStudents, setConceptStudents] = useState(null);
   const [interventionOutcomes, setInterventionOutcomes] = useState(null);
@@ -138,6 +139,7 @@ const ConceptAnalyticsPage = () => {
         setHeatmap([]);
         setGraphSummary(null);
         setGraphPlaybook([]);
+        setNextClusterPlan(null);
         setSelectedConceptId('');
         setConceptStudents(null);
         setInterventionOutcomes(null);
@@ -153,11 +155,12 @@ const ConceptAnalyticsPage = () => {
       try {
         setIsLoadingDetails(true);
         setError('');
-        const [dashboardRes, heatmapRes, graphRes, playbookRes, alertsRes, outcomesRes, assignmentOutcomesRes, repeatRiskRes, riskMatrixRes] = await Promise.all([
+        const [dashboardRes, heatmapRes, graphRes, playbookRes, nextClusterRes, alertsRes, outcomesRes, assignmentOutcomesRes, repeatRiskRes, riskMatrixRes] = await Promise.all([
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/dashboard`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/heatmap`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/graph-summary`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/graph-playbook`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${apiUrl}/teachers/classes/${activeClassId}/next-cluster-plan`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/alerts`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/intervention-outcomes`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/assignment-outcomes`, { headers: { Authorization: `Bearer ${token}` } }),
@@ -165,17 +168,18 @@ const ConceptAnalyticsPage = () => {
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/risk-matrix`, { headers: { Authorization: `Bearer ${token}` } }),
         ]);
 
-        if (!dashboardRes.ok || !heatmapRes.ok || !graphRes.ok || !playbookRes.ok || !alertsRes.ok || !outcomesRes.ok || !assignmentOutcomesRes.ok || !repeatRiskRes.ok || !riskMatrixRes.ok) {
-          const firstFailure = [dashboardRes, heatmapRes, graphRes, playbookRes, alertsRes, outcomesRes, assignmentOutcomesRes, repeatRiskRes, riskMatrixRes].find((response) => !response.ok);
+        if (!dashboardRes.ok || !heatmapRes.ok || !graphRes.ok || !playbookRes.ok || !nextClusterRes.ok || !alertsRes.ok || !outcomesRes.ok || !assignmentOutcomesRes.ok || !repeatRiskRes.ok || !riskMatrixRes.ok) {
+          const firstFailure = [dashboardRes, heatmapRes, graphRes, playbookRes, nextClusterRes, alertsRes, outcomesRes, assignmentOutcomesRes, repeatRiskRes, riskMatrixRes].find((response) => !response.ok);
           const detail = await firstFailure.json().catch(() => null);
           throw new Error(detail?.detail || 'Failed to load teacher analytics.');
         }
 
-        const [dashboardData, heatmapData, graphData, playbookData, alertsData, outcomesData, assignmentOutcomesData, repeatRiskData, riskMatrixData] = await Promise.all([
+        const [dashboardData, heatmapData, graphData, playbookData, nextClusterData, alertsData, outcomesData, assignmentOutcomesData, repeatRiskData, riskMatrixData] = await Promise.all([
           dashboardRes.json(),
           heatmapRes.json(),
           graphRes.json(),
           playbookRes.json(),
+          nextClusterRes.json(),
           alertsRes.json(),
           outcomesRes.json(),
           assignmentOutcomesRes.json(),
@@ -187,6 +191,7 @@ const ConceptAnalyticsPage = () => {
         setHeatmap(Array.isArray(heatmapData?.points) ? heatmapData.points : []);
         setGraphSummary(graphData || null);
         setGraphPlaybook(Array.isArray(playbookData?.actions) ? playbookData.actions : []);
+        setNextClusterPlan(nextClusterData || null);
         setSelectedConceptId(
           graphData?.weakest_blockers?.[0]?.concept_id ||
             graphData?.nodes?.[0]?.concept_id ||
@@ -205,6 +210,7 @@ const ConceptAnalyticsPage = () => {
         setHeatmap([]);
         setGraphSummary(null);
         setGraphPlaybook([]);
+        setNextClusterPlan(null);
         setSelectedConceptId('');
         setConceptStudents(null);
         setInterventionOutcomes(null);
@@ -307,6 +313,10 @@ const ConceptAnalyticsPage = () => {
   const graphSignal = graphSummary?.graph_signal || null;
   const graphBlockers = Array.isArray(graphSummary?.weakest_blockers) ? graphSummary.weakest_blockers : [];
   const readyToPush = Array.isArray(graphSummary?.ready_to_push) ? graphSummary.ready_to_push : [];
+  const nextClusterRepairFirst = Array.isArray(nextClusterPlan?.repair_first) ? nextClusterPlan.repair_first : [];
+  const nextClusterTeachNext = Array.isArray(nextClusterPlan?.teach_next) ? nextClusterPlan.teach_next : [];
+  const nextClusterWatchlist = Array.isArray(nextClusterPlan?.watchlist) ? nextClusterPlan.watchlist : [];
+  const nextClusterActions = Array.isArray(nextClusterPlan?.suggested_actions) ? nextClusterPlan.suggested_actions : [];
 
   const createSuggestedAssignment = async (action) => {
     if (!activeClassId || !activeClass || !token) return;
@@ -773,6 +783,148 @@ const ConceptAnalyticsPage = () => {
                       </div>
                     ))}
                   </div>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="mb-6 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-800">Next Lesson Cluster Plan</h2>
+                    <p className="text-xs text-slate-500">Use the class graph to decide what to repair first, what to teach next, and what to monitor while you move the class forward.</p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                    {String(nextClusterPlan?.plan_status || 'collect_evidence').replace('_', ' ')}
+                  </span>
+                </div>
+
+                {!nextClusterPlan ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm font-semibold text-slate-400">
+                    Next-cluster planning is unavailable for this class right now.
+                  </div>
+                ) : (
+                  <>
+                    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-5">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-500">Planning headline</p>
+                      <h3 className="mt-2 text-xl font-black text-slate-900">{nextClusterPlan.headline}</h3>
+                      <p className="mt-2 text-sm leading-7 text-slate-600">{nextClusterPlan.rationale}</p>
+                    </div>
+
+                    <div className="mt-6 grid gap-4 xl:grid-cols-3">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-center gap-2">
+                          <Route className="h-4 w-4 text-amber-500" />
+                          <h3 className="text-sm font-bold text-slate-800">Repair first</h3>
+                        </div>
+                        <div className="mt-4 space-y-3">
+                          {nextClusterRepairFirst.length ? nextClusterRepairFirst.map((item) => (
+                            <div key={item.concept_id} className="rounded-xl border border-slate-200 bg-white p-3">
+                              <p className="text-sm font-bold text-slate-900">{item.concept_label}</p>
+                              <p className="mt-1 text-xs text-slate-500">{item.topic_title || 'Mapped concept node'}</p>
+                              <p className="mt-2 text-xs leading-6 text-slate-600">{item.recommended_action}</p>
+                            </div>
+                          )) : (
+                            <p className="text-sm font-medium text-slate-400">No repair-first concepts are blocking the class right now.</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-center gap-2">
+                          <ArrowRight className="h-4 w-4 text-indigo-500" />
+                          <h3 className="text-sm font-bold text-slate-800">Teach next</h3>
+                        </div>
+                        <div className="mt-4 space-y-3">
+                          {nextClusterTeachNext.length ? nextClusterTeachNext.map((item) => (
+                            <div key={item.concept_id} className="rounded-xl border border-slate-200 bg-white p-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-bold text-slate-900">{item.concept_label}</p>
+                                  <p className="mt-1 text-xs text-slate-500">{item.topic_title || 'Mapped concept node'}</p>
+                                </div>
+                                <span className="text-xs font-black text-slate-500">{Math.round(Number(item.avg_score || 0) * 100)}%</span>
+                              </div>
+                              {item.blocking_prerequisite_labels?.length ? (
+                                <p className="mt-2 text-[11px] font-semibold text-amber-700">Blocked by {item.blocking_prerequisite_labels.join(', ')}</p>
+                              ) : null}
+                              <p className="mt-2 text-xs leading-6 text-slate-600">{item.recommended_action}</p>
+                            </div>
+                          )) : (
+                            <p className="text-sm font-medium text-slate-400">No teach-next cluster is ready yet. Collect more evidence first.</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-center gap-2">
+                          <ShieldAlert className="h-4 w-4 text-rose-500" />
+                          <h3 className="text-sm font-bold text-slate-800">Watchlist</h3>
+                        </div>
+                        <div className="mt-4 space-y-3">
+                          {nextClusterWatchlist.length ? nextClusterWatchlist.map((item) => (
+                            <div key={item.concept_id} className="rounded-xl border border-slate-200 bg-white p-3">
+                              <p className="text-sm font-bold text-slate-900">{item.concept_label}</p>
+                              <p className="mt-1 text-xs text-slate-500">{item.topic_title || 'Mapped concept node'}</p>
+                              <p className="mt-2 text-xs leading-6 text-slate-600">{item.recommended_action}</p>
+                            </div>
+                          )) : (
+                            <p className="text-sm font-medium text-slate-400">No extra watchlist concepts are active for this cluster yet.</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-6">
+                      <div className="mb-3 flex items-center gap-2">
+                        <NotebookPen className="h-4 w-4 text-slate-500" />
+                        <h3 className="text-sm font-bold text-slate-800">Suggested actions for this cluster</h3>
+                      </div>
+                      {nextClusterActions.length ? (
+                        <div className="grid gap-3 lg:grid-cols-2">
+                          {nextClusterActions.map((action, index) => (
+                            <div key={`${action.action_type}-${index}-cluster`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-bold text-slate-900">{action.title}</p>
+                                  <p className="mt-2 text-xs leading-6 text-slate-600">{action.summary}</p>
+                                </div>
+                                <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                                  {action.severity}
+                                </span>
+                              </div>
+                              {action.suggested_assignment_type ? (
+                                <div className="mt-4 flex flex-wrap items-center gap-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => createSuggestedAssignment(action)}
+                                    className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-white transition hover:bg-slate-800"
+                                  >
+                                    Create {action.suggested_assignment_type}
+                                  </button>
+                                  {assignmentStatus[`${action.action_type}-${action.target_topic_id || action.target_concept_label || action.title}`] ? (
+                                    <span
+                                      className={`text-xs font-semibold ${
+                                        assignmentStatus[`${action.action_type}-${action.target_topic_id || action.target_concept_label || action.title}`].state === 'error'
+                                          ? 'text-rose-600'
+                                          : assignmentStatus[`${action.action_type}-${action.target_topic_id || action.target_concept_label || action.title}`].state === 'success'
+                                            ? 'text-emerald-600'
+                                            : 'text-slate-500'
+                                      }`}
+                                    >
+                                      {assignmentStatus[`${action.action_type}-${action.target_topic_id || action.target_concept_label || action.title}`].message}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-400">
+                          No cluster-specific actions are available for this class yet.
+                        </div>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
 

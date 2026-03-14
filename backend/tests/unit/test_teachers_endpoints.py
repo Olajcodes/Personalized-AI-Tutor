@@ -230,6 +230,55 @@ def test_teachers_endpoints_success(monkeypatch):
                 ],
             }
 
+        def get_next_lesson_cluster_plan(self, *, teacher_id, class_id):
+            return {
+                "class_id": str(class_id),
+                "plan_status": "repair_first",
+                "headline": "Repair Number Sense before reteaching Fractions.",
+                "rationale": "The next lesson cluster is blocked by a weak prerequisite.",
+                "repair_first": [
+                    {
+                        "concept_id": "math:sss2:t1:number-sense",
+                        "concept_label": "Number Sense",
+                        "topic_id": str(class_id),
+                        "topic_title": "Number Sense",
+                        "status": "needs_attention",
+                        "avg_score": 0.22,
+                        "student_count": 1,
+                        "blocking_prerequisite_labels": [],
+                        "recommended_action": "Strengthen this concept cluster with guided practice.",
+                    }
+                ],
+                "teach_next": [
+                    {
+                        "concept_id": "math:sss2:t1:fractions",
+                        "concept_label": "Fractions",
+                        "topic_id": str(class_id),
+                        "topic_title": "Fractions",
+                        "status": "blocked",
+                        "avg_score": 0.31,
+                        "student_count": 1,
+                        "blocking_prerequisite_labels": ["Number Sense"],
+                        "recommended_action": "Repair the weakest prerequisite before pushing this concept.",
+                    }
+                ],
+                "watchlist": [],
+                "suggested_actions": [
+                    {
+                        "action_type": "repair_prerequisite",
+                        "title": "Repair Fractions through its blocker first",
+                        "summary": "Start with Number Sense before reteaching Fractions.",
+                        "severity": "high",
+                        "target_concept_label": "Fractions",
+                        "target_topic_id": str(class_id),
+                        "target_topic_title": "Fractions",
+                        "suggested_assignment_type": "revision",
+                        "suggested_intervention_type": "support_plan",
+                        "affected_student_count": 1,
+                    }
+                ],
+            }
+
         def get_class_alerts(self, *, teacher_id, class_id):
             return {"class_id": str(class_id), "alerts": []}
 
@@ -414,6 +463,7 @@ def test_teachers_endpoints_success(monkeypatch):
     heatmap_resp = client.get(f"/api/v1/teachers/classes/{class_id}/heatmap")
     graph_resp = client.get(f"/api/v1/teachers/classes/{class_id}/graph-summary")
     playbook_resp = client.get(f"/api/v1/teachers/classes/{class_id}/graph-playbook")
+    cluster_plan_resp = client.get(f"/api/v1/teachers/classes/{class_id}/next-cluster-plan")
     alerts_resp = client.get(f"/api/v1/teachers/classes/{class_id}/alerts")
     outcomes_resp = client.get(f"/api/v1/teachers/classes/{class_id}/intervention-outcomes")
     assignment_outcomes_resp = client.get(f"/api/v1/teachers/classes/{class_id}/assignment-outcomes")
@@ -494,6 +544,7 @@ def test_teachers_endpoints_success(monkeypatch):
     assert heatmap_resp.status_code == 200
     assert graph_resp.status_code == 200
     assert playbook_resp.status_code == 200
+    assert cluster_plan_resp.status_code == 200
     assert alerts_resp.status_code == 200
     assert outcomes_resp.status_code == 200
     assert assignment_outcomes_resp.status_code == 200

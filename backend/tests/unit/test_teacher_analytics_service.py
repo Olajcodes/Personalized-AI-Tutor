@@ -266,6 +266,19 @@ def test_teacher_analytics_graph_playbook_returns_actionable_steps():
     assert any(action.action_type == "support_students" for action in out.actions)
 
 
+def test_teacher_next_cluster_plan_repairs_prerequisite_before_reteach():
+    repo = FakeTeacherAnalyticsRepo()
+    service = TeacherAnalyticsService(repo)
+
+    out = service.get_next_lesson_cluster_plan(teacher_id=repo.teacher_id, class_id=repo.class_id)
+
+    assert out.class_id == repo.class_id
+    assert out.plan_status == "repair_first"
+    assert out.repair_first[0].concept_label == "Number Sense"
+    assert out.teach_next[0].concept_label == "Fractions"
+    assert any(action.action_type == "repair_prerequisite" for action in out.suggested_actions)
+
+
 def test_teacher_analytics_concept_student_drilldown_orders_students_by_risk():
     repo = FakeTeacherAnalyticsRepo()
     service = TeacherAnalyticsService(repo)
