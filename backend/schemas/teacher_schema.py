@@ -107,10 +107,18 @@ class TeacherGraphSignalOut(BaseModel):
     recommended_action: str
 
 
+class TeacherGraphEdgeOut(BaseModel):
+    source_concept_id: str
+    target_concept_id: str
+    status: Literal["blocked", "ready"]
+
+
 class TeacherClassGraphOut(BaseModel):
     class_id: UUID
     metrics: TeacherGraphMetricsOut
     graph_signal: TeacherGraphSignalOut
+    nodes: list[TeacherGraphConceptNodeOut] = Field(default_factory=list)
+    edges: list[TeacherGraphEdgeOut] = Field(default_factory=list)
     weakest_blockers: list[TeacherGraphConceptNodeOut] = Field(default_factory=list)
     ready_to_push: list[TeacherGraphConceptNodeOut] = Field(default_factory=list)
 

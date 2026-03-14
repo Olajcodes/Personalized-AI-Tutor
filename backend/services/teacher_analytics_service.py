@@ -11,6 +11,7 @@ from backend.schemas.teacher_schema import (
     TeacherAlertsOut,
     TeacherClassDashboardOut,
     TeacherClassGraphOut,
+    TeacherGraphEdgeOut,
     TeacherClassHeatmapOut,
     TeacherGraphConceptNodeOut,
     TeacherGraphMetricsOut,
@@ -181,6 +182,7 @@ class TeacherAnalyticsService:
         }
 
         nodes: list[TeacherGraphConceptNodeOut] = []
+        edges: list[TeacherGraphEdgeOut] = []
         for concept_id, row in concept_rows_by_id.items():
             stat = heatmap_map.get(concept_id, {"avg_score": 0.0, "student_count": 0})
             prereq_ids = [item for item in list(row.get("prereq_concept_ids") or []) if item]
@@ -225,6 +227,16 @@ class TeacherAnalyticsService:
                     recommended_action=recommended_action,
                 )
             )
+            for prereq_id in prereq_ids:
+                if prereq_id not in concept_rows_by_id:
+                    continue
+                edges.append(
+                    TeacherGraphEdgeOut(
+                        source_concept_id=prereq_id,
+                        target_concept_id=concept_id,
+                        status="blocked" if prereq_id in blocking_prereqs else "ready",
+                    )
+                )
 
         blocked_nodes = sorted(
             [node for node in nodes if node.status == "blocked"],
@@ -295,6 +307,8 @@ class TeacherAnalyticsService:
             class_id=class_id,
             metrics=metrics,
             graph_signal=graph_signal,
+            nodes=(blocked_nodes + weak_nodes + mastered_nodes + unassessed_nodes),
+            edges=sorted(edges, key=lambda item: (item.status, item.target_concept_id, item.source_concept_id)),
             weakest_blockers=(blocked_nodes[:6] or weak_nodes[:6] or unassessed_nodes[:6]),
             ready_to_push=mastered_nodes[:6],
         )

@@ -139,6 +139,8 @@ def test_teacher_analytics_graph_summary_prioritises_blockers():
     assert out.metrics.mapped_concepts == 3
     assert out.metrics.blocked_concepts >= 1
     assert out.graph_signal.status == "repair_prerequisite"
+    assert len(out.nodes) == 3
+    assert any(edge.target_concept_id == "math:sss2:t1:fractions" for edge in out.edges)
     assert out.weakest_blockers[0].concept_label in {"Fractions", "Number Sense"}
 
 

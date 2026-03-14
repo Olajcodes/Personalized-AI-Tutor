@@ -128,6 +128,39 @@ def test_teachers_endpoints_success(monkeypatch):
                     "blocking_prerequisite_label": "Number Sense",
                     "recommended_action": "Run a prerequisite bridge drill.",
                 },
+                "nodes": [
+                    {
+                        "concept_id": "math:sss2:t1:number-sense",
+                        "concept_label": "Number Sense",
+                        "topic_id": str(class_id),
+                        "topic_title": "Number Sense",
+                        "avg_score": 0.22,
+                        "student_count": 1,
+                        "status": "needs_attention",
+                        "prerequisite_labels": [],
+                        "blocking_prerequisite_labels": [],
+                        "recommended_action": "Strengthen this concept cluster with guided practice.",
+                    },
+                    {
+                        "concept_id": "math:sss2:t1:fractions",
+                        "concept_label": "Fractions",
+                        "topic_id": str(class_id),
+                        "topic_title": "Fractions",
+                        "avg_score": 0.31,
+                        "student_count": 1,
+                        "status": "blocked",
+                        "prerequisite_labels": ["Number Sense"],
+                        "blocking_prerequisite_labels": ["Number Sense"],
+                        "recommended_action": "Repair the weakest prerequisite before pushing this concept.",
+                    },
+                ],
+                "edges": [
+                    {
+                        "source_concept_id": "math:sss2:t1:number-sense",
+                        "target_concept_id": "math:sss2:t1:fractions",
+                        "status": "blocked",
+                    }
+                ],
                 "weakest_blockers": [
                     {
                         "concept_id": "math:sss2:t1:fractions",

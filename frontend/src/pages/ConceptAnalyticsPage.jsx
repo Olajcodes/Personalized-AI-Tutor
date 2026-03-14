@@ -13,6 +13,7 @@ import {
   Users,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import TeacherClassGraph from '../components/teacher/TeacherClassGraph';
 
 const humanizeConceptId = (conceptId, fallback = 'Concept') => {
   const value = String(conceptId || '').trim();
@@ -271,6 +272,20 @@ const ConceptAnalyticsPage = () => {
 
           <div className="grid grid-cols-1 gap-8 xl:grid-cols-3">
             <section className="xl:col-span-2 space-y-8">
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="mb-6 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-800">Class Concept Graph</h2>
+                    <p className="text-xs text-slate-500">Interactive prerequisite map showing where the class is blocked, weak, or ready to advance.</p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                    {graphSummary?.nodes?.length || 0} nodes
+                  </span>
+                </div>
+
+                <TeacherClassGraph graphSummary={graphSummary} />
+              </div>
+
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <div className="mb-6 flex items-center justify-between">
                   <div>
