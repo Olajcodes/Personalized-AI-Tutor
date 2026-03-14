@@ -26,6 +26,10 @@ from backend.schemas.teacher_schema import (
     TeacherRepeatRiskConceptOut,
     TeacherRepeatRiskStudentOut,
     TeacherRepeatRiskSummaryOut,
+    TeacherRiskMatrixCellOut,
+    TeacherRiskMatrixConceptOut,
+    TeacherRiskMatrixOut,
+    TeacherRiskMatrixStudentOut,
     TeacherStudentTimelineOut,
     TeacherTimelineEventOut,
 )
@@ -892,4 +896,140 @@ class TeacherAnalyticsService:
             repeat_blocker_students=sum(1 for item in students if item.risk_status == "repeat_blocker"),
             repeat_weakness_students=sum(1 for item in students if item.risk_status == "repeat_weakness"),
             students=students[:10],
+        )
+
+    def get_student_risk_matrix(self, *, teacher_id: UUID, class_id: UUID) -> TeacherRiskMatrixOut:
+        self._require_teacher_user(teacher_id)
+        teacher_class = self._require_teacher_class(teacher_id=teacher_id, class_id=class_id)
+
+        graph = self.get_class_graph_summary(teacher_id=teacher_id, class_id=class_id)
+        priority_nodes = [node for node in graph.nodes if node.status in {"blocked", "needs_attention"}]
+        if not priority_nodes:
+            return TeacherRiskMatrixOut(class_id=class_id)
+
+        selected_nodes = priority_nodes[:5]
+        concept_ids = [node.concept_id for node in selected_nodes]
+
+        scope_rows = self.repo.get_scope_concept_rows(
+            subject=teacher_class.subject,
+            sss_level=teacher_class.sss_level,
+            term=teacher_class.term,
+        )
+        concept_rows_by_id = {
+            str(row["concept_id"]): row
+            for row in scope_rows
+            if str(row.get("concept_id") or "").strip()
+        }
+        prereq_ids = {
+            prereq_id
+            for concept_id in concept_ids
+            for prereq_id in list(concept_rows_by_id.get(concept_id, {}).get("prereq_concept_ids") or [])
+            if prereq_id
+        }
+
+        student_ids = self.repo.get_active_student_ids(class_id=class_id)
+        if not student_ids:
+            return TeacherRiskMatrixOut(class_id=class_id)
+
+        users = self.repo.get_users_by_ids(student_ids)
+        overall_scores = self.repo.get_avg_mastery_by_student(
+            class_id=class_id,
+            subject=teacher_class.subject,
+            term=teacher_class.term,
+        )
+        activity_stats = self.repo.get_recent_activity_stats(
+            class_id=class_id,
+            subject=teacher_class.subject,
+            term=teacher_class.term,
+            since=datetime.now(timezone.utc) - timedelta(days=INACTIVITY_DAYS),
+        )
+        concept_rows = self.repo.get_student_concept_rows(
+            class_id=class_id,
+            subject=teacher_class.subject,
+            term=teacher_class.term,
+            concept_ids=[*concept_ids, *prereq_ids],
+        )
+
+        scores_by_student: dict[UUID, dict[str, dict]] = {}
+        for row in concept_rows:
+            scores_by_student.setdefault(row["student_id"], {})[row["concept_id"]] = row
+
+        matrix_students: list[TeacherRiskMatrixStudentOut] = []
+        for student_id in student_ids:
+            cells: list[TeacherRiskMatrixCellOut] = []
+            blocked_count = 0
+            weak_count = 0
+            for concept_id in concept_ids:
+                row = concept_rows_by_id.get(concept_id, {})
+                concept_row = scores_by_student.get(student_id, {}).get(concept_id)
+                concept_score = float(concept_row["mastery_score"]) if concept_row else None
+                blocking_prereqs = []
+                for prereq_id in list(row.get("prereq_concept_ids") or []):
+                    prereq_row = scores_by_student.get(student_id, {}).get(prereq_id)
+                    prereq_score = float(prereq_row["mastery_score"]) if prereq_row else 0.0
+                    if prereq_score < GRAPH_MASTERY_THRESHOLD:
+                        blocking_prereqs.append(
+                            self._readable_concept_label(
+                                prereq_id,
+                                fallback=concept_rows_by_id.get(prereq_id, {}).get("topic_title"),
+                            )
+                        )
+
+                status, _ = self._classify_concept_status(
+                    concept_score=concept_score,
+                    blocking_prerequisite_labels=blocking_prereqs,
+                )
+                if status == "blocked":
+                    blocked_count += 1
+                elif status == "needs_attention":
+                    weak_count += 1
+
+                cells.append(
+                    TeacherRiskMatrixCellOut(
+                        concept_id=concept_id,
+                        status=status,
+                        concept_score=round(concept_score, 4) if concept_score is not None else None,
+                        blocking_prerequisite_labels=blocking_prereqs,
+                    )
+                )
+
+            if blocked_count == 0 and weak_count == 0:
+                continue
+
+            matrix_students.append(
+                TeacherRiskMatrixStudentOut(
+                    student_id=student_id,
+                    student_name=self._display_name(users.get(student_id), fallback_id=student_id),
+                    overall_mastery_score=round(float(overall_scores.get(student_id, 0.0)), 4)
+                    if student_id in overall_scores
+                    else None,
+                    blocked_concept_count=blocked_count,
+                    weak_concept_count=weak_count,
+                    recent_activity_count_7d=int(activity_stats.get(student_id, {}).get("event_count", 0)),
+                    recent_study_time_seconds_7d=int(activity_stats.get(student_id, {}).get("duration_seconds", 0)),
+                    cells=cells,
+                )
+            )
+
+        matrix_students.sort(
+            key=lambda item: (
+                -(item.blocked_concept_count * 2 + item.weak_concept_count),
+                1.1 if item.overall_mastery_score is None else item.overall_mastery_score,
+                item.student_name.lower(),
+            )
+        )
+
+        return TeacherRiskMatrixOut(
+            class_id=class_id,
+            concepts=[
+                TeacherRiskMatrixConceptOut(
+                    concept_id=node.concept_id,
+                    concept_label=node.concept_label,
+                    topic_id=node.topic_id,
+                    topic_title=node.topic_title,
+                    status=node.status,
+                )
+                for node in selected_nodes
+            ],
+            students=matrix_students[:8],
         )

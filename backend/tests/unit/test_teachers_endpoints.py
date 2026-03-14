@@ -280,6 +280,52 @@ def test_teachers_endpoints_success(monkeypatch):
                 ],
             }
 
+        def get_student_risk_matrix(self, *, teacher_id, class_id):
+            return {
+                "class_id": str(class_id),
+                "concepts": [
+                    {
+                        "concept_id": "math:sss2:t1:fractions",
+                        "concept_label": "Fractions",
+                        "topic_id": str(class_id),
+                        "topic_title": "Fractions",
+                        "status": "blocked",
+                    },
+                    {
+                        "concept_id": "math:sss2:t1:ratio",
+                        "concept_label": "Ratio",
+                        "topic_id": str(class_id),
+                        "topic_title": "Ratio",
+                        "status": "needs_attention",
+                    },
+                ],
+                "students": [
+                    {
+                        "student_id": str(student_id),
+                        "student_name": "Student One",
+                        "overall_mastery_score": 0.42,
+                        "blocked_concept_count": 1,
+                        "weak_concept_count": 1,
+                        "recent_activity_count_7d": 2,
+                        "recent_study_time_seconds_7d": 180,
+                        "cells": [
+                            {
+                                "concept_id": "math:sss2:t1:fractions",
+                                "status": "blocked",
+                                "concept_score": 0.31,
+                                "blocking_prerequisite_labels": ["Number Sense"],
+                            },
+                            {
+                                "concept_id": "math:sss2:t1:ratio",
+                                "status": "needs_attention",
+                                "concept_score": 0.38,
+                                "blocking_prerequisite_labels": [],
+                            },
+                        ],
+                    }
+                ],
+            }
+
         def get_concept_student_drilldown(self, *, teacher_id, class_id, concept_id):
             return {
                 "class_id": str(class_id),
@@ -329,6 +375,7 @@ def test_teachers_endpoints_success(monkeypatch):
     alerts_resp = client.get(f"/api/v1/teachers/classes/{class_id}/alerts")
     outcomes_resp = client.get(f"/api/v1/teachers/classes/{class_id}/intervention-outcomes")
     repeat_risk_resp = client.get(f"/api/v1/teachers/classes/{class_id}/repeat-risk")
+    risk_matrix_resp = client.get(f"/api/v1/teachers/classes/{class_id}/risk-matrix")
     concept_students_resp = client.get(f"/api/v1/teachers/classes/{class_id}/concepts/math:sss2:t1:fractions/students")
     timeline_resp = client.get(f"/api/v1/teachers/classes/{class_id}/students/{student_id}/timeline")
     assignment_resp = client.post(
@@ -378,6 +425,7 @@ def test_teachers_endpoints_success(monkeypatch):
     assert alerts_resp.status_code == 200
     assert outcomes_resp.status_code == 200
     assert repeat_risk_resp.status_code == 200
+    assert risk_matrix_resp.status_code == 200
     assert concept_students_resp.status_code == 200
     assert timeline_resp.status_code == 200
     assert assignment_resp.status_code == 201

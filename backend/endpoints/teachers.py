@@ -32,6 +32,7 @@ from backend.schemas.teacher_schema import (
     TeacherInterventionUpdateIn,
     TeacherInterventionOut,
     TeacherRepeatRiskSummaryOut,
+    TeacherRiskMatrixOut,
     TeacherStudentTimelineOut,
 )
 from backend.services.teacher_analytics_service import TeacherAnalyticsService
@@ -235,6 +236,21 @@ def class_repeat_risk(
     """Return students repeatedly driving blockers or weak concept clusters across the class graph."""
     try:
         return _analytics_service(db).get_repeat_risk_summary(teacher_id=current_user.id, class_id=class_id)
+    except TeacherServiceUnauthorizedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except TeacherServiceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+@router.get("/classes/{class_id}/risk-matrix", response_model=TeacherRiskMatrixOut)
+def class_risk_matrix(
+    class_id: UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return a class-wide student vs concept comparison matrix for the current blocked and weak graph nodes."""
+    try:
+        return _analytics_service(db).get_student_risk_matrix(teacher_id=current_user.id, class_id=class_id)
     except TeacherServiceUnauthorizedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except TeacherServiceNotFoundError as exc:

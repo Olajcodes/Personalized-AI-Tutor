@@ -282,6 +282,19 @@ def test_teacher_repeat_risk_identifies_multi_concept_student():
     assert out.students[0].driving_concepts[0].concept_label in {"Fractions", "Number Sense", "Ratio"}
 
 
+def test_teacher_risk_matrix_returns_student_vs_concept_view():
+    repo = FakeTeacherAnalyticsRepo()
+    service = TeacherAnalyticsService(repo)
+
+    out = service.get_student_risk_matrix(teacher_id=repo.teacher_id, class_id=repo.class_id)
+
+    assert out.class_id == repo.class_id
+    assert len(out.concepts) >= 1
+    assert len(out.students) >= 1
+    assert out.students[0].blocked_concept_count >= 1
+    assert any(cell.status in {"blocked", "needs_attention"} for cell in out.students[0].cells)
+
+
 def test_teacher_analytics_student_timeline_mapping():
     repo = FakeTeacherAnalyticsRepo()
     service = TeacherAnalyticsService(repo)

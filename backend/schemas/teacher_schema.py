@@ -247,6 +247,38 @@ class TeacherRepeatRiskSummaryOut(BaseModel):
     students: list[TeacherRepeatRiskStudentOut] = Field(default_factory=list)
 
 
+class TeacherRiskMatrixConceptOut(BaseModel):
+    concept_id: str
+    concept_label: str
+    topic_id: UUID | None = None
+    topic_title: str | None = None
+    status: Literal["blocked", "needs_attention", "mastered", "unassessed"]
+
+
+class TeacherRiskMatrixCellOut(BaseModel):
+    concept_id: str
+    status: Literal["blocked", "needs_attention", "mastered", "unassessed"]
+    concept_score: float | None = None
+    blocking_prerequisite_labels: list[str] = Field(default_factory=list)
+
+
+class TeacherRiskMatrixStudentOut(BaseModel):
+    student_id: UUID
+    student_name: str
+    overall_mastery_score: float | None = None
+    blocked_concept_count: int = 0
+    weak_concept_count: int = 0
+    recent_activity_count_7d: int = 0
+    recent_study_time_seconds_7d: int = 0
+    cells: list[TeacherRiskMatrixCellOut] = Field(default_factory=list)
+
+
+class TeacherRiskMatrixOut(BaseModel):
+    class_id: UUID
+    concepts: list[TeacherRiskMatrixConceptOut] = Field(default_factory=list)
+    students: list[TeacherRiskMatrixStudentOut] = Field(default_factory=list)
+
+
 class TeacherAssignmentCreateIn(BaseModel):
     class_id: UUID | None = None
     student_id: UUID | None = None

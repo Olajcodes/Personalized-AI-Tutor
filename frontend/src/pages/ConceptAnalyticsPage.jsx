@@ -81,6 +81,7 @@ const ConceptAnalyticsPage = () => {
   const [conceptStudents, setConceptStudents] = useState(null);
   const [interventionOutcomes, setInterventionOutcomes] = useState(null);
   const [repeatRisk, setRepeatRisk] = useState(null);
+  const [riskMatrix, setRiskMatrix] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [studentTimeline, setStudentTimeline] = useState([]);
   const [alerts, setAlerts] = useState([]);
@@ -138,6 +139,7 @@ const ConceptAnalyticsPage = () => {
         setConceptStudents(null);
         setInterventionOutcomes(null);
         setRepeatRisk(null);
+        setRiskMatrix(null);
         setSelectedStudent(null);
         setStudentTimeline([]);
         setAlerts([]);
@@ -147,7 +149,7 @@ const ConceptAnalyticsPage = () => {
       try {
         setIsLoadingDetails(true);
         setError('');
-        const [dashboardRes, heatmapRes, graphRes, playbookRes, alertsRes, outcomesRes, repeatRiskRes] = await Promise.all([
+        const [dashboardRes, heatmapRes, graphRes, playbookRes, alertsRes, outcomesRes, repeatRiskRes, riskMatrixRes] = await Promise.all([
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/dashboard`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/heatmap`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/graph-summary`, { headers: { Authorization: `Bearer ${token}` } }),
@@ -155,15 +157,16 @@ const ConceptAnalyticsPage = () => {
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/alerts`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/intervention-outcomes`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/repeat-risk`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${apiUrl}/teachers/classes/${activeClassId}/risk-matrix`, { headers: { Authorization: `Bearer ${token}` } }),
         ]);
 
-        if (!dashboardRes.ok || !heatmapRes.ok || !graphRes.ok || !playbookRes.ok || !alertsRes.ok || !outcomesRes.ok || !repeatRiskRes.ok) {
-          const firstFailure = [dashboardRes, heatmapRes, graphRes, playbookRes, alertsRes, outcomesRes, repeatRiskRes].find((response) => !response.ok);
+        if (!dashboardRes.ok || !heatmapRes.ok || !graphRes.ok || !playbookRes.ok || !alertsRes.ok || !outcomesRes.ok || !repeatRiskRes.ok || !riskMatrixRes.ok) {
+          const firstFailure = [dashboardRes, heatmapRes, graphRes, playbookRes, alertsRes, outcomesRes, repeatRiskRes, riskMatrixRes].find((response) => !response.ok);
           const detail = await firstFailure.json().catch(() => null);
           throw new Error(detail?.detail || 'Failed to load teacher analytics.');
         }
 
-        const [dashboardData, heatmapData, graphData, playbookData, alertsData, outcomesData, repeatRiskData] = await Promise.all([
+        const [dashboardData, heatmapData, graphData, playbookData, alertsData, outcomesData, repeatRiskData, riskMatrixData] = await Promise.all([
           dashboardRes.json(),
           heatmapRes.json(),
           graphRes.json(),
@@ -171,6 +174,7 @@ const ConceptAnalyticsPage = () => {
           alertsRes.json(),
           outcomesRes.json(),
           repeatRiskRes.json(),
+          riskMatrixRes.json(),
         ]);
 
         setDashboard(dashboardData);
@@ -185,6 +189,7 @@ const ConceptAnalyticsPage = () => {
         setConceptStudents(null);
         setInterventionOutcomes(outcomesData || null);
         setRepeatRisk(repeatRiskData || null);
+        setRiskMatrix(riskMatrixData || null);
         setSelectedStudent(null);
         setStudentTimeline([]);
         setAlerts(Array.isArray(alertsData?.alerts) ? alertsData.alerts : []);
@@ -197,6 +202,7 @@ const ConceptAnalyticsPage = () => {
         setConceptStudents(null);
         setInterventionOutcomes(null);
         setRepeatRisk(null);
+        setRiskMatrix(null);
         setSelectedStudent(null);
         setStudentTimeline([]);
         setAlerts([]);
@@ -391,6 +397,35 @@ const ConceptAnalyticsPage = () => {
     } catch (err) {
       setInterventionStatus((current) => ({ ...current, [key]: { state: 'error', message: err.message || 'Failed to create intervention.' } }));
     }
+  };
+
+  const openStudentFocus = (student, focusConcept = null, cell = null) => {
+    const resolvedConcept = focusConcept || student?.driving_concepts?.[0] || null;
+    if (resolvedConcept?.concept_id) {
+      setSelectedConceptId(resolvedConcept.concept_id);
+    }
+    setSelectedStudent({
+      ...student,
+      status: cell?.status || resolvedConcept?.status || student?.status || 'needs_attention',
+      concept_score:
+        cell?.concept_score ??
+        resolvedConcept?.concept_score ??
+        student?.concept_score ??
+        null,
+      blocking_prerequisite_labels:
+        cell?.blocking_prerequisite_labels ||
+        resolvedConcept?.blocking_prerequisite_labels ||
+        student?.blocking_prerequisite_labels ||
+        [],
+      recommended_action:
+        student?.recommended_action ||
+        (cell?.status === 'blocked'
+          ? `Repair the blocking prerequisite before reteaching ${resolvedConcept?.concept_label || 'this concept'}.`
+          : `Run a focused checkpoint on ${resolvedConcept?.concept_label || 'this concept'}.`),
+      recent_activity_count_7d: student?.recent_activity_count_7d ?? 0,
+      recent_study_time_seconds_7d: student?.recent_study_time_seconds_7d ?? 0,
+      last_evaluated_at: student?.last_evaluated_at || null,
+    });
   };
 
   const updateInterventionStatus = async (outcome, status) => {
@@ -918,10 +953,7 @@ const ConceptAnalyticsPage = () => {
                           <div className="mt-4 flex flex-wrap items-center gap-3">
                             <button
                               type="button"
-                              onClick={() => {
-                                if (focusConcept) setSelectedConceptId(focusConcept.concept_id);
-                                setSelectedStudent(student);
-                              }}
+                              onClick={() => openStudentFocus(student, focusConcept)}
                               className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-100"
                             >
                               View student
@@ -956,6 +988,89 @@ const ConceptAnalyticsPage = () => {
                     </div>
                   )}
                 </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="flex items-center gap-2 text-lg font-bold text-slate-800">
+                  <BrainCircuit className="h-5 w-5 text-violet-500" />
+                  Student Risk Matrix
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">Compare the same at-risk students against the same blocked and weak concepts in one view.</p>
+
+                {!riskMatrix?.concepts?.length || !riskMatrix?.students?.length ? (
+                  <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-400">
+                    No class risk matrix is available yet for this scope.
+                  </div>
+                ) : (
+                  <div className="mt-6 overflow-x-auto">
+                    <table className="min-w-full border-separate border-spacing-y-2">
+                      <thead>
+                        <tr>
+                          <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Student</th>
+                          {riskMatrix.concepts.map((concept) => (
+                            <th key={concept.concept_id} className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                              {concept.concept_label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {riskMatrix.students.map((student) => (
+                          <tr key={student.student_id} className="rounded-2xl bg-slate-50">
+                            <td className="rounded-l-2xl border border-slate-200 bg-white px-3 py-3 align-top">
+                              <button
+                                type="button"
+                                onClick={() => openStudentFocus(student, riskMatrix.concepts[0], student.cells?.[0] || null)}
+                                className="text-left"
+                              >
+                                <p className="text-sm font-bold text-slate-900">{student.student_name}</p>
+                                <p className="mt-1 text-[11px] font-medium text-slate-500">
+                                  {student.blocked_concept_count} blocked • {student.weak_concept_count} weak
+                                </p>
+                              </button>
+                            </td>
+                            {riskMatrix.concepts.map((concept, index) => {
+                              const cell = student.cells.find((item) => item.concept_id === concept.concept_id);
+                              const tone =
+                                cell?.status === 'blocked'
+                                  ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                  : cell?.status === 'needs_attention'
+                                    ? 'border-indigo-200 bg-indigo-50 text-indigo-700'
+                                    : cell?.status === 'mastered'
+                                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                      : 'border-slate-200 bg-white text-slate-400';
+
+                              return (
+                                <td
+                                  key={`${student.student_id}-${concept.concept_id}`}
+                                  className={`${index === riskMatrix.concepts.length - 1 ? 'rounded-r-2xl' : ''} border border-slate-200 bg-white px-3 py-3 align-top`}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => openStudentFocus(student, concept, cell)}
+                                    className={`w-full rounded-xl border px-3 py-3 text-left transition ${tone}`}
+                                  >
+                                    <p className="text-[10px] font-black uppercase tracking-[0.16em]">
+                                      {cell?.status ? cell.status.replace('_', ' ') : 'unassessed'}
+                                    </p>
+                                    <p className="mt-2 text-sm font-semibold">
+                                      {cell?.concept_score == null ? 'No score yet' : `${Math.round(Number(cell.concept_score) * 100)}%`}
+                                    </p>
+                                    {cell?.blocking_prerequisite_labels?.length ? (
+                                      <p className="mt-2 text-[11px] leading-5">
+                                        Blocked by {cell.blocking_prerequisite_labels.join(', ')}
+                                      </p>
+                                    ) : null}
+                                  </button>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
