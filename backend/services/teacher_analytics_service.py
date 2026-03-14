@@ -23,6 +23,9 @@ from backend.schemas.teacher_schema import (
     TeacherGraphMetricsOut,
     TeacherGraphSignalOut,
     TeacherHeatmapPointOut,
+    TeacherRepeatRiskConceptOut,
+    TeacherRepeatRiskStudentOut,
+    TeacherRepeatRiskSummaryOut,
     TeacherStudentTimelineOut,
     TeacherTimelineEventOut,
 )
@@ -57,6 +60,36 @@ class TeacherAnalyticsService:
         token = re.sub(r"[_-]+", " ", token)
         token = re.sub(r"\s+", " ", token).strip()
         return token.title() if token else str(fallback or "Concept").strip()
+
+    @staticmethod
+    def _display_name(user, *, fallback_id: UUID) -> str:
+        return (
+            str(getattr(user, "display_name", "") or "").strip()
+            or " ".join(
+                part
+                for part in [
+                    str(getattr(user, "first_name", "") or "").strip(),
+                    str(getattr(user, "last_name", "") or "").strip(),
+                ]
+                if part
+            ).strip()
+            or str(getattr(user, "email", "") or "").strip()
+            or f"Student {str(fallback_id)[:8]}"
+        )
+
+    def _classify_concept_status(
+        self,
+        *,
+        concept_score: float | None,
+        blocking_prerequisite_labels: list[str],
+    ) -> tuple[str, str]:
+        if concept_score is None:
+            return "unassessed", "Give this student a checkpoint on the selected concept."
+        if blocking_prerequisite_labels:
+            return "blocked", "Repair the blocking prerequisite before reteaching this concept."
+        if concept_score < GRAPH_MASTERY_THRESHOLD:
+            return "needs_attention", "Assign focused practice and a short checkpoint on this concept."
+        return "mastered", "Use this student as a readiness signal for advancing the class."
 
     def _require_teacher_user(self, teacher_id: UUID):
         user = self.repo.get_user(teacher_id)
@@ -535,25 +568,11 @@ class TeacherAnalyticsService:
                         self._readable_concept_label(prereq_id, fallback=concept_rows_by_id.get(prereq_id, {}).get("topic_title"))
                     )
 
-            if concept_score is None:
-                status = "unassessed"
-                recommended_action = "Give this student a checkpoint on the selected concept."
-            elif blocking_prereqs:
-                status = "blocked"
-                recommended_action = "Repair the blocking prerequisite before reteaching this concept."
-            elif concept_score < GRAPH_MASTERY_THRESHOLD:
-                status = "needs_attention"
-                recommended_action = "Assign focused practice and a short checkpoint on this concept."
-            else:
-                status = "mastered"
-                recommended_action = "Use this student as a readiness signal for advancing the class."
-
-            display_name = (
-                str(user.display_name or "").strip()
-                or " ".join(part for part in [str(user.first_name or "").strip(), str(user.last_name or "").strip()] if part).strip()
-                or str(user.email or "").strip()
-                or f"Student {str(student_id)[:8]}"
-            ) if user else f"Student {str(student_id)[:8]}"
+            status, recommended_action = self._classify_concept_status(
+                concept_score=concept_score,
+                blocking_prerequisite_labels=blocking_prereqs,
+            )
+            display_name = self._display_name(user, fallback_id=student_id)
 
             stats = activity_stats.get(student_id, {})
             students.append(
@@ -714,4 +733,163 @@ class TeacherAnalyticsService:
             no_evidence_interventions=sum(1 for item in outcomes if item.outcome_status == "no_evidence"),
             avg_net_mastery_delta=round(sum(evidence_outcomes) / len(evidence_outcomes), 4) if evidence_outcomes else 0.0,
             outcomes=outcomes[:12],
+        )
+
+    def get_repeat_risk_summary(self, *, teacher_id: UUID, class_id: UUID) -> TeacherRepeatRiskSummaryOut:
+        self._require_teacher_user(teacher_id)
+        teacher_class = self._require_teacher_class(teacher_id=teacher_id, class_id=class_id)
+
+        scope_rows = self.repo.get_scope_concept_rows(
+            subject=teacher_class.subject,
+            sss_level=teacher_class.sss_level,
+            term=teacher_class.term,
+        )
+        if not scope_rows:
+            return TeacherRepeatRiskSummaryOut(class_id=class_id)
+
+        concept_rows_by_id = {
+            str(row["concept_id"]): row
+            for row in scope_rows
+            if str(row.get("concept_id") or "").strip()
+        }
+        concept_ids = list(concept_rows_by_id.keys())
+        if not concept_ids:
+            return TeacherRepeatRiskSummaryOut(class_id=class_id)
+
+        student_ids = self.repo.get_active_student_ids(class_id=class_id)
+        if not student_ids:
+            return TeacherRepeatRiskSummaryOut(class_id=class_id)
+
+        users = self.repo.get_users_by_ids(student_ids)
+        overall_scores = self.repo.get_avg_mastery_by_student(
+            class_id=class_id,
+            subject=teacher_class.subject,
+            term=teacher_class.term,
+        )
+        activity_stats = self.repo.get_recent_activity_stats(
+            class_id=class_id,
+            subject=teacher_class.subject,
+            term=teacher_class.term,
+            since=datetime.now(timezone.utc) - timedelta(days=INACTIVITY_DAYS),
+        )
+        concept_rows = self.repo.get_student_concept_rows(
+            class_id=class_id,
+            subject=teacher_class.subject,
+            term=teacher_class.term,
+            concept_ids=concept_ids,
+        )
+
+        scores_by_student: dict[UUID, dict[str, dict]] = {}
+        for row in concept_rows:
+            scores_by_student.setdefault(row["student_id"], {})[row["concept_id"]] = row
+
+        students: list[TeacherRepeatRiskStudentOut] = []
+        for student_id in student_ids:
+            flagged_concepts: list[TeacherRepeatRiskConceptOut] = []
+            blocked_count = 0
+            weak_count = 0
+
+            for concept_id, row in concept_rows_by_id.items():
+                concept_row = scores_by_student.get(student_id, {}).get(concept_id)
+                concept_score = float(concept_row["mastery_score"]) if concept_row else None
+                prereq_ids = [item for item in list(row.get("prereq_concept_ids") or []) if item]
+                blocking_prereqs = []
+                for prereq_id in prereq_ids:
+                    prereq_row = scores_by_student.get(student_id, {}).get(prereq_id)
+                    prereq_score = float(prereq_row["mastery_score"]) if prereq_row else 0.0
+                    if prereq_score < GRAPH_MASTERY_THRESHOLD:
+                        blocking_prereqs.append(
+                            self._readable_concept_label(
+                                prereq_id,
+                                fallback=concept_rows_by_id.get(prereq_id, {}).get("topic_title"),
+                            )
+                        )
+
+                status, _ = self._classify_concept_status(
+                    concept_score=concept_score,
+                    blocking_prerequisite_labels=blocking_prereqs,
+                )
+                if status not in {"blocked", "needs_attention"}:
+                    continue
+
+                if status == "blocked":
+                    blocked_count += 1
+                else:
+                    weak_count += 1
+
+                flagged_concepts.append(
+                    TeacherRepeatRiskConceptOut(
+                        concept_id=concept_id,
+                        concept_label=self._readable_concept_label(concept_id, fallback=row.get("topic_title")),
+                        topic_id=row.get("topic_id"),
+                        topic_title=row.get("topic_title"),
+                        status=status,
+                        concept_score=round(concept_score, 4) if concept_score is not None else None,
+                        blocking_prerequisite_labels=blocking_prereqs,
+                    )
+                )
+
+            flagged_count = blocked_count + weak_count
+            if flagged_count < 2:
+                continue
+
+            flagged_concepts.sort(
+                key=lambda item: (
+                    0 if item.status == "blocked" else 1,
+                    1.1 if item.concept_score is None else item.concept_score,
+                    item.concept_label.lower(),
+                )
+            )
+
+            primary = flagged_concepts[0]
+            if blocked_count > 0:
+                risk_status = "repeat_blocker"
+                recommended_action = (
+                    f"Repair {primary.blocking_prerequisite_labels[0]} before reteaching {primary.concept_label}; "
+                    f"this student is blocked across {flagged_count} mapped concepts."
+                    if primary.blocking_prerequisite_labels
+                    else f"Use a prerequisite bridge before reteaching {primary.concept_label}; "
+                    f"this student is struggling across {flagged_count} mapped concepts."
+                )
+            else:
+                risk_status = "repeat_weakness"
+                recommended_action = (
+                    f"Run a short checkpoint and targeted practice across {flagged_count} weak concepts, starting with "
+                    f"{primary.concept_label}."
+                )
+
+            stats = activity_stats.get(student_id, {})
+            students.append(
+                TeacherRepeatRiskStudentOut(
+                    student_id=student_id,
+                    student_name=self._display_name(users.get(student_id), fallback_id=student_id),
+                    risk_status=risk_status,
+                    blocked_concept_count=blocked_count,
+                    weak_concept_count=weak_count,
+                    flagged_concept_count=flagged_count,
+                    overall_mastery_score=round(float(overall_scores.get(student_id, 0.0)), 4)
+                    if student_id in overall_scores
+                    else None,
+                    recent_activity_count_7d=int(stats.get("event_count", 0)),
+                    recent_study_time_seconds_7d=int(stats.get("duration_seconds", 0)),
+                    recommended_action=recommended_action,
+                    driving_concepts=flagged_concepts[:4],
+                )
+            )
+
+        students.sort(
+            key=lambda item: (
+                0 if item.risk_status == "repeat_blocker" else 1,
+                -(item.blocked_concept_count * 2 + item.weak_concept_count),
+                1.1 if item.overall_mastery_score is None else item.overall_mastery_score,
+                item.student_name.lower(),
+            )
+        )
+
+        return TeacherRepeatRiskSummaryOut(
+            class_id=class_id,
+            at_risk_student_count=len(students),
+            repeat_blocker_students=sum(1 for item in students if item.risk_status == "repeat_blocker"),
+            repeat_weakness_students=sum(1 for item in students if item.risk_status == "repeat_weakness"),
+            students=students[:10],
         )

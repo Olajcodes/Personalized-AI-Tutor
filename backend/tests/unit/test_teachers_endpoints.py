@@ -247,6 +247,39 @@ def test_teachers_endpoints_success(monkeypatch):
                 ],
             }
 
+        def get_repeat_risk_summary(self, *, teacher_id, class_id):
+            return {
+                "class_id": str(class_id),
+                "at_risk_student_count": 1,
+                "repeat_blocker_students": 1,
+                "repeat_weakness_students": 0,
+                "students": [
+                    {
+                        "student_id": str(student_id),
+                        "student_name": "Student One",
+                        "risk_status": "repeat_blocker",
+                        "blocked_concept_count": 1,
+                        "weak_concept_count": 2,
+                        "flagged_concept_count": 3,
+                        "overall_mastery_score": 0.42,
+                        "recent_activity_count_7d": 2,
+                        "recent_study_time_seconds_7d": 180,
+                        "recommended_action": "Repair Number Sense before reteaching Fractions.",
+                        "driving_concepts": [
+                            {
+                                "concept_id": "math:sss2:t1:fractions",
+                                "concept_label": "Fractions",
+                                "topic_id": str(class_id),
+                                "topic_title": "Fractions",
+                                "status": "blocked",
+                                "concept_score": 0.31,
+                                "blocking_prerequisite_labels": ["Number Sense"],
+                            }
+                        ],
+                    }
+                ],
+            }
+
         def get_concept_student_drilldown(self, *, teacher_id, class_id, concept_id):
             return {
                 "class_id": str(class_id),
@@ -295,6 +328,7 @@ def test_teachers_endpoints_success(monkeypatch):
     playbook_resp = client.get(f"/api/v1/teachers/classes/{class_id}/graph-playbook")
     alerts_resp = client.get(f"/api/v1/teachers/classes/{class_id}/alerts")
     outcomes_resp = client.get(f"/api/v1/teachers/classes/{class_id}/intervention-outcomes")
+    repeat_risk_resp = client.get(f"/api/v1/teachers/classes/{class_id}/repeat-risk")
     concept_students_resp = client.get(f"/api/v1/teachers/classes/{class_id}/concepts/math:sss2:t1:fractions/students")
     timeline_resp = client.get(f"/api/v1/teachers/classes/{class_id}/students/{student_id}/timeline")
     assignment_resp = client.post(
@@ -343,6 +377,7 @@ def test_teachers_endpoints_success(monkeypatch):
     assert playbook_resp.status_code == 200
     assert alerts_resp.status_code == 200
     assert outcomes_resp.status_code == 200
+    assert repeat_risk_resp.status_code == 200
     assert concept_students_resp.status_code == 200
     assert timeline_resp.status_code == 200
     assert assignment_resp.status_code == 201

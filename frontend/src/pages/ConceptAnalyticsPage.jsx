@@ -80,6 +80,7 @@ const ConceptAnalyticsPage = () => {
   const [selectedConceptId, setSelectedConceptId] = useState('');
   const [conceptStudents, setConceptStudents] = useState(null);
   const [interventionOutcomes, setInterventionOutcomes] = useState(null);
+  const [repeatRisk, setRepeatRisk] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [studentTimeline, setStudentTimeline] = useState([]);
   const [alerts, setAlerts] = useState([]);
@@ -136,6 +137,7 @@ const ConceptAnalyticsPage = () => {
         setSelectedConceptId('');
         setConceptStudents(null);
         setInterventionOutcomes(null);
+        setRepeatRisk(null);
         setSelectedStudent(null);
         setStudentTimeline([]);
         setAlerts([]);
@@ -145,28 +147,30 @@ const ConceptAnalyticsPage = () => {
       try {
         setIsLoadingDetails(true);
         setError('');
-        const [dashboardRes, heatmapRes, graphRes, playbookRes, alertsRes, outcomesRes] = await Promise.all([
+        const [dashboardRes, heatmapRes, graphRes, playbookRes, alertsRes, outcomesRes, repeatRiskRes] = await Promise.all([
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/dashboard`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/heatmap`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/graph-summary`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/graph-playbook`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/alerts`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/intervention-outcomes`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${apiUrl}/teachers/classes/${activeClassId}/repeat-risk`, { headers: { Authorization: `Bearer ${token}` } }),
         ]);
 
-        if (!dashboardRes.ok || !heatmapRes.ok || !graphRes.ok || !playbookRes.ok || !alertsRes.ok || !outcomesRes.ok) {
-          const firstFailure = [dashboardRes, heatmapRes, graphRes, playbookRes, alertsRes, outcomesRes].find((response) => !response.ok);
+        if (!dashboardRes.ok || !heatmapRes.ok || !graphRes.ok || !playbookRes.ok || !alertsRes.ok || !outcomesRes.ok || !repeatRiskRes.ok) {
+          const firstFailure = [dashboardRes, heatmapRes, graphRes, playbookRes, alertsRes, outcomesRes, repeatRiskRes].find((response) => !response.ok);
           const detail = await firstFailure.json().catch(() => null);
           throw new Error(detail?.detail || 'Failed to load teacher analytics.');
         }
 
-        const [dashboardData, heatmapData, graphData, playbookData, alertsData, outcomesData] = await Promise.all([
+        const [dashboardData, heatmapData, graphData, playbookData, alertsData, outcomesData, repeatRiskData] = await Promise.all([
           dashboardRes.json(),
           heatmapRes.json(),
           graphRes.json(),
           playbookRes.json(),
           alertsRes.json(),
           outcomesRes.json(),
+          repeatRiskRes.json(),
         ]);
 
         setDashboard(dashboardData);
@@ -180,6 +184,7 @@ const ConceptAnalyticsPage = () => {
         );
         setConceptStudents(null);
         setInterventionOutcomes(outcomesData || null);
+        setRepeatRisk(repeatRiskData || null);
         setSelectedStudent(null);
         setStudentTimeline([]);
         setAlerts(Array.isArray(alertsData?.alerts) ? alertsData.alerts : []);
@@ -191,6 +196,7 @@ const ConceptAnalyticsPage = () => {
         setSelectedConceptId('');
         setConceptStudents(null);
         setInterventionOutcomes(null);
+        setRepeatRisk(null);
         setSelectedStudent(null);
         setStudentTimeline([]);
         setAlerts([]);
@@ -339,6 +345,42 @@ const ConceptAnalyticsPage = () => {
           action_plan: student.blocking_prerequisite_labels?.length
             ? `Repair prerequisite(s): ${student.blocking_prerequisite_labels.join(', ')} before reteaching ${conceptStudents.concept_label}.`
             : `Run a focused checkpoint and follow-up practice on ${conceptStudents.concept_label}.`,
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.detail || 'Failed to create intervention.');
+      }
+      setInterventionStatus((current) => ({ ...current, [key]: { state: 'success', message: 'Intervention created.' } }));
+    } catch (err) {
+      setInterventionStatus((current) => ({ ...current, [key]: { state: 'error', message: err.message || 'Failed to create intervention.' } }));
+    }
+  };
+
+  const createRepeatRiskIntervention = async (student) => {
+    const focusConcept = student?.driving_concepts?.[0];
+    if (!activeClassId || !activeClass || !token || !focusConcept) return;
+    const key = `${student.student_id}-${focusConcept.concept_id}`;
+    try {
+      setInterventionStatus((current) => ({ ...current, [key]: { state: 'loading', message: 'Creating intervention...' } }));
+      const response = await fetch(`${apiUrl}/teachers/interventions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          class_id: activeClassId,
+          student_id: student.student_id,
+          intervention_type: 'support_plan',
+          severity: student.risk_status === 'repeat_blocker' ? 'high' : 'medium',
+          subject: activeClass.subject,
+          sss_level: activeClass.sss_level,
+          term: activeClass.term,
+          notes: `Target ${student.student_name} on repeated graph risk around ${focusConcept.concept_label}. ${student.recommended_action}`,
+          action_plan: focusConcept.blocking_prerequisite_labels?.length
+            ? `Repair prerequisite(s): ${focusConcept.blocking_prerequisite_labels.join(', ')} before reteaching ${focusConcept.concept_label}.`
+            : `Run a focused checkpoint and short practice set on ${focusConcept.concept_label}.`,
         }),
       });
       if (!response.ok) {
@@ -788,6 +830,130 @@ const ConceptAnalyticsPage = () => {
                         </div>
                       </div>
                     ))
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="flex items-center gap-2 text-lg font-bold text-slate-800">
+                  <UserRoundSearch className="h-5 w-5 text-indigo-500" />
+                  Repeat-Risk Students
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">Students repeatedly driving blocked or weak concepts across the mapped class graph.</p>
+
+                <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">At risk</p>
+                    <p className="mt-2 text-2xl font-black text-slate-900">{repeatRisk?.at_risk_student_count ?? 0}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Repeat blockers</p>
+                    <p className="mt-2 text-2xl font-black text-amber-600">{repeatRisk?.repeat_blocker_students ?? 0}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Repeat weakness</p>
+                    <p className="mt-2 text-2xl font-black text-indigo-600">{repeatRisk?.repeat_weakness_students ?? 0}</p>
+                  </div>
+                </div>
+
+                <div className="mt-6 space-y-3">
+                  {repeatRisk?.students?.length ? (
+                    repeatRisk.students.map((student) => {
+                      const focusConcept = student.driving_concepts?.[0] || null;
+                      const interventionKey = focusConcept ? `${student.student_id}-${focusConcept.concept_id}` : null;
+                      return (
+                        <div key={student.student_id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-bold text-slate-900">{student.student_name}</p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                {student.blocked_concept_count} blocked • {student.weak_concept_count} weak • {student.flagged_concept_count} flagged concepts
+                              </p>
+                            </div>
+                            <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
+                              student.risk_status === 'repeat_blocker'
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-indigo-100 text-indigo-700'
+                            }`}>
+                              {student.risk_status.replace('_', ' ')}
+                            </span>
+                          </div>
+
+                          <div className="mt-4 grid gap-2 text-xs text-slate-500 sm:grid-cols-3">
+                            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                              <p className="font-black uppercase tracking-[0.16em] text-slate-400">Overall mastery</p>
+                              <p className="mt-1 text-sm font-semibold text-slate-800">
+                                {student.overall_mastery_score == null ? 'Unassessed' : `${Math.round(Number(student.overall_mastery_score) * 100)}%`}
+                              </p>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                              <p className="font-black uppercase tracking-[0.16em] text-slate-400">Activity in 7d</p>
+                              <p className="mt-1 text-sm font-semibold text-slate-800">{student.recent_activity_count_7d} events</p>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                              <p className="font-black uppercase tracking-[0.16em] text-slate-400">Study time</p>
+                              <p className="mt-1 text-sm font-semibold text-slate-800">{formatStudyTime(student.recent_study_time_seconds_7d)}</p>
+                            </div>
+                          </div>
+
+                          <p className="mt-3 text-xs leading-6 text-slate-600">{student.recommended_action}</p>
+
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {student.driving_concepts?.map((concept) => (
+                              <button
+                                key={`${student.student_id}-${concept.concept_id}`}
+                                type="button"
+                                onClick={() => setSelectedConceptId(concept.concept_id)}
+                                className={`rounded-full border px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.14em] transition ${
+                                  concept.status === 'blocked'
+                                    ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                                    : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                                }`}
+                              >
+                                {concept.concept_label}
+                              </button>
+                            ))}
+                          </div>
+
+                          <div className="mt-4 flex flex-wrap items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (focusConcept) setSelectedConceptId(focusConcept.concept_id);
+                                setSelectedStudent(student);
+                              }}
+                              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-100"
+                            >
+                              View student
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => createRepeatRiskIntervention(student)}
+                              className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-white transition hover:bg-indigo-500"
+                            >
+                              Create intervention
+                            </button>
+                            {interventionKey && interventionStatus[interventionKey] ? (
+                              <span
+                                className={`text-xs font-semibold ${
+                                  interventionStatus[interventionKey].state === 'error'
+                                    ? 'text-rose-600'
+                                    : interventionStatus[interventionKey].state === 'success'
+                                      ? 'text-emerald-600'
+                                      : 'text-slate-500'
+                                }`}
+                              >
+                                {interventionStatus[interventionKey].message}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-400">
+                      No repeat-risk students are active in this class right now.
+                    </div>
                   )}
                 </div>
               </div>

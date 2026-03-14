@@ -103,6 +103,12 @@ class FakeTeacherAnalyticsRepo:
                 "last_evaluated_at": datetime.now(timezone.utc) - timedelta(days=1),
             },
             {
+                "student_id": self.student_a,
+                "concept_id": "math:sss2:t1:ratio",
+                "mastery_score": 0.35,
+                "last_evaluated_at": datetime.now(timezone.utc) - timedelta(days=1),
+            },
+            {
                 "student_id": self.student_b,
                 "concept_id": "math:sss2:t1:fractions",
                 "mastery_score": 0.78,
@@ -112,6 +118,12 @@ class FakeTeacherAnalyticsRepo:
                 "student_id": self.student_b,
                 "concept_id": "math:sss2:t1:number-sense",
                 "mastery_score": 0.82,
+                "last_evaluated_at": datetime.now(timezone.utc) - timedelta(days=2),
+            },
+            {
+                "student_id": self.student_b,
+                "concept_id": "math:sss2:t1:ratio",
+                "mastery_score": 0.76,
                 "last_evaluated_at": datetime.now(timezone.utc) - timedelta(days=2),
             },
         ]
@@ -253,6 +265,21 @@ def test_teacher_analytics_intervention_outcomes_show_real_follow_through():
     assert out.improving_interventions == 1
     assert out.outcomes[0].outcome_status == "improving"
     assert out.outcomes[0].net_mastery_delta > 0
+
+
+def test_teacher_repeat_risk_identifies_multi_concept_student():
+    repo = FakeTeacherAnalyticsRepo()
+    service = TeacherAnalyticsService(repo)
+
+    out = service.get_repeat_risk_summary(teacher_id=repo.teacher_id, class_id=repo.class_id)
+
+    assert out.class_id == repo.class_id
+    assert out.at_risk_student_count == 1
+    assert out.repeat_blocker_students == 1
+    assert out.students[0].student_id == repo.student_a
+    assert out.students[0].blocked_concept_count >= 1
+    assert out.students[0].flagged_concept_count >= 2
+    assert out.students[0].driving_concepts[0].concept_label in {"Fractions", "Number Sense", "Ratio"}
 
 
 def test_teacher_analytics_student_timeline_mapping():
