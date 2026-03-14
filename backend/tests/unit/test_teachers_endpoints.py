@@ -200,6 +200,29 @@ def test_teachers_endpoints_success(monkeypatch):
         def get_class_alerts(self, *, teacher_id, class_id):
             return {"class_id": str(class_id), "alerts": []}
 
+        def get_concept_student_drilldown(self, *, teacher_id, class_id, concept_id):
+            return {
+                "class_id": str(class_id),
+                "concept_id": concept_id,
+                "concept_label": "Fractions",
+                "topic_id": str(class_id),
+                "topic_title": "Fractions",
+                "students": [
+                    {
+                        "student_id": str(student_id),
+                        "student_name": "Student One",
+                        "concept_score": 0.31,
+                        "overall_mastery_score": 0.42,
+                        "status": "blocked",
+                        "blocking_prerequisite_labels": ["Number Sense"],
+                        "recent_activity_count_7d": 2,
+                        "recent_study_time_seconds_7d": 180,
+                        "recommended_action": "Repair the blocking prerequisite before reteaching this concept.",
+                        "last_evaluated_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                ],
+            }
+
         def get_student_timeline(self, *, teacher_id, class_id, student_id, limit):
             return {"class_id": str(class_id), "student_id": str(student_id), "timeline": []}
 
@@ -224,6 +247,7 @@ def test_teachers_endpoints_success(monkeypatch):
     graph_resp = client.get(f"/api/v1/teachers/classes/{class_id}/graph-summary")
     playbook_resp = client.get(f"/api/v1/teachers/classes/{class_id}/graph-playbook")
     alerts_resp = client.get(f"/api/v1/teachers/classes/{class_id}/alerts")
+    concept_students_resp = client.get(f"/api/v1/teachers/classes/{class_id}/concepts/math:sss2:t1:fractions/students")
     timeline_resp = client.get(f"/api/v1/teachers/classes/{class_id}/students/{student_id}/timeline")
     assignment_resp = client.post(
         "/api/v1/teachers/assignments",
@@ -266,6 +290,7 @@ def test_teachers_endpoints_success(monkeypatch):
     assert graph_resp.status_code == 200
     assert playbook_resp.status_code == 200
     assert alerts_resp.status_code == 200
+    assert concept_students_resp.status_code == 200
     assert timeline_resp.status_code == 200
     assert assignment_resp.status_code == 201
     assert intervention_resp.status_code == 201

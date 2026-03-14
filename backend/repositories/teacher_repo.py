@@ -290,6 +290,42 @@ class TeacherRepository:
             for row in rows
         ]
 
+    def get_student_concept_rows(
+        self,
+        *,
+        class_id: UUID,
+        subject: str,
+        term: int,
+        concept_ids: list[str],
+    ) -> list[dict]:
+        student_ids = self.get_active_student_ids(class_id=class_id)
+        if not student_ids or not concept_ids:
+            return []
+        rows = (
+            self.db.query(
+                StudentConceptMastery.student_id,
+                StudentConceptMastery.concept_id,
+                StudentConceptMastery.mastery_score,
+                StudentConceptMastery.last_evaluated_at,
+            )
+            .filter(
+                StudentConceptMastery.student_id.in_(student_ids),
+                StudentConceptMastery.subject == subject,
+                StudentConceptMastery.term == term,
+                StudentConceptMastery.concept_id.in_(concept_ids),
+            )
+            .all()
+        )
+        return [
+            {
+                "student_id": row.student_id,
+                "concept_id": str(row.concept_id),
+                "mastery_score": float(row.mastery_score),
+                "last_evaluated_at": row.last_evaluated_at,
+            }
+            for row in rows
+        ]
+
     def get_negative_mastery_delta_by_student(
         self,
         *,

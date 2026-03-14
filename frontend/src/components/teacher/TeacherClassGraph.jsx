@@ -46,10 +46,10 @@ const GRAPH_LAYOUT = {
 
 const percent = (value) => `${Math.round(Number(value || 0) * 100)}%`;
 
-const TeacherClassGraph = ({ graphSummary }) => {
+const TeacherClassGraph = ({ graphSummary, selectedConceptId = '', onSelectNode }) => {
   const nodes = useMemo(() => (Array.isArray(graphSummary?.nodes) ? graphSummary.nodes : []), [graphSummary]);
   const edges = useMemo(() => (Array.isArray(graphSummary?.edges) ? graphSummary.edges : []), [graphSummary]);
-  const [selectedConceptId, setSelectedConceptId] = useState('');
+  const [localSelectedConceptId, setLocalSelectedConceptId] = useState('');
 
   const grouped = useMemo(() => {
     const map = new Map(STATUS_ORDER.map((status) => [status, []]));
@@ -89,8 +89,9 @@ const TeacherClassGraph = ({ graphSummary }) => {
     Math.max(1, ...STATUS_ORDER.map((status) => (grouped.get(status) || []).length)) * GRAPH_LAYOUT.cardHeight +
     Math.max(0, Math.max(...STATUS_ORDER.map((status) => (grouped.get(status) || []).length)) - 1) * GRAPH_LAYOUT.rowGap;
 
+  const activeConceptId = selectedConceptId || localSelectedConceptId;
   const selectedNode =
-    nodes.find((node) => node.concept_id === selectedConceptId) ||
+    nodes.find((node) => node.concept_id === activeConceptId) ||
     nodes.find((node) => node.concept_label === graphSummary?.graph_signal?.focus_concept_label) ||
     nodes[0] ||
     null;
@@ -173,7 +174,10 @@ const TeacherClassGraph = ({ graphSummary }) => {
               <button
                 key={node.concept_id}
                 type="button"
-                onClick={() => setSelectedConceptId(node.concept_id)}
+                onClick={() => {
+                  setLocalSelectedConceptId(node.concept_id);
+                  onSelectNode?.(node);
+                }}
                 className={`absolute rounded-2xl border p-4 text-left transition ${
                   styles.card
                 } ${isSelected ? 'ring-2 ring-white/90 scale-[1.02]' : 'hover:-translate-y-0.5 hover:shadow-xl'}`}

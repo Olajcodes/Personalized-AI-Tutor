@@ -141,6 +141,28 @@ class TeacherGraphPlaybookOut(BaseModel):
     actions: list[TeacherGraphPlaybookActionOut] = Field(default_factory=list)
 
 
+class TeacherConceptStudentOut(BaseModel):
+    student_id: UUID
+    student_name: str
+    concept_score: float | None = None
+    overall_mastery_score: float | None = None
+    status: Literal["blocked", "needs_attention", "mastered", "unassessed"]
+    blocking_prerequisite_labels: list[str] = Field(default_factory=list)
+    recent_activity_count_7d: int = 0
+    recent_study_time_seconds_7d: int = 0
+    recommended_action: str
+    last_evaluated_at: datetime | None = None
+
+
+class TeacherConceptStudentDrilldownOut(BaseModel):
+    class_id: UUID
+    concept_id: str
+    concept_label: str
+    topic_id: UUID | None = None
+    topic_title: str | None = None
+    students: list[TeacherConceptStudentOut] = Field(default_factory=list)
+
+
 class TeacherAlertOut(BaseModel):
     alert_type: Literal["inactivity", "rapid_decline", "prereq_failure"]
     severity: Severity

@@ -14,9 +14,9 @@ class FakeTeacherAnalyticsRepo:
         self.student_a = uuid4()
         self.student_b = uuid4()
         self.users = {
-            self.teacher_id: SimpleNamespace(id=self.teacher_id, role="teacher", is_active=True),
-            self.student_a: SimpleNamespace(id=self.student_a, role="student", is_active=True),
-            self.student_b: SimpleNamespace(id=self.student_b, role="student", is_active=True),
+            self.teacher_id: SimpleNamespace(id=self.teacher_id, role="teacher", is_active=True, display_name="Teacher", first_name="Teach", last_name="Er", email="teacher@example.com"),
+            self.student_a: SimpleNamespace(id=self.student_a, role="student", is_active=True, display_name="Ada James", first_name="Ada", last_name="James", email="ada@example.com"),
+            self.student_b: SimpleNamespace(id=self.student_b, role="student", is_active=True, display_name="Bola Musa", first_name="Bola", last_name="Musa", email="bola@example.com"),
         }
         self.teacher_class = SimpleNamespace(
             id=self.class_id,
@@ -28,6 +28,9 @@ class FakeTeacherAnalyticsRepo:
 
     def get_user(self, user_id):
         return self.users.get(user_id)
+
+    def get_users_by_ids(self, user_ids):
+        return {user_id: self.users[user_id] for user_id in user_ids if user_id in self.users}
 
     def get_teacher_class(self, *, teacher_id, class_id):
         if teacher_id == self.teacher_id and class_id == self.class_id:
@@ -83,6 +86,35 @@ class FakeTeacherAnalyticsRepo:
                 "topic_title": "Ratio",
             },
         ]
+
+    def get_student_concept_rows(self, *, class_id, subject, term, concept_ids):
+        rows = [
+            {
+                "student_id": self.student_a,
+                "concept_id": "math:sss2:t1:fractions",
+                "mastery_score": 0.25,
+                "last_evaluated_at": datetime.now(timezone.utc) - timedelta(days=1),
+            },
+            {
+                "student_id": self.student_a,
+                "concept_id": "math:sss2:t1:number-sense",
+                "mastery_score": 0.3,
+                "last_evaluated_at": datetime.now(timezone.utc) - timedelta(days=1),
+            },
+            {
+                "student_id": self.student_b,
+                "concept_id": "math:sss2:t1:fractions",
+                "mastery_score": 0.78,
+                "last_evaluated_at": datetime.now(timezone.utc) - timedelta(days=2),
+            },
+            {
+                "student_id": self.student_b,
+                "concept_id": "math:sss2:t1:number-sense",
+                "mastery_score": 0.82,
+                "last_evaluated_at": datetime.now(timezone.utc) - timedelta(days=2),
+            },
+        ]
+        return [row for row in rows if row["concept_id"] in concept_ids]
 
     def get_negative_mastery_delta_by_student(self, *, class_id, subject, term, since):
         return {self.student_a: -0.12}
@@ -165,6 +197,23 @@ def test_teacher_analytics_graph_playbook_returns_actionable_steps():
     assert len(out.actions) >= 2
     assert out.actions[0].action_type in {"repair_prerequisite", "run_checkpoint"}
     assert any(action.action_type == "support_students" for action in out.actions)
+
+
+def test_teacher_analytics_concept_student_drilldown_orders_students_by_risk():
+    repo = FakeTeacherAnalyticsRepo()
+    service = TeacherAnalyticsService(repo)
+
+    out = service.get_concept_student_drilldown(
+        teacher_id=repo.teacher_id,
+        class_id=repo.class_id,
+        concept_id="math:sss2:t1:fractions",
+    )
+
+    assert out.class_id == repo.class_id
+    assert out.concept_label == "Fractions"
+    assert len(out.students) == 2
+    assert out.students[0].status == "blocked"
+    assert "Number Sense" in out.students[0].blocking_prerequisite_labels
 
 
 def test_teacher_analytics_student_timeline_mapping():

@@ -10,6 +10,8 @@ from backend.schemas.teacher_schema import (
     TeacherAlertOut,
     TeacherAlertsOut,
     TeacherClassDashboardOut,
+    TeacherConceptStudentDrilldownOut,
+    TeacherConceptStudentOut,
     TeacherClassGraphOut,
     TeacherGraphEdgeOut,
     TeacherGraphPlaybookActionOut,
@@ -465,6 +467,123 @@ class TeacherAnalyticsService:
             )
 
         return TeacherGraphPlaybookOut(class_id=class_id, actions=actions)
+
+    def get_concept_student_drilldown(
+        self,
+        *,
+        teacher_id: UUID,
+        class_id: UUID,
+        concept_id: str,
+    ) -> TeacherConceptStudentDrilldownOut:
+        self._require_teacher_user(teacher_id)
+        teacher_class = self._require_teacher_class(teacher_id=teacher_id, class_id=class_id)
+
+        scope_rows = self.repo.get_scope_concept_rows(
+            subject=teacher_class.subject,
+            sss_level=teacher_class.sss_level,
+            term=teacher_class.term,
+        )
+        concept_rows_by_id = {
+            str(row["concept_id"]): row
+            for row in scope_rows
+            if str(row.get("concept_id") or "").strip()
+        }
+        target = concept_rows_by_id.get(concept_id)
+        if not target:
+            raise TeacherServiceNotFoundError("Concept is not mapped in this class scope.")
+
+        prereq_ids = [item for item in list(target.get("prereq_concept_ids") or []) if item]
+        concept_rows = self.repo.get_student_concept_rows(
+            class_id=class_id,
+            subject=teacher_class.subject,
+            term=teacher_class.term,
+            concept_ids=[concept_id, *prereq_ids],
+        )
+        student_ids = self.repo.get_active_student_ids(class_id=class_id)
+        users = self.repo.get_users_by_ids(student_ids)
+        activity_stats = self.repo.get_recent_activity_stats(
+            class_id=class_id,
+            subject=teacher_class.subject,
+            term=teacher_class.term,
+            since=datetime.now(timezone.utc) - timedelta(days=INACTIVITY_DAYS),
+        )
+        overall_scores = self.repo.get_avg_mastery_by_student(
+            class_id=class_id,
+            subject=teacher_class.subject,
+            term=teacher_class.term,
+        )
+
+        scores_by_student: dict[UUID, dict[str, dict]] = {}
+        for row in concept_rows:
+            bucket = scores_by_student.setdefault(row["student_id"], {})
+            bucket[row["concept_id"]] = row
+
+        students: list[TeacherConceptStudentOut] = []
+        for student_id in student_ids:
+            user = users.get(student_id)
+            concept_row = scores_by_student.get(student_id, {}).get(concept_id)
+            concept_score = float(concept_row["mastery_score"]) if concept_row else None
+            blocking_prereqs = []
+            for prereq_id in prereq_ids:
+                prereq_row = scores_by_student.get(student_id, {}).get(prereq_id)
+                prereq_score = float(prereq_row["mastery_score"]) if prereq_row else 0.0
+                if prereq_score < GRAPH_MASTERY_THRESHOLD:
+                    blocking_prereqs.append(
+                        self._readable_concept_label(prereq_id, fallback=concept_rows_by_id.get(prereq_id, {}).get("topic_title"))
+                    )
+
+            if concept_score is None:
+                status = "unassessed"
+                recommended_action = "Give this student a checkpoint on the selected concept."
+            elif blocking_prereqs:
+                status = "blocked"
+                recommended_action = "Repair the blocking prerequisite before reteaching this concept."
+            elif concept_score < GRAPH_MASTERY_THRESHOLD:
+                status = "needs_attention"
+                recommended_action = "Assign focused practice and a short checkpoint on this concept."
+            else:
+                status = "mastered"
+                recommended_action = "Use this student as a readiness signal for advancing the class."
+
+            display_name = (
+                str(user.display_name or "").strip()
+                or " ".join(part for part in [str(user.first_name or "").strip(), str(user.last_name or "").strip()] if part).strip()
+                or str(user.email or "").strip()
+                or f"Student {str(student_id)[:8]}"
+            ) if user else f"Student {str(student_id)[:8]}"
+
+            stats = activity_stats.get(student_id, {})
+            students.append(
+                TeacherConceptStudentOut(
+                    student_id=student_id,
+                    student_name=display_name,
+                    concept_score=round(concept_score, 4) if concept_score is not None else None,
+                    overall_mastery_score=round(float(overall_scores.get(student_id, 0.0)), 4) if student_id in overall_scores else None,
+                    status=status,
+                    blocking_prerequisite_labels=blocking_prereqs,
+                    recent_activity_count_7d=int(stats.get("event_count", 0)),
+                    recent_study_time_seconds_7d=int(stats.get("duration_seconds", 0)),
+                    recommended_action=recommended_action,
+                    last_evaluated_at=concept_row["last_evaluated_at"] if concept_row else None,
+                )
+            )
+
+        students.sort(
+            key=lambda item: (
+                {"blocked": 0, "needs_attention": 1, "unassessed": 2, "mastered": 3}[item.status],
+                1.1 if item.concept_score is None else item.concept_score,
+                item.student_name.lower(),
+            )
+        )
+
+        return TeacherConceptStudentDrilldownOut(
+            class_id=class_id,
+            concept_id=concept_id,
+            concept_label=self._readable_concept_label(concept_id, fallback=target.get("topic_title")),
+            topic_id=target.get("topic_id"),
+            topic_title=target.get("topic_title"),
+            students=students,
+        )
 
     def get_student_timeline(
         self,

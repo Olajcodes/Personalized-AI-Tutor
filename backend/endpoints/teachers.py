@@ -19,6 +19,7 @@ from backend.schemas.teacher_schema import (
     TeacherAssignmentOut,
     TeacherClassCreateIn,
     TeacherClassDashboardOut,
+    TeacherConceptStudentDrilldownOut,
     TeacherClassGraphOut,
     TeacherClassEnrollIn,
     TeacherClassEnrollOut,
@@ -222,6 +223,26 @@ def student_timeline(
             class_id=class_id,
             student_id=student_id,
             limit=limit,
+        )
+    except TeacherServiceUnauthorizedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except TeacherServiceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+@router.get("/classes/{class_id}/concepts/{concept_id}/students", response_model=TeacherConceptStudentDrilldownOut)
+def concept_student_drilldown(
+    class_id: UUID,
+    concept_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return the students driving a concept blocker or weak node inside the class graph."""
+    try:
+        return _analytics_service(db).get_concept_student_drilldown(
+            teacher_id=current_user.id,
+            class_id=class_id,
+            concept_id=concept_id,
         )
     except TeacherServiceUnauthorizedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))

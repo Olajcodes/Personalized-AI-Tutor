@@ -11,6 +11,7 @@ import {
   NotebookPen,
   Route,
   ShieldAlert,
+  UserRoundSearch,
   Users,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -75,10 +76,14 @@ const ConceptAnalyticsPage = () => {
   const [heatmap, setHeatmap] = useState([]);
   const [graphSummary, setGraphSummary] = useState(null);
   const [graphPlaybook, setGraphPlaybook] = useState([]);
+  const [selectedConceptId, setSelectedConceptId] = useState('');
+  const [conceptStudents, setConceptStudents] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [assignmentStatus, setAssignmentStatus] = useState({});
+  const [interventionStatus, setInterventionStatus] = useState({});
   const [isLoadingClasses, setIsLoadingClasses] = useState(true);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [isLoadingConceptStudents, setIsLoadingConceptStudents] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -122,6 +127,8 @@ const ConceptAnalyticsPage = () => {
         setHeatmap([]);
         setGraphSummary(null);
         setGraphPlaybook([]);
+        setSelectedConceptId('');
+        setConceptStudents(null);
         setAlerts([]);
         return;
       }
@@ -155,12 +162,20 @@ const ConceptAnalyticsPage = () => {
         setHeatmap(Array.isArray(heatmapData?.points) ? heatmapData.points : []);
         setGraphSummary(graphData || null);
         setGraphPlaybook(Array.isArray(playbookData?.actions) ? playbookData.actions : []);
+        setSelectedConceptId(
+          graphData?.weakest_blockers?.[0]?.concept_id ||
+            graphData?.nodes?.[0]?.concept_id ||
+            ''
+        );
+        setConceptStudents(null);
         setAlerts(Array.isArray(alertsData?.alerts) ? alertsData.alerts : []);
       } catch (err) {
         setDashboard(null);
         setHeatmap([]);
         setGraphSummary(null);
         setGraphPlaybook([]);
+        setSelectedConceptId('');
+        setConceptStudents(null);
         setAlerts([]);
         setError(err.message || 'Teacher analytics is unavailable right now.');
       } finally {
@@ -170,6 +185,36 @@ const ConceptAnalyticsPage = () => {
 
     fetchAnalytics();
   }, [activeClassId, apiUrl, token]);
+
+  useEffect(() => {
+    const fetchConceptStudents = async () => {
+      if (!token || !activeClassId || !selectedConceptId) {
+        setConceptStudents(null);
+        return;
+      }
+
+      try {
+        setIsLoadingConceptStudents(true);
+        const response = await fetch(
+          `${apiUrl}/teachers/classes/${activeClassId}/concepts/${encodeURIComponent(selectedConceptId)}/students`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (!response.ok) {
+          const detail = await response.json().catch(() => null);
+          throw new Error(detail?.detail || 'Failed to load concept student drilldown.');
+        }
+        const data = await response.json();
+        setConceptStudents(data || null);
+      } catch (err) {
+        setConceptStudents(null);
+        setError(err.message || 'Failed to load concept student drilldown.');
+      } finally {
+        setIsLoadingConceptStudents(false);
+      }
+    };
+
+    fetchConceptStudents();
+  }, [activeClassId, apiUrl, selectedConceptId, token]);
 
   const activeClass = useMemo(
     () => classes.find((item) => item.id === activeClassId) || null,
@@ -216,6 +261,41 @@ const ConceptAnalyticsPage = () => {
       setAssignmentStatus((current) => ({ ...current, [key]: { state: 'success', message: 'Assignment created for this class.' } }));
     } catch (err) {
       setAssignmentStatus((current) => ({ ...current, [key]: { state: 'error', message: err.message || 'Failed to create assignment.' } }));
+    }
+  };
+
+  const createStudentIntervention = async (student) => {
+    if (!activeClassId || !activeClass || !token || !conceptStudents) return;
+    const key = `${student.student_id}-${conceptStudents.concept_id}`;
+    try {
+      setInterventionStatus((current) => ({ ...current, [key]: { state: 'loading', message: 'Creating intervention...' } }));
+      const response = await fetch(`${apiUrl}/teachers/interventions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          class_id: activeClassId,
+          student_id: student.student_id,
+          intervention_type: 'support_plan',
+          severity: student.status === 'blocked' ? 'high' : 'medium',
+          subject: activeClass.subject,
+          sss_level: activeClass.sss_level,
+          term: activeClass.term,
+          notes: `Target ${student.student_name} on ${conceptStudents.concept_label}. ${student.recommended_action}`,
+          action_plan: student.blocking_prerequisite_labels?.length
+            ? `Repair prerequisite(s): ${student.blocking_prerequisite_labels.join(', ')} before reteaching ${conceptStudents.concept_label}.`
+            : `Run a focused checkpoint and follow-up practice on ${conceptStudents.concept_label}.`,
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.detail || 'Failed to create intervention.');
+      }
+      setInterventionStatus((current) => ({ ...current, [key]: { state: 'success', message: 'Intervention created.' } }));
+    } catch (err) {
+      setInterventionStatus((current) => ({ ...current, [key]: { state: 'error', message: err.message || 'Failed to create intervention.' } }));
     }
   };
 
@@ -330,7 +410,11 @@ const ConceptAnalyticsPage = () => {
                   </span>
                 </div>
 
-                <TeacherClassGraph graphSummary={graphSummary} />
+                <TeacherClassGraph
+                  graphSummary={graphSummary}
+                  selectedConceptId={selectedConceptId}
+                  onSelectNode={(node) => setSelectedConceptId(node?.concept_id || '')}
+                />
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -510,6 +594,101 @@ const ConceptAnalyticsPage = () => {
             </section>
 
             <section className="space-y-6">
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="flex items-center gap-2 text-lg font-bold text-slate-800">
+                  <UserRoundSearch className="h-5 w-5 text-indigo-500" />
+                  Students Driving This Node
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  Student-level mastery and prerequisite evidence for the currently selected concept graph node.
+                </p>
+
+                <div className="mt-6 space-y-3">
+                  {isLoadingConceptStudents ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-400">
+                      Loading student drilldown...
+                    </div>
+                  ) : !conceptStudents?.students?.length ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-400">
+                      Select a mapped node to inspect the affected students.
+                    </div>
+                  ) : (
+                    conceptStudents.students.slice(0, 8).map((student) => (
+                      <div key={student.student_id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-bold text-slate-900">{student.student_name}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {student.status.replace('_', ' ')} on {conceptStudents.concept_label}
+                            </p>
+                          </div>
+                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
+                            student.status === 'blocked'
+                              ? 'bg-amber-100 text-amber-700'
+                              : student.status === 'needs_attention'
+                                ? 'bg-indigo-100 text-indigo-700'
+                                : student.status === 'mastered'
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : 'bg-slate-200 text-slate-700'
+                          }`}>
+                            {student.status.replace('_', ' ')}
+                          </span>
+                        </div>
+
+                        <div className="mt-4 grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
+                          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                            <p className="font-black uppercase tracking-[0.16em] text-slate-400">Concept score</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-800">
+                              {student.concept_score == null ? 'Unassessed' : `${Math.round(Number(student.concept_score) * 100)}%`}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                            <p className="font-black uppercase tracking-[0.16em] text-slate-400">Overall mastery</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-800">
+                              {student.overall_mastery_score == null ? 'Unassessed' : `${Math.round(Number(student.overall_mastery_score) * 100)}%`}
+                            </p>
+                          </div>
+                        </div>
+
+                        {student.blocking_prerequisite_labels?.length ? (
+                          <p className="mt-3 text-xs leading-6 text-amber-700">
+                            Blocked by: {student.blocking_prerequisite_labels.join(', ')}
+                          </p>
+                        ) : null}
+
+                        <div className="mt-3 flex flex-wrap gap-3 text-[11px] font-medium text-slate-500">
+                          <span>{student.recent_activity_count_7d} activities in 7d</span>
+                          <span>{formatStudyTime(student.recent_study_time_seconds_7d)} study time</span>
+                        </div>
+                        <p className="mt-3 text-xs leading-6 text-slate-600">{student.recommended_action}</p>
+                        <div className="mt-4 flex flex-wrap items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => createStudentIntervention(student)}
+                            className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-white transition hover:bg-indigo-500"
+                          >
+                            Create intervention
+                          </button>
+                          {interventionStatus[`${student.student_id}-${conceptStudents.concept_id}`] ? (
+                            <span
+                              className={`text-xs font-semibold ${
+                                interventionStatus[`${student.student_id}-${conceptStudents.concept_id}`].state === 'error'
+                                  ? 'text-rose-600'
+                                  : interventionStatus[`${student.student_id}-${conceptStudents.concept_id}`].state === 'success'
+                                    ? 'text-emerald-600'
+                                    : 'text-slate-500'
+                              }`}
+                            >
+                              {interventionStatus[`${student.student_id}-${conceptStudents.concept_id}`].message}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <h2 className="flex items-center gap-2 text-lg font-bold text-slate-800">
                   <BookOpenCheck className="h-5 w-5 text-emerald-500" />
