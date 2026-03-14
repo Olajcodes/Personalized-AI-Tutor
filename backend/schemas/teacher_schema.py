@@ -258,6 +258,10 @@ class TeacherInterventionCreateIn(BaseModel):
     action_plan: str | None = Field(default=None, max_length=2000)
 
 
+class TeacherInterventionUpdateIn(BaseModel):
+    status: Literal["resolved", "dismissed"]
+
+
 class TeacherInterventionOut(BaseModel):
     id: UUID
     teacher_id: UUID

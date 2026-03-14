@@ -155,6 +155,32 @@ class TeacherRepository:
         self.db.refresh(row)
         return row
 
+    def get_teacher_intervention(self, *, teacher_id: UUID, intervention_id: UUID) -> TeacherIntervention | None:
+        return (
+            self.db.query(TeacherIntervention)
+            .filter(
+                TeacherIntervention.id == intervention_id,
+                TeacherIntervention.teacher_id == teacher_id,
+            )
+            .first()
+        )
+
+    def update_intervention_status(
+        self,
+        *,
+        intervention_id: UUID,
+        status: str,
+        resolved_at: datetime | None,
+    ) -> TeacherIntervention | None:
+        row = self.db.get(TeacherIntervention, intervention_id)
+        if not row:
+            return None
+        row.status = status
+        row.resolved_at = resolved_at
+        self.db.commit()
+        self.db.refresh(row)
+        return row
+
     def get_class_interventions(
         self,
         *,

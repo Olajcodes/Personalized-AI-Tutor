@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from sqlalchemy.exc import IntegrityError
 from uuid import UUID
 
@@ -13,6 +14,7 @@ from backend.schemas.teacher_schema import (
     TeacherClassListOut,
     TeacherClassOut,
     TeacherInterventionCreateIn,
+    TeacherInterventionUpdateIn,
     TeacherInterventionOut,
 )
 
@@ -257,4 +259,43 @@ class TeacherService:
             resolved_at=row.resolved_at,
             created_at=row.created_at,
             updated_at=row.updated_at,
+        )
+
+    def update_intervention(
+        self,
+        *,
+        teacher_id: UUID,
+        intervention_id: UUID,
+        payload: TeacherInterventionUpdateIn,
+    ) -> TeacherInterventionOut:
+        self._require_teacher_user(teacher_id)
+        row = self.repo.get_teacher_intervention(teacher_id=teacher_id, intervention_id=intervention_id)
+        if not row:
+            raise TeacherServiceNotFoundError("Intervention not found for this teacher.")
+
+        resolved_at = datetime.now(timezone.utc) if payload.status == "resolved" else None
+        updated = self.repo.update_intervention_status(
+            intervention_id=intervention_id,
+            status=payload.status,
+            resolved_at=resolved_at,
+        )
+        if not updated:
+            raise TeacherServiceNotFoundError("Intervention not found.")
+
+        return TeacherInterventionOut(
+            id=updated.id,
+            teacher_id=updated.teacher_id,
+            class_id=updated.class_id,
+            student_id=updated.student_id,
+            intervention_type=updated.intervention_type,
+            severity=updated.severity,
+            subject=updated.subject,
+            sss_level=updated.sss_level,
+            term=updated.term,
+            notes=updated.notes,
+            action_plan=updated.action_plan,
+            status=updated.status,
+            resolved_at=updated.resolved_at,
+            created_at=updated.created_at,
+            updated_at=updated.updated_at,
         )

@@ -29,6 +29,7 @@ from backend.schemas.teacher_schema import (
     TeacherClassOut,
     TeacherGraphPlaybookOut,
     TeacherInterventionCreateIn,
+    TeacherInterventionUpdateIn,
     TeacherInterventionOut,
     TeacherStudentTimelineOut,
 )
@@ -292,6 +293,28 @@ def create_intervention(
     """Create intervention notes/flags for at-risk students."""
     try:
         return _teacher_service(db).create_intervention(teacher_id=current_user.id, payload=payload)
+    except TeacherServiceUnauthorizedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except TeacherServiceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except TeacherServiceValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.patch("/interventions/{intervention_id}", response_model=TeacherInterventionOut)
+def update_intervention(
+    intervention_id: UUID,
+    payload: TeacherInterventionUpdateIn,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Resolve or dismiss a teacher intervention."""
+    try:
+        return _teacher_service(db).update_intervention(
+            teacher_id=current_user.id,
+            intervention_id=intervention_id,
+            payload=payload,
+        )
     except TeacherServiceUnauthorizedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except TeacherServiceNotFoundError as exc:

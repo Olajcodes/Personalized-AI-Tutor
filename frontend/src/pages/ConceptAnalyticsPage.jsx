@@ -85,6 +85,7 @@ const ConceptAnalyticsPage = () => {
   const [alerts, setAlerts] = useState([]);
   const [assignmentStatus, setAssignmentStatus] = useState({});
   const [interventionStatus, setInterventionStatus] = useState({});
+  const [interventionUpdateStatus, setInterventionUpdateStatus] = useState({});
   const [isLoadingClasses, setIsLoadingClasses] = useState(true);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [isLoadingConceptStudents, setIsLoadingConceptStudents] = useState(false);
@@ -347,6 +348,50 @@ const ConceptAnalyticsPage = () => {
       setInterventionStatus((current) => ({ ...current, [key]: { state: 'success', message: 'Intervention created.' } }));
     } catch (err) {
       setInterventionStatus((current) => ({ ...current, [key]: { state: 'error', message: err.message || 'Failed to create intervention.' } }));
+    }
+  };
+
+  const updateInterventionStatus = async (outcome, status) => {
+    if (!token) return;
+    const key = `${outcome.intervention_id}-${status}`;
+    try {
+      setInterventionUpdateStatus((current) => ({ ...current, [key]: { state: 'loading', message: `${status}...` } }));
+      const response = await fetch(`${apiUrl}/teachers/interventions/${outcome.intervention_id}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.detail || 'Failed to update intervention.');
+      }
+      const updated = await response.json();
+      setInterventionOutcomes((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          open_interventions: Math.max(
+            0,
+            current.open_interventions - (outcome.status === 'open' ? 1 : 0),
+          ),
+          outcomes: current.outcomes.map((item) =>
+            item.intervention_id === updated.id
+              ? {
+                  ...item,
+                  status: updated.status,
+                  created_at: item.created_at,
+                  resolved_at: updated.resolved_at,
+                }
+              : item
+          ),
+        };
+      });
+      setInterventionUpdateStatus((current) => ({ ...current, [key]: { state: 'success', message: `Marked ${status}.` } }));
+    } catch (err) {
+      setInterventionUpdateStatus((current) => ({ ...current, [key]: { state: 'error', message: err.message || 'Failed to update intervention.' } }));
     }
   };
 
@@ -801,6 +846,46 @@ const ConceptAnalyticsPage = () => {
                           <span>Net delta {Number(outcome.net_mastery_delta || 0).toFixed(2)}</span>
                           <span>{outcome.evidence_event_count} evidence event{outcome.evidence_event_count === 1 ? '' : 's'}</span>
                         </div>
+                        {outcome.status === 'open' ? (
+                          <div className="mt-4 flex flex-wrap items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => updateInterventionStatus(outcome, 'resolved')}
+                              className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-white transition hover:bg-emerald-500"
+                            >
+                              Resolve
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updateInterventionStatus(outcome, 'dismissed')}
+                              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-100"
+                            >
+                              Dismiss
+                            </button>
+                            {['resolved', 'dismissed'].map((statusKey) => {
+                              const state = interventionUpdateStatus[`${outcome.intervention_id}-${statusKey}`];
+                              if (!state) return null;
+                              return (
+                                <span
+                                  key={statusKey}
+                                  className={`text-xs font-semibold ${
+                                    state.state === 'error'
+                                      ? 'text-rose-600'
+                                      : state.state === 'success'
+                                        ? 'text-emerald-600'
+                                        : 'text-slate-500'
+                                  }`}
+                                >
+                                  {state.message}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="mt-4 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                            Intervention {outcome.status}
+                          </p>
+                        )}
                       </div>
                     ))
                   ) : (

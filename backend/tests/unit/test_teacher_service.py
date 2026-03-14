@@ -11,6 +11,7 @@ from backend.schemas.teacher_schema import (
     TeacherClassCreateIn,
     TeacherClassEnrollIn,
     TeacherInterventionCreateIn,
+    TeacherInterventionUpdateIn,
 )
 from backend.services.teacher_service import (
     TeacherService,
@@ -42,6 +43,7 @@ class FakeTeacherRepo:
             updated_at=datetime.now(timezone.utc),
         )
         self.active_students = {self.student_id}
+        self.intervention_id = uuid4()
 
     def get_user(self, user_id):
         return self.users.get(user_id)
@@ -106,7 +108,7 @@ class FakeTeacherRepo:
 
     def create_intervention(self, payload):
         return SimpleNamespace(
-            id=uuid4(),
+            id=self.intervention_id,
             teacher_id=payload["teacher_id"],
             class_id=payload.get("class_id"),
             student_id=payload["student_id"],
@@ -119,6 +121,46 @@ class FakeTeacherRepo:
             action_plan=payload.get("action_plan"),
             status="open",
             resolved_at=None,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+
+    def get_teacher_intervention(self, *, teacher_id, intervention_id):
+        if teacher_id != self.teacher_id or intervention_id != self.intervention_id:
+            return None
+        return SimpleNamespace(
+            id=self.intervention_id,
+            teacher_id=self.teacher_id,
+            class_id=self.class_id,
+            student_id=self.student_id,
+            intervention_type="note",
+            severity="medium",
+            subject="math",
+            sss_level="SSS2",
+            term=1,
+            notes="Needs extra support on linear equations.",
+            action_plan="Schedule one-on-one session.",
+            status="open",
+            resolved_at=None,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+
+    def update_intervention_status(self, *, intervention_id, status, resolved_at):
+        return SimpleNamespace(
+            id=intervention_id,
+            teacher_id=self.teacher_id,
+            class_id=self.class_id,
+            student_id=self.student_id,
+            intervention_type="note",
+            severity="medium",
+            subject="math",
+            sss_level="SSS2",
+            term=1,
+            notes="Needs extra support on linear equations.",
+            action_plan="Schedule one-on-one session.",
+            status=status,
+            resolved_at=resolved_at,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
         )
@@ -212,3 +254,17 @@ def test_teacher_service_create_class_requires_existing_teacher():
 
     with pytest.raises(TeacherServiceNotFoundError):
         service.create_class(teacher_id=uuid4(), payload=payload)
+
+
+def test_teacher_service_update_intervention_resolved():
+    repo = FakeTeacherRepo()
+    service = TeacherService(repo)
+
+    out = service.update_intervention(
+        teacher_id=repo.teacher_id,
+        intervention_id=repo.intervention_id,
+        payload=TeacherInterventionUpdateIn(status="resolved"),
+    )
+
+    assert out.status == "resolved"
+    assert out.resolved_at is not None

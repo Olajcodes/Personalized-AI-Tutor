@@ -96,6 +96,25 @@ def test_teachers_endpoints_success(monkeypatch):
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
 
+        def update_intervention(self, *, teacher_id, intervention_id, payload):
+            return {
+                "id": str(intervention_id),
+                "teacher_id": str(teacher_id),
+                "class_id": str(class_id),
+                "student_id": str(student_id),
+                "intervention_type": "note",
+                "severity": "medium",
+                "subject": "math",
+                "sss_level": "SSS2",
+                "term": 1,
+                "notes": "Needs extra help",
+                "action_plan": "Follow-up session",
+                "status": payload.status,
+                "resolved_at": datetime.now(timezone.utc).isoformat() if payload.status == "resolved" else None,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+
     class _AnalyticsService:
         def get_class_dashboard(self, *, teacher_id, class_id):
             return {
@@ -307,6 +326,10 @@ def test_teachers_endpoints_success(monkeypatch):
             "action_plan": "Follow-up session",
         },
     )
+    update_intervention_resp = client.patch(
+        f"/api/v1/teachers/interventions/{uuid4()}",
+        json={"status": "resolved"},
+    )
     delete_resp = client.delete(f"/api/v1/teachers/classes/{class_id}/enroll/{student_id}")
 
     app.dependency_overrides.clear()
@@ -324,6 +347,7 @@ def test_teachers_endpoints_success(monkeypatch):
     assert timeline_resp.status_code == 200
     assert assignment_resp.status_code == 201
     assert intervention_resp.status_code == 201
+    assert update_intervention_resp.status_code == 200
     assert delete_resp.status_code == 204
 
 
