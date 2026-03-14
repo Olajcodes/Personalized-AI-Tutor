@@ -15,7 +15,15 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CURRICULUM_ROOT = REPO_ROOT / "docs" / "Curriculum_in_json"
 
 
-def validate_curriculum_json_root(source_root: Path) -> dict[str, list[str] | int]:
+def _warning_detail(*, file_path: Path, message: str, suggestion: str) -> dict[str, str]:
+    return {
+        "file": str(file_path),
+        "message": message,
+        "suggestion": suggestion,
+    }
+
+
+def validate_curriculum_json_root(source_root: Path) -> dict[str, object]:
     root = source_root.expanduser().resolve()
     if not root.exists() or not root.is_dir():
         raise AdminCurriculumValidationError(f"source_root does not exist or is not a directory: {root}")
@@ -26,6 +34,7 @@ def validate_curriculum_json_root(source_root: Path) -> dict[str, list[str] | in
 
     errors: list[str] = []
     warnings: list[str] = []
+    warning_details: list[dict[str, str]] = []
     seen_scope_slug: dict[tuple[str, str, int, str], list[str]] = defaultdict(list)
 
     for file_path in json_files:
@@ -49,18 +58,53 @@ def validate_curriculum_json_root(source_root: Path) -> dict[str, list[str] | in
         keywords = list(payload.get("keywords") or [])
 
         if not learning_objectives:
-            warnings.append(f"{file_path}: missing learning_objectives")
+            message = "missing learning_objectives"
+            warnings.append(f"{file_path}: {message}")
+            warning_details.append(
+                _warning_detail(
+                    file_path=file_path,
+                    message=message,
+                    suggestion="Add 2 to 4 measurable learning objectives that state what the student should know or do after this topic.",
+                )
+            )
         if len(sections) < 2:
-            warnings.append(f"{file_path}: only {len(sections)} section(s); richer topic structure is preferred")
+            message = f"only {len(sections)} section(s); richer topic structure is preferred"
+            warnings.append(f"{file_path}: {message}")
+            warning_details.append(
+                _warning_detail(
+                    file_path=file_path,
+                    message=message,
+                    suggestion="Split the topic into at least 2 meaningful sections, for example explanation plus examples, or explanation plus practice.",
+                )
+            )
         if not keywords:
-            warnings.append(f"{file_path}: missing keywords")
+            message = "missing keywords"
+            warnings.append(f"{file_path}: {message}")
+            warning_details.append(
+                _warning_detail(
+                    file_path=file_path,
+                    message=message,
+                    suggestion="Add 5 to 10 topic-specific keywords so chunking, retrieval, and graph labeling stay grounded.",
+                )
+            )
 
         for section in sections:
             heading = str(section.get("heading") or "").strip()
             content = str(section.get("content") or "").strip()
             if len(content) < 60:
+                message = f"section '{heading or 'untitled'}' is very short ({len(content)} chars)"
                 warnings.append(
-                    f"{file_path}: section '{heading or 'untitled'}' is very short ({len(content)} chars)"
+                    f"{file_path}: {message}"
+                )
+                warning_details.append(
+                    _warning_detail(
+                        file_path=file_path,
+                        message=message,
+                        suggestion=(
+                            f"Expand '{heading or 'untitled'}' with a fuller explanation, worked examples, or practice items; "
+                            "otherwise merge it into a stronger neighboring section."
+                        ),
+                    )
                 )
 
     for scope_key, paths in seen_scope_slug.items():
@@ -77,6 +121,7 @@ def validate_curriculum_json_root(source_root: Path) -> dict[str, list[str] | in
         "warning_count": len(warnings),
         "errors": errors,
         "warnings": warnings,
+        "warning_details": warning_details,
     }
 
 
@@ -102,8 +147,14 @@ def main() -> int:
 
     if result["warnings"]:
         print("Warnings:")
-        for entry in result["warnings"]:
-            print(f"  - {entry}")
+        warning_details = result.get("warning_details") or []
+        if warning_details:
+            for item in warning_details:
+                print(f"  - {item['file']}: {item['message']}")
+                print(f"    suggestion: {item['suggestion']}")
+        else:
+            for entry in result["warnings"]:
+                print(f"  - {entry}")
 
     if result["errors"] or (args.strict_warnings and result["warnings"]):
         return 1

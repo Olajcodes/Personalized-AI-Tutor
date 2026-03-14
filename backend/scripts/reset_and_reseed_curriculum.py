@@ -98,10 +98,18 @@ def _validate_canonical_json_if_present(args: argparse.Namespace) -> None:
         f"files={result['file_count']}, errors={result['error_count']}, warnings={result['warning_count']}"
     )
     if result["warnings"]:
-        for entry in list(result["warnings"])[:10]:
-            print(f"    warning: {entry}")
-        if len(result["warnings"]) > 10:
-            print(f"    ... {len(result['warnings']) - 10} more warning(s)")
+        warning_details = list(result.get("warning_details") or [])
+        if warning_details:
+            for item in warning_details[:10]:
+                print(f"    warning: {item['file']}: {item['message']}")
+                print(f"      suggestion: {item['suggestion']}")
+            if len(warning_details) > 10:
+                print(f"    ... {len(warning_details) - 10} more warning(s)")
+        else:
+            for entry in list(result["warnings"])[:10]:
+                print(f"    warning: {entry}")
+            if len(result["warnings"]) > 10:
+                print(f"    ... {len(result['warnings']) - 10} more warning(s)")
     if result["errors"]:
         for entry in result["errors"]:
             print(f"    error: {entry}")

@@ -38,3 +38,30 @@ def test_validate_curriculum_json_root_flags_duplicate_topic_slugs(tmp_path):
 def test_validate_curriculum_json_root_requires_files(tmp_path):
     with pytest.raises(AdminCurriculumValidationError):
         validate_curriculum_json_root(tmp_path)
+
+
+def test_validate_curriculum_json_root_includes_fix_suggestions_for_warnings(tmp_path):
+    topic_payload = {
+        "subject": "civic",
+        "sss_level": "SSS1",
+        "term": 1,
+        "week": 2,
+        "topic_title": "Our Values",
+        "topic_slug": "our-values",
+        "source_title": "First Term SS1 Civic Education",
+        "learning_objectives": [],
+        "sections": [
+            {"heading": "Meaning", "content": "Too short."},
+        ],
+        "keywords": [],
+    }
+    _write_json(tmp_path / "topic_a.json", topic_payload)
+
+    result = validate_curriculum_json_root(tmp_path)
+
+    assert result["warning_count"] >= 3
+    warning_details = result["warning_details"]
+    assert warning_details
+    assert any("learning objectives" in item["suggestion"].lower() for item in warning_details)
+    assert any("split the topic" in item["suggestion"].lower() for item in warning_details)
+    assert any("expand" in item["suggestion"].lower() for item in warning_details)
