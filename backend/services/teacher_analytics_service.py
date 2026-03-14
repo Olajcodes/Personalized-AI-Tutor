@@ -14,6 +14,8 @@ from backend.schemas.teacher_schema import (
     TeacherConceptStudentOut,
     TeacherClassGraphOut,
     TeacherGraphEdgeOut,
+    TeacherInterventionOutcomeOut,
+    TeacherInterventionOutcomeSummaryOut,
     TeacherGraphPlaybookActionOut,
     TeacherGraphPlaybookOut,
     TeacherClassHeatmapOut,
@@ -38,6 +40,7 @@ LOW_MASTERY_THRESHOLD = 0.4
 LOW_MASTERY_HIGH_SEVERITY = 0.3
 GRAPH_MASTERY_THRESHOLD = 0.7
 GRAPH_WEAK_THRESHOLD = 0.5
+INTERVENTION_OUTCOME_WINDOW_DAYS = 21
 
 
 class TeacherAnalyticsService:
@@ -612,4 +615,103 @@ class TeacherAnalyticsService:
                 )
                 for item in timeline
             ],
+        )
+
+    def get_intervention_outcomes(self, *, teacher_id: UUID, class_id: UUID) -> TeacherInterventionOutcomeSummaryOut:
+        self._require_teacher_user(teacher_id)
+        teacher_class = self._require_teacher_class(teacher_id=teacher_id, class_id=class_id)
+
+        interventions = self.repo.get_class_interventions(
+            class_id=class_id,
+            subject=teacher_class.subject,
+            term=teacher_class.term,
+            limit=50,
+        )
+        if not interventions:
+            return TeacherInterventionOutcomeSummaryOut(class_id=class_id)
+
+        student_ids = sorted({row.student_id for row in interventions})
+        users = self.repo.get_users_by_ids(student_ids)
+        oldest_created_at = min((row.created_at for row in interventions), default=datetime.now(timezone.utc))
+        mastery_events = self.repo.get_mastery_events_for_students_since(
+            student_ids=student_ids,
+            subject=teacher_class.subject,
+            term=teacher_class.term,
+            since=oldest_created_at,
+        )
+        events_by_student: dict[UUID, list] = {}
+        for event in mastery_events:
+            events_by_student.setdefault(event.student_id, []).append(event)
+
+        outcomes: list[TeacherInterventionOutcomeOut] = []
+        for row in interventions:
+            window_end = row.created_at + timedelta(days=INTERVENTION_OUTCOME_WINDOW_DAYS)
+            candidate_events = [
+                event
+                for event in events_by_student.get(row.student_id, [])
+                if row.created_at <= event.created_at <= window_end
+            ]
+            net_delta = 0.0
+            for event in candidate_events:
+                for entry in list(event.new_mastery or []):
+                    net_delta += float(entry.get("delta", 0.0) or 0.0)
+
+            if not candidate_events:
+                outcome_status = "no_evidence"
+            elif net_delta > 0.05:
+                outcome_status = "improving"
+            elif net_delta < -0.02:
+                outcome_status = "declining"
+            else:
+                outcome_status = "flat"
+
+            user = users.get(row.student_id)
+            display_name = (
+                str(getattr(user, "display_name", "") or "").strip()
+                or " ".join(
+                    part
+                    for part in [
+                        str(getattr(user, "first_name", "") or "").strip(),
+                        str(getattr(user, "last_name", "") or "").strip(),
+                    ]
+                    if part
+                ).strip()
+                or str(getattr(user, "email", "") or "").strip()
+                or f"Student {str(row.student_id)[:8]}"
+            )
+            outcomes.append(
+                TeacherInterventionOutcomeOut(
+                    intervention_id=row.id,
+                    student_id=row.student_id,
+                    student_name=display_name,
+                    intervention_type=row.intervention_type,
+                    severity=row.severity,
+                    status=row.status,
+                    outcome_status=outcome_status,
+                    net_mastery_delta=round(net_delta, 4),
+                    evidence_event_count=len(candidate_events),
+                    created_at=row.created_at,
+                    latest_mastery_event_at=candidate_events[0].created_at if candidate_events else None,
+                    notes=row.notes,
+                    action_plan=row.action_plan,
+                )
+            )
+
+        outcomes.sort(
+            key=lambda item: (
+                {"declining": 0, "no_evidence": 1, "flat": 2, "improving": 3}[item.outcome_status],
+                {"high": 0, "medium": 1, "low": 2}[item.severity],
+                item.created_at,
+            )
+        )
+        evidence_outcomes = [item.net_mastery_delta for item in outcomes if item.evidence_event_count > 0]
+        return TeacherInterventionOutcomeSummaryOut(
+            class_id=class_id,
+            total_interventions=len(outcomes),
+            open_interventions=sum(1 for item in outcomes if item.status == "open"),
+            improving_interventions=sum(1 for item in outcomes if item.outcome_status == "improving"),
+            declining_interventions=sum(1 for item in outcomes if item.outcome_status == "declining"),
+            no_evidence_interventions=sum(1 for item in outcomes if item.outcome_status == "no_evidence"),
+            avg_net_mastery_delta=round(sum(evidence_outcomes) / len(evidence_outcomes), 4) if evidence_outcomes else 0.0,
+            outcomes=outcomes[:12],
         )

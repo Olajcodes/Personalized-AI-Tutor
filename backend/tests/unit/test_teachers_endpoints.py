@@ -200,6 +200,34 @@ def test_teachers_endpoints_success(monkeypatch):
         def get_class_alerts(self, *, teacher_id, class_id):
             return {"class_id": str(class_id), "alerts": []}
 
+        def get_intervention_outcomes(self, *, teacher_id, class_id):
+            return {
+                "class_id": str(class_id),
+                "total_interventions": 1,
+                "open_interventions": 1,
+                "improving_interventions": 1,
+                "declining_interventions": 0,
+                "no_evidence_interventions": 0,
+                "avg_net_mastery_delta": 0.12,
+                "outcomes": [
+                    {
+                        "intervention_id": str(uuid4()),
+                        "student_id": str(student_id),
+                        "student_name": "Student One",
+                        "intervention_type": "support_plan",
+                        "severity": "high",
+                        "status": "open",
+                        "outcome_status": "improving",
+                        "net_mastery_delta": 0.12,
+                        "evidence_event_count": 1,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                        "latest_mastery_event_at": datetime.now(timezone.utc).isoformat(),
+                        "notes": "Focused support on Fractions",
+                        "action_plan": "Repair Number Sense first",
+                    }
+                ],
+            }
+
         def get_concept_student_drilldown(self, *, teacher_id, class_id, concept_id):
             return {
                 "class_id": str(class_id),
@@ -247,6 +275,7 @@ def test_teachers_endpoints_success(monkeypatch):
     graph_resp = client.get(f"/api/v1/teachers/classes/{class_id}/graph-summary")
     playbook_resp = client.get(f"/api/v1/teachers/classes/{class_id}/graph-playbook")
     alerts_resp = client.get(f"/api/v1/teachers/classes/{class_id}/alerts")
+    outcomes_resp = client.get(f"/api/v1/teachers/classes/{class_id}/intervention-outcomes")
     concept_students_resp = client.get(f"/api/v1/teachers/classes/{class_id}/concepts/math:sss2:t1:fractions/students")
     timeline_resp = client.get(f"/api/v1/teachers/classes/{class_id}/students/{student_id}/timeline")
     assignment_resp = client.post(
@@ -290,6 +319,7 @@ def test_teachers_endpoints_success(monkeypatch):
     assert graph_resp.status_code == 200
     assert playbook_resp.status_code == 200
     assert alerts_resp.status_code == 200
+    assert outcomes_resp.status_code == 200
     assert concept_students_resp.status_code == 200
     assert timeline_resp.status_code == 200
     assert assignment_resp.status_code == 201

@@ -25,6 +25,7 @@ class FakeTeacherAnalyticsRepo:
             sss_level="SSS2",
             term=1,
         )
+        self.intervention_id = uuid4()
 
     def get_user(self, user_id):
         return self.users.get(user_id)
@@ -137,6 +138,31 @@ class FakeTeacherAnalyticsRepo:
             },
         ]
 
+    def get_class_interventions(self, *, class_id, subject, term, limit=50):
+        now = datetime.now(timezone.utc)
+        return [
+            SimpleNamespace(
+                id=self.intervention_id,
+                student_id=self.student_a,
+                intervention_type="support_plan",
+                severity="high",
+                status="open",
+                created_at=now - timedelta(days=3),
+                notes="Focused support on Fractions",
+                action_plan="Repair Number Sense first",
+            )
+        ]
+
+    def get_mastery_events_for_students_since(self, *, student_ids, subject, term, since):
+        now = datetime.now(timezone.utc)
+        return [
+            SimpleNamespace(
+                student_id=self.student_a,
+                created_at=now - timedelta(days=1),
+                new_mastery=[{"concept_id": "math:sss2:t1:fractions", "delta": 0.12}],
+            )
+        ]
+
 
 def test_teacher_analytics_dashboard_metrics():
     repo = FakeTeacherAnalyticsRepo()
@@ -214,6 +240,19 @@ def test_teacher_analytics_concept_student_drilldown_orders_students_by_risk():
     assert len(out.students) == 2
     assert out.students[0].status == "blocked"
     assert "Number Sense" in out.students[0].blocking_prerequisite_labels
+
+
+def test_teacher_analytics_intervention_outcomes_show_real_follow_through():
+    repo = FakeTeacherAnalyticsRepo()
+    service = TeacherAnalyticsService(repo)
+
+    out = service.get_intervention_outcomes(teacher_id=repo.teacher_id, class_id=repo.class_id)
+
+    assert out.class_id == repo.class_id
+    assert out.total_interventions == 1
+    assert out.improving_interventions == 1
+    assert out.outcomes[0].outcome_status == "improving"
+    assert out.outcomes[0].net_mastery_delta > 0
 
 
 def test_teacher_analytics_student_timeline_mapping():

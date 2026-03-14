@@ -155,6 +155,26 @@ class TeacherRepository:
         self.db.refresh(row)
         return row
 
+    def get_class_interventions(
+        self,
+        *,
+        class_id: UUID,
+        subject: str,
+        term: int,
+        limit: int = 50,
+    ) -> list[TeacherIntervention]:
+        return (
+            self.db.query(TeacherIntervention)
+            .filter(
+                TeacherIntervention.class_id == class_id,
+                TeacherIntervention.subject == subject,
+                TeacherIntervention.term == term,
+            )
+            .order_by(TeacherIntervention.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
     def get_active_student_ids(self, *, class_id: UUID) -> list[UUID]:
         rows = (
             self.db.query(ClassEnrollment.student_id)
@@ -471,3 +491,25 @@ class TeacherRepository:
 
         events.sort(key=lambda item: item["occurred_at"], reverse=True)
         return events[:limit]
+
+    def get_mastery_events_for_students_since(
+        self,
+        *,
+        student_ids: list[UUID],
+        subject: str,
+        term: int,
+        since: datetime,
+    ) -> list[MasteryUpdateEvent]:
+        if not student_ids:
+            return []
+        return (
+            self.db.query(MasteryUpdateEvent)
+            .filter(
+                MasteryUpdateEvent.student_id.in_(student_ids),
+                MasteryUpdateEvent.subject == subject,
+                MasteryUpdateEvent.term == term,
+                MasteryUpdateEvent.created_at >= since,
+            )
+            .order_by(MasteryUpdateEvent.created_at.desc())
+            .all()
+        )

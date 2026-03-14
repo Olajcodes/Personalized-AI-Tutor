@@ -24,6 +24,7 @@ from backend.schemas.teacher_schema import (
     TeacherClassEnrollIn,
     TeacherClassEnrollOut,
     TeacherClassHeatmapOut,
+    TeacherInterventionOutcomeSummaryOut,
     TeacherClassListOut,
     TeacherClassOut,
     TeacherGraphPlaybookOut,
@@ -202,6 +203,21 @@ def class_alerts(
     """Return inactivity/decline/prerequisite-failure alerts for class students."""
     try:
         return _analytics_service(db).get_class_alerts(teacher_id=current_user.id, class_id=class_id)
+    except TeacherServiceUnauthorizedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except TeacherServiceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+@router.get("/classes/{class_id}/intervention-outcomes", response_model=TeacherInterventionOutcomeSummaryOut)
+def class_intervention_outcomes(
+    class_id: UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return whether recent teacher interventions are followed by real mastery movement."""
+    try:
+        return _analytics_service(db).get_intervention_outcomes(teacher_id=current_user.id, class_id=class_id)
     except TeacherServiceUnauthorizedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except TeacherServiceNotFoundError as exc:

@@ -188,6 +188,33 @@ class TeacherStudentTimelineOut(BaseModel):
     timeline: list[TeacherTimelineEventOut]
 
 
+class TeacherInterventionOutcomeOut(BaseModel):
+    intervention_id: UUID
+    student_id: UUID
+    student_name: str
+    intervention_type: InterventionType
+    severity: Severity
+    status: Literal["open", "resolved", "dismissed"]
+    outcome_status: Literal["improving", "flat", "declining", "no_evidence"]
+    net_mastery_delta: float = 0.0
+    evidence_event_count: int = 0
+    created_at: datetime
+    latest_mastery_event_at: datetime | None = None
+    notes: str
+    action_plan: str | None = None
+
+
+class TeacherInterventionOutcomeSummaryOut(BaseModel):
+    class_id: UUID
+    total_interventions: int = 0
+    open_interventions: int = 0
+    improving_interventions: int = 0
+    declining_interventions: int = 0
+    no_evidence_interventions: int = 0
+    avg_net_mastery_delta: float = 0.0
+    outcomes: list[TeacherInterventionOutcomeOut] = Field(default_factory=list)
+
+
 class TeacherAssignmentCreateIn(BaseModel):
     class_id: UUID | None = None
     student_id: UUID | None = None

@@ -79,6 +79,7 @@ const ConceptAnalyticsPage = () => {
   const [graphPlaybook, setGraphPlaybook] = useState([]);
   const [selectedConceptId, setSelectedConceptId] = useState('');
   const [conceptStudents, setConceptStudents] = useState(null);
+  const [interventionOutcomes, setInterventionOutcomes] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [studentTimeline, setStudentTimeline] = useState([]);
   const [alerts, setAlerts] = useState([]);
@@ -133,6 +134,7 @@ const ConceptAnalyticsPage = () => {
         setGraphPlaybook([]);
         setSelectedConceptId('');
         setConceptStudents(null);
+        setInterventionOutcomes(null);
         setSelectedStudent(null);
         setStudentTimeline([]);
         setAlerts([]);
@@ -142,26 +144,28 @@ const ConceptAnalyticsPage = () => {
       try {
         setIsLoadingDetails(true);
         setError('');
-        const [dashboardRes, heatmapRes, graphRes, playbookRes, alertsRes] = await Promise.all([
+        const [dashboardRes, heatmapRes, graphRes, playbookRes, alertsRes, outcomesRes] = await Promise.all([
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/dashboard`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/heatmap`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/graph-summary`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/graph-playbook`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/alerts`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${apiUrl}/teachers/classes/${activeClassId}/intervention-outcomes`, { headers: { Authorization: `Bearer ${token}` } }),
         ]);
 
-        if (!dashboardRes.ok || !heatmapRes.ok || !graphRes.ok || !playbookRes.ok || !alertsRes.ok) {
-          const firstFailure = [dashboardRes, heatmapRes, graphRes, playbookRes, alertsRes].find((response) => !response.ok);
+        if (!dashboardRes.ok || !heatmapRes.ok || !graphRes.ok || !playbookRes.ok || !alertsRes.ok || !outcomesRes.ok) {
+          const firstFailure = [dashboardRes, heatmapRes, graphRes, playbookRes, alertsRes, outcomesRes].find((response) => !response.ok);
           const detail = await firstFailure.json().catch(() => null);
           throw new Error(detail?.detail || 'Failed to load teacher analytics.');
         }
 
-        const [dashboardData, heatmapData, graphData, playbookData, alertsData] = await Promise.all([
+        const [dashboardData, heatmapData, graphData, playbookData, alertsData, outcomesData] = await Promise.all([
           dashboardRes.json(),
           heatmapRes.json(),
           graphRes.json(),
           playbookRes.json(),
           alertsRes.json(),
+          outcomesRes.json(),
         ]);
 
         setDashboard(dashboardData);
@@ -174,6 +178,7 @@ const ConceptAnalyticsPage = () => {
             ''
         );
         setConceptStudents(null);
+        setInterventionOutcomes(outcomesData || null);
         setSelectedStudent(null);
         setStudentTimeline([]);
         setAlerts(Array.isArray(alertsData?.alerts) ? alertsData.alerts : []);
@@ -184,6 +189,7 @@ const ConceptAnalyticsPage = () => {
         setGraphPlaybook([]);
         setSelectedConceptId('');
         setConceptStudents(null);
+        setInterventionOutcomes(null);
         setSelectedStudent(null);
         setStudentTimeline([]);
         setAlerts([]);
@@ -737,6 +743,70 @@ const ConceptAnalyticsPage = () => {
                         </div>
                       </div>
                     ))
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="flex items-center gap-2 text-lg font-bold text-slate-800">
+                  <Flame className="h-5 w-5 text-rose-500" />
+                  Intervention Outcomes
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">Whether recent teacher interventions are followed by real mastery movement.</p>
+
+                <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Improving</p>
+                    <p className="mt-2 text-2xl font-black text-emerald-600">{interventionOutcomes?.improving_interventions ?? 0}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">No evidence</p>
+                    <p className="mt-2 text-2xl font-black text-amber-600">{interventionOutcomes?.no_evidence_interventions ?? 0}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Declining</p>
+                    <p className="mt-2 text-2xl font-black text-rose-600">{interventionOutcomes?.declining_interventions ?? 0}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Avg mastery delta</p>
+                    <p className="mt-2 text-2xl font-black text-slate-900">
+                      {Number(interventionOutcomes?.avg_net_mastery_delta || 0).toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6 space-y-3">
+                  {interventionOutcomes?.outcomes?.length ? (
+                    interventionOutcomes.outcomes.slice(0, 6).map((outcome) => (
+                      <div key={outcome.intervention_id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-bold text-slate-900">{outcome.student_name}</p>
+                            <p className="mt-1 text-xs text-slate-500">{outcome.intervention_type.replace('_', ' ')} • {outcome.status}</p>
+                          </div>
+                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
+                            outcome.outcome_status === 'improving'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : outcome.outcome_status === 'declining'
+                                ? 'bg-rose-100 text-rose-700'
+                                : outcome.outcome_status === 'no_evidence'
+                                  ? 'bg-amber-100 text-amber-700'
+                                  : 'bg-slate-200 text-slate-700'
+                          }`}>
+                            {outcome.outcome_status.replace('_', ' ')}
+                          </span>
+                        </div>
+                        <p className="mt-3 text-xs leading-6 text-slate-600">{outcome.notes}</p>
+                        <div className="mt-3 flex flex-wrap gap-3 text-[11px] font-medium text-slate-500">
+                          <span>Net delta {Number(outcome.net_mastery_delta || 0).toFixed(2)}</span>
+                          <span>{outcome.evidence_event_count} evidence event{outcome.evidence_event_count === 1 ? '' : 's'}</span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-400">
+                      No intervention outcomes are available for this class yet.
+                    </div>
                   )}
                 </div>
               </div>
