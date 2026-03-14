@@ -17,6 +17,8 @@ from backend.schemas.teacher_schema import (
     TeacherAlertsOut,
     TeacherAssignmentCreateIn,
     TeacherAssignmentOut,
+    TeacherBulkAssignmentCreateIn,
+    TeacherBulkAssignmentOut,
     TeacherBulkInterventionCreateIn,
     TeacherBulkInterventionOut,
     TeacherClassCreateIn,
@@ -310,6 +312,23 @@ def create_assignment(
     """Create a teacher assignment for class or student targets."""
     try:
         return _teacher_service(db).create_assignment(teacher_id=current_user.id, payload=payload)
+    except TeacherServiceUnauthorizedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except TeacherServiceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except TeacherServiceValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.post("/assignments/bulk", response_model=TeacherBulkAssignmentOut, status_code=status.HTTP_201_CREATED)
+def create_bulk_assignments(
+    payload: TeacherBulkAssignmentCreateIn,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Create the same assignment across multiple target students in one request."""
+    try:
+        return _teacher_service(db).create_bulk_assignments(teacher_id=current_user.id, payload=payload)
     except TeacherServiceUnauthorizedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except TeacherServiceNotFoundError as exc:

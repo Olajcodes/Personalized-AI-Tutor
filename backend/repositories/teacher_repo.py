@@ -148,6 +148,14 @@ class TeacherRepository:
         self.db.refresh(row)
         return row
 
+    def create_assignments(self, payloads: list[dict[str, Any]]) -> list[TeacherAssignment]:
+        rows = [TeacherAssignment(**payload) for payload in payloads]
+        self.db.add_all(rows)
+        self.db.commit()
+        for row in rows:
+            self.db.refresh(row)
+        return rows
+
     def create_intervention(self, payload: dict[str, Any]) -> TeacherIntervention:
         row = TeacherIntervention(**payload)
         self.db.add(row)

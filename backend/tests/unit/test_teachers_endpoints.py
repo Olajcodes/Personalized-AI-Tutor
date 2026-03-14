@@ -96,6 +96,13 @@ def test_teachers_endpoints_success(monkeypatch):
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
 
+        def create_bulk_assignments(self, *, teacher_id, payload):
+            return {
+                "created_count": len(payload.student_ids),
+                "student_ids": [str(item) for item in payload.student_ids],
+                "assignment_ids": [str(uuid4()) for _ in payload.student_ids],
+            }
+
         def create_bulk_interventions(self, *, teacher_id, payload):
             return {
                 "created_count": len(payload.student_ids),
@@ -400,6 +407,21 @@ def test_teachers_endpoints_success(monkeypatch):
             "due_at": None,
         },
     )
+    bulk_assignment_resp = client.post(
+        "/api/v1/teachers/assignments/bulk",
+        json={
+            "class_id": str(class_id),
+            "student_ids": [str(student_id)],
+            "assignment_type": "revision",
+            "ref_id": "fractions-repair-bulk",
+            "title": "Fractions Repair Pack",
+            "instructions": "Repair the prerequisite before reteaching Fractions.",
+            "subject": "math",
+            "sss_level": "SSS2",
+            "term": 1,
+            "due_at": None,
+        },
+    )
     intervention_resp = client.post(
         "/api/v1/teachers/interventions",
         json={
@@ -450,6 +472,7 @@ def test_teachers_endpoints_success(monkeypatch):
     assert concept_students_resp.status_code == 200
     assert timeline_resp.status_code == 200
     assert assignment_resp.status_code == 201
+    assert bulk_assignment_resp.status_code == 201
     assert intervention_resp.status_code == 201
     assert bulk_intervention_resp.status_code == 201
     assert update_intervention_resp.status_code == 200

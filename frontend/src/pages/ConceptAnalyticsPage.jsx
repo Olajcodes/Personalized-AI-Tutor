@@ -89,6 +89,7 @@ const ConceptAnalyticsPage = () => {
   const [interventionStatus, setInterventionStatus] = useState({});
   const [interventionUpdateStatus, setInterventionUpdateStatus] = useState({});
   const [bulkInterventionStatus, setBulkInterventionStatus] = useState(null);
+  const [bulkAssignmentStatus, setBulkAssignmentStatus] = useState(null);
   const [isLoadingClasses, setIsLoadingClasses] = useState(true);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [isLoadingConceptStudents, setIsLoadingConceptStudents] = useState(false);
@@ -220,6 +221,7 @@ const ConceptAnalyticsPage = () => {
     const fetchConceptStudents = async () => {
       if (!token || !activeClassId || !selectedConceptId) {
         setConceptStudents(null);
+        setBulkAssignmentStatus(null);
         setBulkInterventionStatus(null);
         setSelectedStudent(null);
         setStudentTimeline([]);
@@ -238,11 +240,13 @@ const ConceptAnalyticsPage = () => {
         }
         const data = await response.json();
         setConceptStudents(data || null);
+        setBulkAssignmentStatus(null);
         setBulkInterventionStatus(null);
         setSelectedStudent(null);
         setStudentTimeline([]);
       } catch (err) {
         setConceptStudents(null);
+        setBulkAssignmentStatus(null);
         setBulkInterventionStatus(null);
         setSelectedStudent(null);
         setStudentTimeline([]);
@@ -475,6 +479,51 @@ const ConceptAnalyticsPage = () => {
       });
     } catch (err) {
       setBulkInterventionStatus({ state: 'error', message: err.message || 'Failed to create bulk interventions.' });
+    }
+  };
+
+  const createBulkConceptAssignments = async () => {
+    if (!activeClassId || !activeClass || !token || !conceptStudents?.students?.length) return;
+    const targetStudents = conceptStudents.students.filter((student) =>
+      ['blocked', 'needs_attention'].includes(student.status),
+    );
+    if (targetStudents.length === 0) {
+      setBulkAssignmentStatus({ state: 'error', message: 'No blocked or weak students are available for a bulk assignment.' });
+      return;
+    }
+
+    try {
+      setBulkAssignmentStatus({ state: 'loading', message: 'Creating bulk assignment...' });
+      const response = await fetch(`${apiUrl}/teachers/assignments/bulk`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          class_id: activeClassId,
+          student_ids: targetStudents.map((student) => student.student_id),
+          assignment_type: 'revision',
+          ref_id: `${conceptStudents.concept_id}-repair-pack`,
+          title: `${conceptStudents.concept_label} Repair Pack`,
+          instructions: `Repair the blocker and revisit ${conceptStudents.concept_label}. Complete the follow-up questions after revision.`,
+          subject: activeClass.subject,
+          sss_level: activeClass.sss_level,
+          term: activeClass.term,
+          due_at: null,
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.detail || 'Failed to create bulk assignments.');
+      }
+      const data = await response.json();
+      setBulkAssignmentStatus({
+        state: 'success',
+        message: `Created ${data.created_count} revision assignments for ${conceptStudents.concept_label}.`,
+      });
+    } catch (err) {
+      setBulkAssignmentStatus({ state: 'error', message: err.message || 'Failed to create bulk assignments.' });
     }
   };
 
@@ -829,15 +878,37 @@ const ConceptAnalyticsPage = () => {
                     </p>
                   </div>
                   {conceptStudents?.students?.some((student) => ['blocked', 'needs_attention'].includes(student.status)) ? (
-                    <button
-                      type="button"
-                      onClick={createBulkConceptInterventions}
-                      className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-white transition hover:bg-slate-800"
-                    >
-                      Bulk support this node
-                    </button>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={createBulkConceptAssignments}
+                        className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-100"
+                      >
+                        Bulk repair assignment
+                      </button>
+                      <button
+                        type="button"
+                        onClick={createBulkConceptInterventions}
+                        className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-white transition hover:bg-slate-800"
+                      >
+                        Bulk support this node
+                      </button>
+                    </div>
                   ) : null}
                 </div>
+                {bulkAssignmentStatus ? (
+                  <p
+                    className={`mt-4 text-xs font-semibold ${
+                      bulkAssignmentStatus.state === 'error'
+                        ? 'text-rose-600'
+                        : bulkAssignmentStatus.state === 'success'
+                          ? 'text-emerald-600'
+                          : 'text-slate-500'
+                    }`}
+                  >
+                    {bulkAssignmentStatus.message}
+                  </p>
+                ) : null}
                 {bulkInterventionStatus ? (
                   <p
                     className={`mt-4 text-xs font-semibold ${

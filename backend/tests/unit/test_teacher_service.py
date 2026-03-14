@@ -8,6 +8,7 @@ import pytest
 
 from backend.schemas.teacher_schema import (
     TeacherAssignmentCreateIn,
+    TeacherBulkAssignmentCreateIn,
     TeacherBulkInterventionCreateIn,
     TeacherClassCreateIn,
     TeacherClassEnrollIn,
@@ -125,6 +126,30 @@ class FakeTeacherRepo:
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
         )
+
+    def create_assignments(self, payloads):
+        rows = []
+        for payload in payloads:
+            rows.append(
+                SimpleNamespace(
+                    id=uuid4(),
+                    teacher_id=payload["teacher_id"],
+                    class_id=payload.get("class_id"),
+                    student_id=payload.get("student_id"),
+                    assignment_type=payload["assignment_type"],
+                    ref_id=payload["ref_id"],
+                    title=payload["title"],
+                    instructions=payload["instructions"],
+                    subject=payload["subject"],
+                    sss_level=payload["sss_level"],
+                    term=payload["term"],
+                    due_at=payload["due_at"],
+                    status="assigned",
+                    created_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(timezone.utc),
+                )
+            )
+        return rows
 
     def create_interventions(self, payloads):
         rows = []
@@ -264,6 +289,33 @@ def test_teacher_service_create_intervention_success():
     assert out.student_id == repo.student_id
     assert out.intervention_type == "note"
     assert out.status == "open"
+
+
+def test_teacher_service_create_bulk_assignments_success():
+    repo = FakeTeacherRepo()
+    second_student_id = uuid4()
+    repo.users[second_student_id] = SimpleNamespace(id=second_student_id, role="student", is_active=True)
+    repo.active_students.add(second_student_id)
+    service = TeacherService(repo)
+
+    out = service.create_bulk_assignments(
+        teacher_id=repo.teacher_id,
+        payload=TeacherBulkAssignmentCreateIn(
+            class_id=repo.class_id,
+            student_ids=[repo.student_id, second_student_id],
+            assignment_type="revision",
+            ref_id="fractions-repair-bulk",
+            title="Fractions Repair Pack",
+            instructions="Repair the prerequisite before reteaching Fractions.",
+            subject="math",
+            sss_level="SSS2",
+            term=1,
+            due_at=None,
+        ),
+    )
+
+    assert out.created_count == 2
+    assert set(out.student_ids) == {repo.student_id, second_student_id}
 
 
 def test_teacher_service_create_class_requires_existing_teacher():

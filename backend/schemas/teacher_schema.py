@@ -310,6 +310,25 @@ class TeacherAssignmentOut(BaseModel):
     updated_at: datetime
 
 
+class TeacherBulkAssignmentCreateIn(BaseModel):
+    class_id: UUID | None = None
+    student_ids: list[UUID] = Field(min_length=1, max_length=500)
+    assignment_type: AssignmentType
+    ref_id: str = Field(min_length=1, max_length=255)
+    title: str = Field(min_length=1, max_length=255)
+    instructions: str | None = Field(default=None, max_length=2000)
+    subject: Subject
+    sss_level: SSSLevel
+    term: Literal[1, 2, 3]
+    due_at: datetime | None = None
+
+
+class TeacherBulkAssignmentOut(BaseModel):
+    created_count: int
+    student_ids: list[UUID]
+    assignment_ids: list[UUID]
+
+
 class TeacherInterventionCreateIn(BaseModel):
     class_id: UUID | None = None
     student_id: UUID
