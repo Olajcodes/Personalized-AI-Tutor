@@ -16,6 +16,11 @@ import {
 import { useAuth } from '../context/AuthContext';
 import TeacherClassGraph from '../components/teacher/TeacherClassGraph';
 
+const actionRefId = (action) => {
+  const raw = String(action?.target_topic_id || action?.target_concept_label || action?.title || 'graph-action').trim().toLowerCase();
+  return `graph-${String(action?.action_type || 'action').replace(/[^a-z0-9]+/gi, '-')}-${raw.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '')}`;
+};
+
 const humanizeConceptId = (conceptId, fallback = 'Concept') => {
   const value = String(conceptId || '').trim();
   if (!value) return fallback;
@@ -71,6 +76,7 @@ const ConceptAnalyticsPage = () => {
   const [graphSummary, setGraphSummary] = useState(null);
   const [graphPlaybook, setGraphPlaybook] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const [assignmentStatus, setAssignmentStatus] = useState({});
   const [isLoadingClasses, setIsLoadingClasses] = useState(true);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [error, setError] = useState('');
@@ -178,6 +184,40 @@ const ConceptAnalyticsPage = () => {
   const graphSignal = graphSummary?.graph_signal || null;
   const graphBlockers = Array.isArray(graphSummary?.weakest_blockers) ? graphSummary.weakest_blockers : [];
   const readyToPush = Array.isArray(graphSummary?.ready_to_push) ? graphSummary.ready_to_push : [];
+
+  const createSuggestedAssignment = async (action) => {
+    if (!activeClassId || !activeClass || !token) return;
+    const key = `${action.action_type}-${action.target_topic_id || action.target_concept_label || action.title}`;
+    try {
+      setAssignmentStatus((current) => ({ ...current, [key]: { state: 'loading', message: 'Creating assignment...' } }));
+      const response = await fetch(`${apiUrl}/teachers/assignments`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          class_id: activeClassId,
+          student_id: null,
+          assignment_type: action.suggested_assignment_type || 'revision',
+          ref_id: actionRefId(action),
+          title: action.title,
+          instructions: action.summary,
+          subject: activeClass.subject,
+          sss_level: activeClass.sss_level,
+          term: activeClass.term,
+          due_at: null,
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.detail || 'Failed to create assignment.');
+      }
+      setAssignmentStatus((current) => ({ ...current, [key]: { state: 'success', message: 'Assignment created for this class.' } }));
+    } catch (err) {
+      setAssignmentStatus((current) => ({ ...current, [key]: { state: 'error', message: err.message || 'Failed to create assignment.' } }));
+    }
+  };
 
   return (
     <main className="space-y-8 p-8">
@@ -344,6 +384,30 @@ const ConceptAnalyticsPage = () => {
                             </p>
                           </div>
                         </div>
+                        {action.suggested_assignment_type ? (
+                          <div className="mt-4 flex flex-wrap items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => createSuggestedAssignment(action)}
+                              className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-white transition hover:bg-slate-800"
+                            >
+                              Create {action.suggested_assignment_type}
+                            </button>
+                            {assignmentStatus[`${action.action_type}-${action.target_topic_id || action.target_concept_label || action.title}`] ? (
+                              <span
+                                className={`text-xs font-semibold ${
+                                  assignmentStatus[`${action.action_type}-${action.target_topic_id || action.target_concept_label || action.title}`].state === 'error'
+                                    ? 'text-rose-600'
+                                    : assignmentStatus[`${action.action_type}-${action.target_topic_id || action.target_concept_label || action.title}`].state === 'success'
+                                      ? 'text-emerald-600'
+                                      : 'text-slate-500'
+                                }`}
+                              >
+                                {assignmentStatus[`${action.action_type}-${action.target_topic_id || action.target_concept_label || action.title}`].message}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>
