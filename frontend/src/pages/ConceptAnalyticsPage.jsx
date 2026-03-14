@@ -662,12 +662,36 @@ const ConceptAnalyticsPage = () => {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard title="Students" value={dashboard?.total_students ?? 0} subtitle="Enrolled in this class" icon={Users} tone="indigo" />
-            <StatCard title="Active in 7 days" value={dashboard?.active_students_7d ?? 0} subtitle="Recent learning activity" icon={Flame} tone="amber" />
-            <StatCard title="Average mastery" value={`${Math.round(Number(dashboard?.avg_mastery_score || 0) * 100)}%`} subtitle="Across mapped concepts" icon={BookOpenCheck} tone="emerald" />
-            <StatCard title="Study time" value={formatStudyTime(dashboard?.avg_study_time_seconds_7d)} subtitle="Average in the last 7 days" icon={BarChart3} tone="slate" />
-          </div>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard title="Students" value={dashboard?.total_students ?? 0} subtitle="Enrolled in this class" icon={Users} tone="indigo" />
+          <StatCard title="Active in 7 days" value={dashboard?.active_students_7d ?? 0} subtitle="Recent learning activity" icon={Flame} tone="amber" />
+          <StatCard title="Average mastery" value={`${Math.round(Number(dashboard?.avg_mastery_score || 0) * 100)}%`} subtitle="Across mapped concepts" icon={BookOpenCheck} tone="emerald" />
+          <StatCard title="Study time" value={formatStudyTime(dashboard?.avg_study_time_seconds_7d)} subtitle="Average in the last 7 days" icon={BarChart3} tone="slate" />
+        </div>
+
+          {selectedStudent ? (
+            <section className="rounded-3xl border border-emerald-200 bg-[linear-gradient(135deg,#ecfdf5,_#ffffff)] p-5 shadow-sm">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
+                    <UserRoundSearch className="h-3.5 w-3.5" />
+                    Student focus
+                  </div>
+                  <h2 className="mt-3 text-xl font-black text-slate-900">{selectedStudent.student_name}</h2>
+                  <p className="mt-2 text-sm leading-7 text-slate-600">
+                    Intervention outcomes, assignment outcomes, and the focus drawer are currently narrowed to this student.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStudent(null)}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-100"
+                >
+                  Clear student focus
+                </button>
+              </div>
+            </section>
+          ) : null}
 
           {graphSignal && (
             <section className="rounded-3xl border border-indigo-200 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.18),_transparent_42%),linear-gradient(135deg,#ffffff,_#eef2ff)] p-6 shadow-sm">
