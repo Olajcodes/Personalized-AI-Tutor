@@ -72,3 +72,37 @@ def test_dashboard_bootstrap_returns_active_subject_and_course(monkeypatch):
     body = response.json()
     assert body["active_subject"] == "english"
     assert body["course_bootstrap"]["subject"] == "english"
+
+
+def test_dashboard_briefing_export_returns_student_path_story(monkeypatch):
+    student_id = uuid4()
+
+    monkeypatch.setattr(
+        "backend.endpoints.dashboard_learning.DashboardExperienceService.get_path_briefing_export",
+        lambda self, **kwargs: {
+            "export_kind": "student_path_briefing",
+            "student_id": str(student_id),
+            "subject": "english",
+            "sss_level": "SSS2",
+            "term": 2,
+            "title": "English learning path briefing",
+            "subtitle": "Graph-backed student summary.",
+            "generated_at": "2026-03-15T10:00:00+00:00",
+            "file_name": "english-learning-path-briefing.md",
+            "markdown": "# English learning path briefing",
+            "sections": [{"title": "Graph signal", "items": ["Repair main idea first."]}],
+        },
+    )
+
+    client = TestClient(app)
+    app.dependency_overrides[get_current_user] = _override_user(student_id)
+    response = client.get(
+        "/api/v1/learning/dashboard/briefing/export",
+        params={"student_id": str(student_id), "subject": "english"},
+    )
+
+    app.dependency_overrides.clear()
+    assert response.status_code == 200
+    body = response.json()
+    assert body["export_kind"] == "student_path_briefing"
+    assert body["subject"] == "english"

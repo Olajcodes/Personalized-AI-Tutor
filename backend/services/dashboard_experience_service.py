@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import time
+from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
 
@@ -14,7 +15,7 @@ from backend.core.database import SessionLocal
 from backend.core.telemetry import log_timed_event, now_ms
 from backend.models.student import StudentProfile, StudentSubject
 from backend.models.subject import Subject
-from backend.schemas.dashboard_schema import DashboardBootstrapOut
+from backend.schemas.dashboard_schema import DashboardBootstrapOut, StudentExportSectionOut, StudentPathBriefingOut
 from backend.services.course_experience_service import CourseExperienceService
 from backend.services.prewarm_job_service import PrewarmJobService
 
@@ -227,3 +228,101 @@ class DashboardExperienceService:
             failed_subjects=len(failed_subjects),
         )
         return output
+
+    @staticmethod
+    def _build_markdown(*, title: str, subtitle: str, sections: list[StudentExportSectionOut]) -> str:
+        lines = [f"# {title}", "", subtitle]
+        for section in sections:
+            lines.extend(["", f"## {section.title}"])
+            if not section.items:
+                lines.append("- No export-ready evidence yet.")
+                continue
+            lines.extend([f"- {item}" for item in section.items])
+        lines.append("")
+        return "\n".join(lines)
+
+    def get_path_briefing_export(
+        self,
+        *,
+        student_id: UUID,
+        subject: Literal["math", "english", "civic"] | None = None,
+    ) -> StudentPathBriefingOut:
+        bootstrap = self.bootstrap(student_id=student_id, subject=subject)
+        active_subject = bootstrap.active_subject
+        course = bootstrap.course_bootstrap
+        if active_subject is None or course is None:
+            raise DashboardExperienceError("Student graph path is unavailable for this scope.")
+
+        next_step = course.next_step
+        story = course.recommendation_story
+        recent = course.recent_evidence
+        timeline = list(course.intervention_timeline or [])
+        topics = list(course.topics or [])
+
+        ready_topics = [
+            topic.title
+            for topic in topics
+            if topic.status in {"ready", "current"}
+        ][:5]
+        blocked_topics = [
+            f"{topic.title}: {topic.graph_details or topic.lesson_unavailable_reason or 'Waiting on prerequisite mastery.'}"
+            for topic in topics
+            if topic.status == "locked"
+        ][:5]
+        timeline_items = [
+            f"{event.source_label}: {event.summary}"
+            for event in timeline[:5]
+        ]
+
+        sections = [
+            StudentExportSectionOut(
+                title="Graph signal",
+                items=[
+                    story.headline if story else (next_step.recommended_topic_title or next_step.recommended_concept_label or "Stay on your current graph path.") if next_step else "No graph recommendation is available yet.",
+                    story.supporting_reason if story else (next_step.reason if next_step else "Collect more evidence from lessons, checkpoints, or quizzes."),
+                ],
+            ),
+            StudentExportSectionOut(
+                title="Best next lesson",
+                items=[
+                    next_step.recommended_topic_title if next_step and next_step.recommended_topic_title else "No lesson has been recommended yet.",
+                    next_step.reason if next_step else "The graph needs more evidence before changing your route.",
+                ],
+            ),
+            StudentExportSectionOut(
+                title="Repair first",
+                items=(
+                    list(next_step.prereq_gap_labels)
+                    if next_step and next_step.prereq_gap_labels
+                    else blocked_topics
+                )[:5],
+            ),
+            StudentExportSectionOut(
+                title="Ready now",
+                items=ready_topics,
+            ),
+            StudentExportSectionOut(
+                title="Recent evidence",
+                items=timeline_items or ([recent.summary] if recent else []),
+            ),
+        ]
+
+        generated_at = datetime.now(timezone.utc).isoformat()
+        title = f"{active_subject.title()} learning path briefing"
+        subtitle = (
+            f"{bootstrap.sss_level} Term {bootstrap.term}. "
+            "Graph-backed student summary of next lesson, blockers, and recent evidence."
+        )
+
+        return StudentPathBriefingOut(
+            student_id=student_id,
+            subject=active_subject,
+            sss_level=bootstrap.sss_level,
+            term=bootstrap.term,
+            title=title,
+            subtitle=subtitle,
+            generated_at=generated_at,
+            file_name=f"{active_subject}-learning-path-briefing.md",
+            markdown=self._build_markdown(title=title, subtitle=subtitle, sections=sections),
+            sections=sections,
+        )

@@ -72,3 +72,52 @@ def test_dashboard_bootstrap_uses_cache_and_invalidation(monkeypatch):
     assert calls["course"] == 2
     assert third.active_subject == "english"
     assert third.warmed_subjects == ["math"]
+
+
+def test_dashboard_path_briefing_export_uses_live_course_bootstrap(monkeypatch):
+    student_id = uuid4()
+    service = DashboardExperienceService(db=SimpleNamespace())
+
+    monkeypatch.setattr(
+        service,
+        "bootstrap",
+        lambda **kwargs: SimpleNamespace(
+            student_id=student_id,
+            sss_level="SSS2",
+            term=2,
+            active_subject="english",
+            course_bootstrap=SimpleNamespace(
+                next_step=SimpleNamespace(
+                    recommended_topic_title="Comprehension Skills",
+                    recommended_concept_label="Inference",
+                    reason="Your latest checkpoint shows inference is the next best move.",
+                    prereq_gap_labels=["Main Idea"],
+                ),
+                recommendation_story=SimpleNamespace(
+                    headline="Repair main idea before moving deeper into inference.",
+                    supporting_reason="The graph found a prerequisite gap on Main Idea after your latest checkpoint.",
+                ),
+                recent_evidence=SimpleNamespace(
+                    summary="Checkpoint evidence shows inference dropped after the last lesson.",
+                ),
+                intervention_timeline=[
+                    SimpleNamespace(
+                        source_label="Checkpoint",
+                        summary="You missed the last inference checkpoint.",
+                    )
+                ],
+                topics=[
+                    SimpleNamespace(title="Comprehension Skills", status="ready", graph_details="Ready from graph."),
+                    SimpleNamespace(title="Reading for Main Idea", status="locked", graph_details="Blocked by Main Idea."),
+                ],
+            ),
+        ),
+    )
+
+    out = service.get_path_briefing_export(student_id=student_id, subject="english")
+
+    assert out.export_kind == "student_path_briefing"
+    assert out.subject == "english"
+    assert out.title == "English learning path briefing"
+    assert any(section.title == "Graph signal" for section in out.sections)
+    assert "Repair main idea before moving deeper into inference." in out.markdown

@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Brain,
+  ClipboardList,
   GitBranch,
   Loader2,
   Lock,
@@ -230,6 +231,16 @@ export default function GraphPathPage() {
                 {subject}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => navigate(activeSubject ? `/graph-briefing?subject=${encodeURIComponent(activeSubject)}` : '/graph-briefing')}
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+            >
+              <span className="inline-flex items-center gap-2">
+                <ClipboardList className="h-4 w-4" />
+                Briefing
+              </span>
+            </button>
           </div>
         </div>
 
