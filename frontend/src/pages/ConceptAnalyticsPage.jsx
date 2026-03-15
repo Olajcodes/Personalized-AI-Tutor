@@ -81,7 +81,9 @@ const ConceptAnalyticsPage = () => {
   const [graphPlaybook, setGraphPlaybook] = useState([]);
   const [nextClusterPlan, setNextClusterPlan] = useState(null);
   const [selectedConceptId, setSelectedConceptId] = useState('');
+  const [compareConceptId, setCompareConceptId] = useState('');
   const [conceptStudents, setConceptStudents] = useState(null);
+  const [conceptCompare, setConceptCompare] = useState(null);
   const [interventionOutcomes, setInterventionOutcomes] = useState(null);
   const [assignmentOutcomes, setAssignmentOutcomes] = useState(null);
   const [repeatRisk, setRepeatRisk] = useState(null);
@@ -99,6 +101,7 @@ const ConceptAnalyticsPage = () => {
   const [isLoadingClasses, setIsLoadingClasses] = useState(true);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [isLoadingConceptStudents, setIsLoadingConceptStudents] = useState(false);
+  const [isLoadingConceptCompare, setIsLoadingConceptCompare] = useState(false);
   const [isLoadingStudentTimeline, setIsLoadingStudentTimeline] = useState(false);
   const [isLoadingStudentConceptTrend, setIsLoadingStudentConceptTrend] = useState(false);
   const [error, setError] = useState('');
@@ -203,7 +206,9 @@ const ConceptAnalyticsPage = () => {
             graphData?.nodes?.[0]?.concept_id ||
             ''
         );
+        setCompareConceptId('');
         setConceptStudents(null);
+        setConceptCompare(null);
         setInterventionOutcomes(outcomesData || null);
         setAssignmentOutcomes(assignmentOutcomesData || null);
         setRepeatRisk(repeatRiskData || null);
@@ -219,7 +224,9 @@ const ConceptAnalyticsPage = () => {
         setGraphPlaybook([]);
         setNextClusterPlan(null);
         setSelectedConceptId('');
+        setCompareConceptId('');
         setConceptStudents(null);
+        setConceptCompare(null);
         setInterventionOutcomes(null);
         setAssignmentOutcomes(null);
         setRepeatRisk(null);
@@ -236,6 +243,18 @@ const ConceptAnalyticsPage = () => {
 
     fetchAnalytics();
   }, [activeClassId, apiUrl, token]);
+
+  useEffect(() => {
+    const nodes = Array.isArray(graphSummary?.nodes) ? graphSummary.nodes : [];
+    if (!nodes.length || !selectedConceptId) {
+      setCompareConceptId('');
+      return;
+    }
+    if (compareConceptId && compareConceptId !== selectedConceptId && nodes.some((node) => node.concept_id === compareConceptId)) {
+      return;
+    }
+    setCompareConceptId(nodes.find((node) => node.concept_id !== selectedConceptId)?.concept_id || '');
+  }, [compareConceptId, graphSummary?.nodes, selectedConceptId]);
 
   useEffect(() => {
     const fetchConceptStudents = async () => {
@@ -281,6 +300,36 @@ const ConceptAnalyticsPage = () => {
 
     fetchConceptStudents();
   }, [activeClassId, apiUrl, selectedConceptId, token]);
+
+  useEffect(() => {
+    const fetchConceptCompare = async () => {
+      if (!token || !activeClassId || !selectedConceptId || !compareConceptId || selectedConceptId === compareConceptId) {
+        setConceptCompare(null);
+        return;
+      }
+
+      try {
+        setIsLoadingConceptCompare(true);
+        const response = await fetch(
+          `${apiUrl}/teachers/classes/${activeClassId}/concept-compare?left_concept_id=${encodeURIComponent(selectedConceptId)}&right_concept_id=${encodeURIComponent(compareConceptId)}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (!response.ok) {
+          const detail = await response.json().catch(() => null);
+          throw new Error(detail?.detail || 'Failed to load concept comparison.');
+        }
+        const data = await response.json();
+        setConceptCompare(data || null);
+      } catch (err) {
+        setConceptCompare(null);
+        setError(err.message || 'Failed to load concept comparison.');
+      } finally {
+        setIsLoadingConceptCompare(false);
+      }
+    };
+
+    fetchConceptCompare();
+  }, [activeClassId, apiUrl, compareConceptId, selectedConceptId, token]);
 
   useEffect(() => {
     const fetchStudentTimeline = async () => {
@@ -384,6 +433,14 @@ const ConceptAnalyticsPage = () => {
     () => [...heatmap].sort((a, b) => Number(a.avg_score || 0) - Number(b.avg_score || 0)).slice(0, 8),
     [heatmap],
   );
+  const compareOptions = useMemo(() => {
+    const nodes = Array.isArray(graphSummary?.nodes) ? graphSummary.nodes : [];
+    return nodes.map((node) => ({
+      value: node.concept_id,
+      label: node.concept_label || humanizeConceptId(node.concept_id),
+      status: node.status,
+    }));
+  }, [graphSummary?.nodes]);
 
   const graphMetrics = graphSummary?.metrics || null;
   const graphSignal = graphSummary?.graph_signal || null;
@@ -1610,6 +1667,196 @@ const ConceptAnalyticsPage = () => {
                       </tbody>
                     </table>
                   </div>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <h2 className="flex items-center gap-2 text-lg font-bold text-slate-800">
+                      <BarChart3 className="h-5 w-5 text-violet-500" />
+                      Compare Two Concepts
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Compare two mapped graph concepts across the same class roster and see which one is the stronger blocker.
+                    </p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="flex flex-col gap-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">
+                      Focus concept
+                      <select
+                        value={selectedConceptId}
+                        onChange={(event) => setSelectedConceptId(event.target.value)}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-700"
+                      >
+                        {compareOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">
+                      Compare against
+                      <select
+                        value={compareConceptId}
+                        onChange={(event) => setCompareConceptId(event.target.value)}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-700"
+                      >
+                        {compareOptions
+                          .filter((option) => option.value !== selectedConceptId)
+                          .map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                  </div>
+                </div>
+
+                {isLoadingConceptCompare ? (
+                  <div className="mt-6 flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-500">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Comparing graph evidence...
+                  </div>
+                ) : !conceptCompare ? (
+                  <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-400">
+                    Select two different mapped concepts to compare their class impact.
+                  </div>
+                ) : (
+                  <>
+                    <div className="mt-6 grid gap-4 lg:grid-cols-[1.2fr_1fr_1fr]">
+                      <div className="rounded-2xl border border-violet-100 bg-violet-50 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-500">Recommendation</p>
+                        <p className="mt-2 text-lg font-black text-slate-900">{conceptCompare.summary.headline}</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-600">{conceptCompare.summary.rationale}</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{conceptCompare.left.concept_label}</p>
+                        <p className="mt-2 text-2xl font-black text-slate-900">
+                          {conceptCompare.summary.avg_left_score == null ? 'Unassessed' : `${Math.round(Number(conceptCompare.summary.avg_left_score) * 100)}%`}
+                        </p>
+                        <p className="mt-2 text-xs font-semibold text-slate-500">{conceptCompare.summary.left_weaker_count} students weaker here</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{conceptCompare.right.concept_label}</p>
+                        <p className="mt-2 text-2xl font-black text-slate-900">
+                          {conceptCompare.summary.avg_right_score == null ? 'Unassessed' : `${Math.round(Number(conceptCompare.summary.avg_right_score) * 100)}%`}
+                        </p>
+                        <p className="mt-2 text-xs font-semibold text-slate-500">{conceptCompare.summary.right_weaker_count} students weaker here</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-4">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Students compared</p>
+                        <p className="mt-2 text-2xl font-black text-slate-900">{conceptCompare.summary.students_compared}</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Both blocked</p>
+                        <p className="mt-2 text-2xl font-black text-rose-600">{conceptCompare.summary.both_blocked_count}</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Left weaker</p>
+                        <p className="mt-2 text-2xl font-black text-amber-600">{conceptCompare.summary.left_weaker_count}</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Right weaker</p>
+                        <p className="mt-2 text-2xl font-black text-indigo-600">{conceptCompare.summary.right_weaker_count}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200">
+                      <table className="min-w-full divide-y divide-slate-200">
+                        <thead className="bg-slate-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Student</th>
+                            <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">{conceptCompare.left.concept_label}</th>
+                            <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">{conceptCompare.right.concept_label}</th>
+                            <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Signal</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          {conceptCompare.students.map((student) => (
+                            <tr key={student.student_id}>
+                              <td className="px-4 py-4 align-top">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedStudent({
+                                    student_id: student.student_id,
+                                    student_name: student.student_name,
+                                    concept_score: student.left.concept_score,
+                                    overall_mastery_score: student.overall_mastery_score,
+                                    status: student.left.status,
+                                    blocking_prerequisite_labels: student.left.blocking_prerequisite_labels,
+                                    recent_activity_count_7d: student.recent_activity_count_7d,
+                                    recent_study_time_seconds_7d: student.recent_study_time_seconds_7d,
+                                    recommended_action: student.comparison_signal === 'right_weaker'
+                                      ? `Focus ${conceptCompare.right.concept_label} before ${conceptCompare.left.concept_label}.`
+                                      : student.comparison_signal === 'both_ready'
+                                        ? `This student is ready across both compared concepts.`
+                                        : `Focus ${conceptCompare.left.concept_label} before ${conceptCompare.right.concept_label}.`,
+                                    last_evaluated_at: null,
+                                  })}
+                                  className="text-left"
+                                >
+                                  <p className="text-sm font-bold text-slate-900 transition hover:text-indigo-600">{student.student_name}</p>
+                                  <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                                    Overall {student.overall_mastery_score == null ? 'Unassessed' : `${Math.round(Number(student.overall_mastery_score) * 100)}%`}
+                                  </p>
+                                </button>
+                              </td>
+                              <td className="px-4 py-4 align-top">
+                                <p className="text-sm font-bold text-slate-900">
+                                  {student.left.concept_score == null ? 'Unassessed' : `${Math.round(Number(student.left.concept_score) * 100)}%`}
+                                </p>
+                                <p className="mt-1 text-[11px] font-semibold text-slate-500">{student.left.status.replace('_', ' ')}</p>
+                                {student.left.blocking_prerequisite_labels.length ? (
+                                  <p className="mt-2 text-[11px] text-amber-700">Blocked by {student.left.blocking_prerequisite_labels.join(', ')}</p>
+                                ) : null}
+                              </td>
+                              <td className="px-4 py-4 align-top">
+                                <p className="text-sm font-bold text-slate-900">
+                                  {student.right.concept_score == null ? 'Unassessed' : `${Math.round(Number(student.right.concept_score) * 100)}%`}
+                                </p>
+                                <p className="mt-1 text-[11px] font-semibold text-slate-500">{student.right.status.replace('_', ' ')}</p>
+                                {student.right.blocking_prerequisite_labels.length ? (
+                                  <p className="mt-2 text-[11px] text-amber-700">Blocked by {student.right.blocking_prerequisite_labels.join(', ')}</p>
+                                ) : null}
+                              </td>
+                              <td className="px-4 py-4 align-top">
+                                <span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                  student.comparison_signal === 'both_blocked'
+                                    ? 'bg-rose-100 text-rose-700'
+                                    : student.comparison_signal === 'left_weaker'
+                                      ? 'bg-amber-100 text-amber-700'
+                                      : student.comparison_signal === 'right_weaker'
+                                        ? 'bg-indigo-100 text-indigo-700'
+                                        : student.comparison_signal === 'both_ready'
+                                          ? 'bg-emerald-100 text-emerald-700'
+                                          : 'bg-slate-200 text-slate-700'
+                                }`}>
+                                  {student.comparison_signal.replace('_', ' ')}
+                                </span>
+                                <p className="mt-2 text-[11px] font-medium text-slate-500">
+                                  {student.comparison_signal === 'left_weaker'
+                                    ? `${conceptCompare.left.concept_label} needs attention first.`
+                                    : student.comparison_signal === 'right_weaker'
+                                      ? `${conceptCompare.right.concept_label} needs attention first.`
+                                      : student.comparison_signal === 'both_blocked'
+                                        ? 'Both concepts are blocked and need sequencing support.'
+                                        : student.comparison_signal === 'both_ready'
+                                          ? 'This student is ready across both compared concepts.'
+                                          : 'Use the scores and blockers to decide the best next support move.'}
+                                </p>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
                 )}
               </div>
 

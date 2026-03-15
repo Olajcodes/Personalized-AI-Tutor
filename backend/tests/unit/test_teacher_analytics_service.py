@@ -377,6 +377,25 @@ def test_teacher_risk_matrix_returns_student_vs_concept_view():
     assert any(cell.status in {"blocked", "needs_attention"} for cell in out.students[0].cells)
 
 
+def test_teacher_concept_compare_surfaces_the_stronger_blocker():
+    repo = FakeTeacherAnalyticsRepo()
+    service = TeacherAnalyticsService(repo)
+
+    out = service.get_concept_compare(
+        teacher_id=repo.teacher_id,
+        class_id=repo.class_id,
+        left_concept_id="math:sss2:t1:fractions",
+        right_concept_id="math:sss2:t1:ratio",
+    )
+
+    assert out.class_id == repo.class_id
+    assert out.left.concept_label == "Fractions"
+    assert out.right.concept_label == "Ratio"
+    assert out.summary.students_compared == 2
+    assert out.summary.recommended_focus_side == "left"
+    assert out.students[0].comparison_signal in {"both_blocked", "left_weaker"}
+
+
 def test_teacher_analytics_student_timeline_mapping():
     repo = FakeTeacherAnalyticsRepo()
     service = TeacherAnalyticsService(repo)

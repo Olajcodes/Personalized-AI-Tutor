@@ -14,6 +14,11 @@ from backend.schemas.teacher_schema import (
     TeacherClassDashboardOut,
     TeacherConceptStudentDrilldownOut,
     TeacherConceptStudentOut,
+    TeacherConceptCompareOut,
+    TeacherConceptCompareSelectionOut,
+    TeacherConceptCompareStudentOut,
+    TeacherConceptCompareStudentSideOut,
+    TeacherConceptCompareSummaryOut,
     TeacherConceptTrendEventOut,
     TeacherConceptTrendSnapshotOut,
     TeacherExportOut,
@@ -45,6 +50,7 @@ from backend.schemas.teacher_schema import (
 from backend.services.teacher_service import (
     TeacherServiceNotFoundError,
     TeacherServiceUnauthorizedError,
+    TeacherServiceValidationError,
 )
 
 
@@ -1725,4 +1731,254 @@ class TeacherAnalyticsService:
                 for node in selected_nodes
             ],
             students=matrix_students[:8],
+        )
+
+    def get_concept_compare(
+        self,
+        *,
+        teacher_id: UUID,
+        class_id: UUID,
+        left_concept_id: str,
+        right_concept_id: str,
+    ) -> TeacherConceptCompareOut:
+        self._require_teacher_user(teacher_id)
+        teacher_class = self._require_teacher_class(teacher_id=teacher_id, class_id=class_id)
+
+        left_concept_id = str(left_concept_id or "").strip()
+        right_concept_id = str(right_concept_id or "").strip()
+        if not left_concept_id or not right_concept_id:
+            raise TeacherServiceValidationError("Both concept IDs are required for concept comparison.")
+        if left_concept_id == right_concept_id:
+            raise TeacherServiceValidationError("Choose two different concepts to compare.")
+
+        graph = self.get_class_graph_summary(teacher_id=teacher_id, class_id=class_id)
+        node_by_id = {node.concept_id: node for node in graph.nodes}
+        left_node = node_by_id.get(left_concept_id)
+        right_node = node_by_id.get(right_concept_id)
+        if not left_node or not right_node:
+            raise TeacherServiceNotFoundError("One or both concept nodes are not mapped in this class scope.")
+
+        scope_rows = self.repo.get_scope_concept_rows(
+            subject=teacher_class.subject,
+            sss_level=teacher_class.sss_level,
+            term=teacher_class.term,
+        )
+        concept_rows_by_id = {
+            str(row["concept_id"]): row
+            for row in scope_rows
+            if str(row.get("concept_id") or "").strip()
+        }
+        left_row = concept_rows_by_id.get(left_concept_id)
+        right_row = concept_rows_by_id.get(right_concept_id)
+        if not left_row or not right_row:
+            raise TeacherServiceNotFoundError("One or both compared concepts are missing curriculum mappings.")
+
+        needed_concepts = {
+            left_concept_id,
+            right_concept_id,
+            *list(left_row.get("prereq_concept_ids") or []),
+            *list(right_row.get("prereq_concept_ids") or []),
+        }
+        student_ids = self.repo.get_active_student_ids(class_id=class_id)
+        if not student_ids:
+            return TeacherConceptCompareOut(
+                class_id=class_id,
+                left=TeacherConceptCompareSelectionOut(
+                    concept_id=left_node.concept_id,
+                    concept_label=left_node.concept_label,
+                    topic_id=left_node.topic_id,
+                    topic_title=left_node.topic_title,
+                    status=left_node.status,
+                    avg_score=left_node.avg_score,
+                    student_count=left_node.student_count,
+                    blocking_prerequisite_labels=list(left_node.blocking_prerequisite_labels or []),
+                ),
+                right=TeacherConceptCompareSelectionOut(
+                    concept_id=right_node.concept_id,
+                    concept_label=right_node.concept_label,
+                    topic_id=right_node.topic_id,
+                    topic_title=right_node.topic_title,
+                    status=right_node.status,
+                    avg_score=right_node.avg_score,
+                    student_count=right_node.student_count,
+                    blocking_prerequisite_labels=list(right_node.blocking_prerequisite_labels or []),
+                ),
+                summary=TeacherConceptCompareSummaryOut(
+                    headline=f"Compare {left_node.concept_label} and {right_node.concept_label} once the class has evidence.",
+                    rationale="There are no active students in this class yet, so the concept comparison is still empty.",
+                    recommended_focus_side="tie",
+                ),
+                students=[],
+            )
+
+        users = self.repo.get_users_by_ids(student_ids)
+        overall_scores = self.repo.get_avg_mastery_by_student(
+            class_id=class_id,
+            subject=teacher_class.subject,
+            term=teacher_class.term,
+        )
+        activity_stats = self.repo.get_recent_activity_stats(
+            class_id=class_id,
+            subject=teacher_class.subject,
+            term=teacher_class.term,
+            since=datetime.now(timezone.utc) - timedelta(days=INACTIVITY_DAYS),
+        )
+        concept_rows = self.repo.get_student_concept_rows(
+            class_id=class_id,
+            subject=teacher_class.subject,
+            term=teacher_class.term,
+            concept_ids=sorted(needed_concepts),
+        )
+        scores_by_student: dict[UUID, dict[str, dict]] = {}
+        for row in concept_rows:
+            scores_by_student.setdefault(row["student_id"], {})[row["concept_id"]] = row
+
+        def _build_side(*, student_id: UUID, concept_id: str, row: dict, node: TeacherGraphConceptNodeOut) -> TeacherConceptCompareStudentSideOut:
+            concept_row = scores_by_student.get(student_id, {}).get(concept_id)
+            concept_score = float(concept_row["mastery_score"]) if concept_row else None
+            prereq_labels: list[str] = []
+            for prereq_id in list(row.get("prereq_concept_ids") or []):
+                prereq_row = scores_by_student.get(student_id, {}).get(prereq_id)
+                prereq_score = float(prereq_row["mastery_score"]) if prereq_row else 0.0
+                if prereq_score < GRAPH_MASTERY_THRESHOLD:
+                    prereq_labels.append(
+                        self._readable_concept_label(
+                            prereq_id,
+                            fallback=concept_rows_by_id.get(prereq_id, {}).get("topic_title"),
+                        )
+                    )
+            status, _ = self._classify_concept_status(
+                concept_score=concept_score,
+                blocking_prerequisite_labels=prereq_labels,
+            )
+            return TeacherConceptCompareStudentSideOut(
+                concept_id=concept_id,
+                concept_label=node.concept_label,
+                status=status,
+                concept_score=round(concept_score, 4) if concept_score is not None else None,
+                blocking_prerequisite_labels=prereq_labels,
+            )
+
+        students: list[TeacherConceptCompareStudentOut] = []
+        both_blocked_count = 0
+        left_weaker_count = 0
+        right_weaker_count = 0
+        both_ready_count = 0
+
+        for student_id in student_ids:
+            left_side = _build_side(student_id=student_id, concept_id=left_concept_id, row=left_row, node=left_node)
+            right_side = _build_side(student_id=student_id, concept_id=right_concept_id, row=right_row, node=right_node)
+
+            left_score = -1.0 if left_side.concept_score is None else float(left_side.concept_score)
+            right_score = -1.0 if right_side.concept_score is None else float(right_side.concept_score)
+
+            left_bad = left_side.status in {"blocked", "needs_attention", "unassessed"}
+            right_bad = right_side.status in {"blocked", "needs_attention", "unassessed"}
+            if left_side.status == "blocked" and right_side.status == "blocked":
+                comparison_signal = "both_blocked"
+                both_blocked_count += 1
+            elif left_bad and (not right_bad or left_score < right_score):
+                comparison_signal = "left_weaker"
+                left_weaker_count += 1
+            elif right_bad and (not left_bad or right_score < left_score):
+                comparison_signal = "right_weaker"
+                right_weaker_count += 1
+            elif not left_bad and not right_bad:
+                comparison_signal = "both_ready"
+                both_ready_count += 1
+            else:
+                comparison_signal = "mixed"
+
+            if left_score > right_score:
+                stronger_side = "left"
+            elif right_score > left_score:
+                stronger_side = "right"
+            else:
+                stronger_side = "tied"
+
+            stats = activity_stats.get(student_id, {})
+            students.append(
+                TeacherConceptCompareStudentOut(
+                    student_id=student_id,
+                    student_name=self._display_name(users.get(student_id), fallback_id=student_id),
+                    overall_mastery_score=round(float(overall_scores.get(student_id, 0.0)), 4)
+                    if student_id in overall_scores
+                    else None,
+                    recent_activity_count_7d=int(stats.get("event_count", 0)),
+                    recent_study_time_seconds_7d=int(stats.get("duration_seconds", 0)),
+                    stronger_side=stronger_side,
+                    comparison_signal=comparison_signal,
+                    left=left_side,
+                    right=right_side,
+                )
+            )
+
+        students.sort(
+            key=lambda item: (
+                {"both_blocked": 0, "left_weaker": 1, "right_weaker": 2, "mixed": 3, "both_ready": 4}[item.comparison_signal],
+                1.1 if item.left.concept_score is None else item.left.concept_score,
+                1.1 if item.right.concept_score is None else item.right.concept_score,
+                item.student_name.lower(),
+            )
+        )
+
+        left_avg = left_node.avg_score if left_node.avg_score is not None else None
+        right_avg = right_node.avg_score if right_node.avg_score is not None else None
+        if left_weaker_count > right_weaker_count:
+            recommended_focus_side = "left"
+            headline = f"{left_node.concept_label} is the stronger blocker across the class."
+            rationale = (
+                f"More students are weaker on {left_node.concept_label} than on {right_node.concept_label}, "
+                "so reteaching should start there."
+            )
+        elif right_weaker_count > left_weaker_count:
+            recommended_focus_side = "right"
+            headline = f"{right_node.concept_label} is the stronger blocker across the class."
+            rationale = (
+                f"More students are weaker on {right_node.concept_label} than on {left_node.concept_label}, "
+                "so reteaching should start there."
+            )
+        else:
+            recommended_focus_side = "tie"
+            headline = f"{left_node.concept_label} and {right_node.concept_label} are equally critical right now."
+            rationale = (
+                "The compared concepts are showing similar class-wide weakness, so use the student table to split "
+                "targeted support instead of forcing one global reteach order."
+            )
+
+        return TeacherConceptCompareOut(
+            class_id=class_id,
+            left=TeacherConceptCompareSelectionOut(
+                concept_id=left_node.concept_id,
+                concept_label=left_node.concept_label,
+                topic_id=left_node.topic_id,
+                topic_title=left_node.topic_title,
+                status=left_node.status,
+                avg_score=left_avg,
+                student_count=left_node.student_count,
+                blocking_prerequisite_labels=list(left_node.blocking_prerequisite_labels or []),
+            ),
+            right=TeacherConceptCompareSelectionOut(
+                concept_id=right_node.concept_id,
+                concept_label=right_node.concept_label,
+                topic_id=right_node.topic_id,
+                topic_title=right_node.topic_title,
+                status=right_node.status,
+                avg_score=right_avg,
+                student_count=right_node.student_count,
+                blocking_prerequisite_labels=list(right_node.blocking_prerequisite_labels or []),
+            ),
+            summary=TeacherConceptCompareSummaryOut(
+                students_compared=len(students),
+                both_blocked_count=both_blocked_count,
+                left_weaker_count=left_weaker_count,
+                right_weaker_count=right_weaker_count,
+                both_ready_count=both_ready_count,
+                avg_left_score=round(float(left_avg), 4) if left_avg is not None else None,
+                avg_right_score=round(float(right_avg), 4) if right_avg is not None else None,
+                recommended_focus_side=recommended_focus_side,
+                headline=headline,
+                rationale=rationale,
+            ),
+            students=students[:12],
         )

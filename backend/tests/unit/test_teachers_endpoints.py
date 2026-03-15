@@ -469,6 +469,68 @@ def test_teachers_endpoints_success(monkeypatch):
                 ],
             }
 
+        def get_concept_compare(self, *, teacher_id, class_id, left_concept_id, right_concept_id):
+            return {
+                "class_id": str(class_id),
+                "left": {
+                    "concept_id": left_concept_id,
+                    "concept_label": "Fractions",
+                    "topic_id": str(class_id),
+                    "topic_title": "Fractions",
+                    "status": "blocked",
+                    "avg_score": 0.31,
+                    "student_count": 1,
+                    "blocking_prerequisite_labels": ["Number Sense"],
+                },
+                "right": {
+                    "concept_id": right_concept_id,
+                    "concept_label": "Ratio",
+                    "topic_id": str(class_id),
+                    "topic_title": "Ratio",
+                    "status": "needs_attention",
+                    "avg_score": 0.38,
+                    "student_count": 1,
+                    "blocking_prerequisite_labels": [],
+                },
+                "summary": {
+                    "students_compared": 1,
+                    "both_blocked_count": 0,
+                    "left_weaker_count": 1,
+                    "right_weaker_count": 0,
+                    "both_ready_count": 0,
+                    "avg_left_score": 0.31,
+                    "avg_right_score": 0.38,
+                    "recommended_focus_side": "left",
+                    "headline": "Fractions is the stronger blocker across the class.",
+                    "rationale": "More students are weaker on Fractions than on Ratio.",
+                },
+                "students": [
+                    {
+                        "student_id": str(student_id),
+                        "student_name": "Student One",
+                        "overall_mastery_score": 0.42,
+                        "recent_activity_count_7d": 2,
+                        "recent_study_time_seconds_7d": 180,
+                        "stronger_side": "right",
+                        "comparison_signal": "left_weaker",
+                        "left": {
+                            "concept_id": left_concept_id,
+                            "concept_label": "Fractions",
+                            "status": "blocked",
+                            "concept_score": 0.31,
+                            "blocking_prerequisite_labels": ["Number Sense"],
+                        },
+                        "right": {
+                            "concept_id": right_concept_id,
+                            "concept_label": "Ratio",
+                            "status": "needs_attention",
+                            "concept_score": 0.38,
+                            "blocking_prerequisite_labels": [],
+                        },
+                    }
+                ],
+            }
+
         def get_concept_student_drilldown(self, *, teacher_id, class_id, concept_id):
             return {
                 "class_id": str(class_id),
@@ -585,6 +647,9 @@ def test_teachers_endpoints_success(monkeypatch):
     assignment_outcomes_resp = client.get(f"/api/v1/teachers/classes/{class_id}/assignment-outcomes")
     repeat_risk_resp = client.get(f"/api/v1/teachers/classes/{class_id}/repeat-risk")
     risk_matrix_resp = client.get(f"/api/v1/teachers/classes/{class_id}/risk-matrix")
+    concept_compare_resp = client.get(
+        f"/api/v1/teachers/classes/{class_id}/concept-compare?left_concept_id=math:sss2:t1:fractions&right_concept_id=math:sss2:t1:ratio"
+    )
     concept_students_resp = client.get(f"/api/v1/teachers/classes/{class_id}/concepts/math:sss2:t1:fractions/students")
     timeline_resp = client.get(f"/api/v1/teachers/classes/{class_id}/students/{student_id}/timeline")
     concept_trend_resp = client.get(f"/api/v1/teachers/classes/{class_id}/students/{student_id}/concepts/math:sss2:t1:fractions/trend")
@@ -670,6 +735,7 @@ def test_teachers_endpoints_success(monkeypatch):
     assert assignment_outcomes_resp.status_code == 200
     assert repeat_risk_resp.status_code == 200
     assert risk_matrix_resp.status_code == 200
+    assert concept_compare_resp.status_code == 200
     assert concept_students_resp.status_code == 200
     assert timeline_resp.status_code == 200
     assert concept_trend_resp.status_code == 200

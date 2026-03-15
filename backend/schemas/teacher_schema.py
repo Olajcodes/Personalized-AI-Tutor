@@ -392,6 +392,58 @@ class TeacherRiskMatrixOut(BaseModel):
     students: list[TeacherRiskMatrixStudentOut] = Field(default_factory=list)
 
 
+class TeacherConceptCompareSelectionOut(BaseModel):
+    concept_id: str
+    concept_label: str
+    topic_id: UUID | None = None
+    topic_title: str | None = None
+    status: Literal["blocked", "needs_attention", "mastered", "unassessed"]
+    avg_score: float | None = None
+    student_count: int = 0
+    blocking_prerequisite_labels: list[str] = Field(default_factory=list)
+
+
+class TeacherConceptCompareStudentSideOut(BaseModel):
+    concept_id: str
+    concept_label: str
+    status: Literal["blocked", "needs_attention", "mastered", "unassessed"]
+    concept_score: float | None = None
+    blocking_prerequisite_labels: list[str] = Field(default_factory=list)
+
+
+class TeacherConceptCompareStudentOut(BaseModel):
+    student_id: UUID
+    student_name: str
+    overall_mastery_score: float | None = None
+    recent_activity_count_7d: int = 0
+    recent_study_time_seconds_7d: int = 0
+    stronger_side: Literal["left", "right", "tied"]
+    comparison_signal: Literal["both_blocked", "left_weaker", "right_weaker", "both_ready", "mixed"]
+    left: TeacherConceptCompareStudentSideOut
+    right: TeacherConceptCompareStudentSideOut
+
+
+class TeacherConceptCompareSummaryOut(BaseModel):
+    students_compared: int = 0
+    both_blocked_count: int = 0
+    left_weaker_count: int = 0
+    right_weaker_count: int = 0
+    both_ready_count: int = 0
+    avg_left_score: float | None = None
+    avg_right_score: float | None = None
+    recommended_focus_side: Literal["left", "right", "tie"]
+    headline: str
+    rationale: str
+
+
+class TeacherConceptCompareOut(BaseModel):
+    class_id: UUID
+    left: TeacherConceptCompareSelectionOut
+    right: TeacherConceptCompareSelectionOut
+    summary: TeacherConceptCompareSummaryOut
+    students: list[TeacherConceptCompareStudentOut] = Field(default_factory=list)
+
+
 class TeacherAssignmentCreateIn(BaseModel):
     class_id: UUID | None = None
     student_id: UUID | None = None

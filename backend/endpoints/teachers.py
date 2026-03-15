@@ -23,6 +23,7 @@ from backend.schemas.teacher_schema import (
     TeacherBulkInterventionCreateIn,
     TeacherBulkInterventionOut,
     TeacherClassCreateIn,
+    TeacherConceptCompareOut,
     TeacherClassDashboardOut,
     TeacherConceptStudentDrilldownOut,
     TeacherClassGraphOut,
@@ -333,6 +334,30 @@ def class_risk_matrix(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except TeacherServiceNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+@router.get("/classes/{class_id}/concept-compare", response_model=TeacherConceptCompareOut)
+def class_concept_compare(
+    class_id: UUID,
+    left_concept_id: str = Query(...),
+    right_concept_id: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Compare two mapped graph concepts across the same class roster to decide what to reteach first."""
+    try:
+        return _analytics_service(db).get_concept_compare(
+            teacher_id=current_user.id,
+            class_id=class_id,
+            left_concept_id=left_concept_id,
+            right_concept_id=right_concept_id,
+        )
+    except TeacherServiceUnauthorizedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except TeacherServiceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except TeacherServiceValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.get("/classes/{class_id}/students/{student_id}/timeline", response_model=TeacherStudentTimelineOut)
