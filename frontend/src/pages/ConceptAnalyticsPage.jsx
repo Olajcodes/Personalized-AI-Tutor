@@ -105,6 +105,7 @@ const ConceptAnalyticsPage = () => {
   const [bulkInterventionStatus, setBulkInterventionStatus] = useState(null);
   const [bulkAssignmentStatus, setBulkAssignmentStatus] = useState(null);
   const [queueActionStatus, setQueueActionStatus] = useState({});
+  const [queueAssignmentStatus, setQueueAssignmentStatus] = useState({});
   const [isLoadingClasses, setIsLoadingClasses] = useState(true);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [isLoadingConceptStudents, setIsLoadingConceptStudents] = useState(false);
@@ -832,6 +833,42 @@ const ConceptAnalyticsPage = () => {
     }
   };
 
+  const createQueueAssignment = async (item) => {
+    if (!activeClassId || !activeClass || !token || !item?.suggested_assignment_type) return;
+    const key = item.queue_id;
+    try {
+      setQueueAssignmentStatus((current) => ({ ...current, [key]: { state: 'loading', message: 'Creating assignment...' } }));
+      const response = await fetch(`${apiUrl}/teachers/assignments`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          class_id: activeClassId,
+          student_id: item.student_id || null,
+          assignment_type: item.suggested_assignment_type,
+          concept_id: item.concept_id || null,
+          concept_label: item.concept_label || null,
+          ref_id: item.queue_id,
+          title: item.headline,
+          instructions: item.rationale,
+          subject: activeClass.subject,
+          sss_level: activeClass.sss_level,
+          term: activeClass.term,
+          due_at: null,
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.detail || 'Failed to create assignment.');
+      }
+      setQueueAssignmentStatus((current) => ({ ...current, [key]: { state: 'success', message: 'Assignment created.' } }));
+    } catch (err) {
+      setQueueAssignmentStatus((current) => ({ ...current, [key]: { state: 'error', message: err.message || 'Failed to create assignment.' } }));
+    }
+  };
+
   const openStudentFocus = (student, focusConcept = null, cell = null) => {
     const resolvedConcept = focusConcept || student?.driving_concepts?.[0] || null;
     if (resolvedConcept?.concept_id) {
@@ -1336,6 +1373,15 @@ const ConceptAnalyticsPage = () => {
                                 Focus node
                               </button>
                             ) : null}
+                            {item.suggested_assignment_type ? (
+                              <button
+                                type="button"
+                                onClick={() => createQueueAssignment(item)}
+                                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-100"
+                              >
+                                Assign {item.suggested_assignment_type}
+                              </button>
+                            ) : null}
                             {item.student_id ? (
                               <button
                                 type="button"
@@ -1344,6 +1390,19 @@ const ConceptAnalyticsPage = () => {
                               >
                                 Create intervention
                               </button>
+                            ) : null}
+                            {queueAssignmentStatus[item.queue_id] ? (
+                              <span
+                                className={`text-xs font-semibold ${
+                                  queueAssignmentStatus[item.queue_id].state === 'error'
+                                    ? 'text-rose-600'
+                                    : queueAssignmentStatus[item.queue_id].state === 'success'
+                                      ? 'text-emerald-600'
+                                      : 'text-slate-500'
+                                }`}
+                              >
+                                {queueAssignmentStatus[item.queue_id].message}
+                              </span>
                             ) : null}
                             {queueActionStatus[item.queue_id] ? (
                               <span
