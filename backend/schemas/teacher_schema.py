@@ -171,7 +171,7 @@ class TeacherExportSectionOut(BaseModel):
 
 
 class TeacherExportOut(BaseModel):
-    export_kind: Literal["next_cluster_plan", "student_focus"]
+    export_kind: Literal["next_cluster_plan", "student_focus", "class_briefing"]
     class_id: UUID
     class_name: str
     subject: Subject

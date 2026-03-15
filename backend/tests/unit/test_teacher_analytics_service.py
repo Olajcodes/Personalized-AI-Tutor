@@ -430,6 +430,19 @@ def test_teacher_next_cluster_plan_export_contains_teacher_ready_markdown():
     assert any(section.title == "Teach next" for section in out.sections)
 
 
+def test_teacher_class_briefing_export_combines_graph_and_outcome_story():
+    repo = FakeTeacherAnalyticsRepo()
+    service = TeacherAnalyticsService(repo)
+
+    out = service.get_class_briefing_export(teacher_id=repo.teacher_id, class_id=repo.class_id)
+
+    assert out.export_kind == "class_briefing"
+    assert out.class_id == repo.class_id
+    assert "class briefing" in out.title.lower()
+    assert "students are currently driving repeated graph risk" in out.share_text
+    assert any(section.title == "Outcome snapshot" for section in out.sections)
+
+
 def test_teacher_student_focus_export_contains_student_and_concept_evidence():
     repo = FakeTeacherAnalyticsRepo()
     service = TeacherAnalyticsService(repo)

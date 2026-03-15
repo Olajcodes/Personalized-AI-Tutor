@@ -302,6 +302,29 @@ def test_teachers_endpoints_success(monkeypatch):
                 "concept_label": None,
             }
 
+        def get_class_briefing_export(self, *, teacher_id, class_id):
+            return {
+                "export_kind": "class_briefing",
+                "class_id": str(class_id),
+                "class_name": "SSS2 Math A",
+                "subject": "math",
+                "sss_level": "SSS2",
+                "term": 1,
+                "title": "SSS2 Math A class briefing",
+                "subtitle": "SSS2 Math A • Math • SSS2 Term 1",
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "file_name": "sss2-math-a-class-briefing.md",
+                "share_text": "Repair Number Sense before reteaching Fractions.",
+                "markdown": "# SSS2 Math A class briefing",
+                "sections": [
+                    {"title": "Graph signal", "items": ["Repair Number Sense before reteaching Fractions."]},
+                ],
+                "student_id": None,
+                "student_name": None,
+                "concept_id": None,
+                "concept_label": None,
+            }
+
         def get_class_alerts(self, *, teacher_id, class_id):
             return {"class_id": str(class_id), "alerts": []}
 
@@ -556,6 +579,7 @@ def test_teachers_endpoints_success(monkeypatch):
     playbook_resp = client.get(f"/api/v1/teachers/classes/{class_id}/graph-playbook")
     cluster_plan_resp = client.get(f"/api/v1/teachers/classes/{class_id}/next-cluster-plan")
     cluster_plan_export_resp = client.get(f"/api/v1/teachers/classes/{class_id}/next-cluster-plan/export")
+    class_briefing_export_resp = client.get(f"/api/v1/teachers/classes/{class_id}/briefing/export")
     alerts_resp = client.get(f"/api/v1/teachers/classes/{class_id}/alerts")
     outcomes_resp = client.get(f"/api/v1/teachers/classes/{class_id}/intervention-outcomes")
     assignment_outcomes_resp = client.get(f"/api/v1/teachers/classes/{class_id}/assignment-outcomes")
@@ -640,6 +664,7 @@ def test_teachers_endpoints_success(monkeypatch):
     assert playbook_resp.status_code == 200
     assert cluster_plan_resp.status_code == 200
     assert cluster_plan_export_resp.status_code == 200
+    assert class_briefing_export_resp.status_code == 200
     assert alerts_resp.status_code == 200
     assert outcomes_resp.status_code == 200
     assert assignment_outcomes_resp.status_code == 200

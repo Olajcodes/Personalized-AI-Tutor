@@ -744,6 +744,94 @@ class TeacherAnalyticsService:
             sections=sections,
         )
 
+    def get_class_briefing_export(self, *, teacher_id: UUID, class_id: UUID) -> TeacherExportOut:
+        teacher_class = self._require_teacher_class(teacher_id=teacher_id, class_id=class_id)
+        graph = self.get_class_graph_summary(teacher_id=teacher_id, class_id=class_id)
+        plan = self.get_next_lesson_cluster_plan(teacher_id=teacher_id, class_id=class_id)
+        repeat_risk = self.get_repeat_risk_summary(teacher_id=teacher_id, class_id=class_id)
+        assignment_outcomes = self.get_assignment_outcomes(teacher_id=teacher_id, class_id=class_id)
+        intervention_outcomes = self.get_intervention_outcomes(teacher_id=teacher_id, class_id=class_id)
+        alerts = self.get_class_alerts(teacher_id=teacher_id, class_id=class_id)
+
+        sections = [
+            TeacherExportSectionOut(
+                title="Graph signal",
+                items=[
+                    graph.graph_signal.headline,
+                    graph.graph_signal.supporting_reason,
+                    f"Recommended action: {graph.graph_signal.recommended_action}",
+                ],
+            ),
+            TeacherExportSectionOut(
+                title="Top blockers",
+                items=[
+                    f"{node.concept_label}: {node.recommended_action}"
+                    for node in graph.weakest_blockers[:4]
+                ],
+            ),
+            TeacherExportSectionOut(
+                title="Next lesson cluster plan",
+                items=[
+                    plan.headline,
+                    plan.rationale,
+                    *[
+                        f"Teach next: {item.concept_label} - {item.recommended_action}"
+                        for item in plan.teach_next[:3]
+                    ],
+                ],
+            ),
+            TeacherExportSectionOut(
+                title="At-risk students",
+                items=[
+                    f"{student.student_name}: {student.recommended_action}"
+                    for student in repeat_risk.students[:5]
+                ],
+            ),
+            TeacherExportSectionOut(
+                title="Outcome snapshot",
+                items=[
+                    (
+                        f"Assignments - improving: {assignment_outcomes.improving_assignments}, "
+                        f"declining: {assignment_outcomes.declining_assignments}, "
+                        f"no evidence: {assignment_outcomes.no_evidence_assignments}"
+                    ),
+                    (
+                        f"Interventions - improving: {intervention_outcomes.improving_interventions}, "
+                        f"declining: {intervention_outcomes.declining_interventions}, "
+                        f"no evidence: {intervention_outcomes.no_evidence_interventions}"
+                    ),
+                    f"Active alerts: {len(alerts.alerts)}",
+                ],
+            ),
+        ]
+
+        subtitle = (
+            f"{teacher_class.name} • {teacher_class.subject.title()} • {teacher_class.sss_level} Term {teacher_class.term}. "
+            f"Graph-backed class briefing."
+        )
+        return TeacherExportOut(
+            export_kind="class_briefing",
+            class_id=class_id,
+            class_name=teacher_class.name,
+            subject=teacher_class.subject,
+            sss_level=teacher_class.sss_level,
+            term=teacher_class.term,
+            title=f"{teacher_class.name} class briefing",
+            subtitle=subtitle,
+            generated_at=datetime.now(timezone.utc),
+            file_name=f"{self._slugify(teacher_class.name, fallback='class')}-class-briefing.md",
+            share_text=(
+                f"{graph.graph_signal.headline} "
+                f"{len(repeat_risk.students)} students are currently driving repeated graph risk."
+            ),
+            markdown=self._build_markdown(
+                title=f"{teacher_class.name} class briefing",
+                subtitle=subtitle,
+                sections=sections,
+            ),
+            sections=sections,
+        )
+
     def get_concept_student_drilldown(
         self,
         *,

@@ -235,6 +235,21 @@ def class_next_cluster_plan_export(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 
+@router.get("/classes/{class_id}/briefing/export", response_model=TeacherExportOut)
+def class_briefing_export(
+    class_id: UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return a teacher-ready class briefing package with graph signal, plan, and current evidence."""
+    try:
+        return _analytics_service(db).get_class_briefing_export(teacher_id=current_user.id, class_id=class_id)
+    except TeacherServiceUnauthorizedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except TeacherServiceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
 @router.get("/classes/{class_id}/alerts", response_model=TeacherAlertsOut)
 def class_alerts(
     class_id: UUID,

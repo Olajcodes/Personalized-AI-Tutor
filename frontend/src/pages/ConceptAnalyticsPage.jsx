@@ -474,6 +474,24 @@ const ConceptAnalyticsPage = () => {
     }
   };
 
+  const openClassBriefingExport = async () => {
+    if (!activeClassId || !token) return;
+    setExportState({ isOpen: true, isLoading: true, error: '', data: null, target: 'briefing' });
+    try {
+      const response = await fetch(`${apiUrl}/teachers/classes/${activeClassId}/briefing/export`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.detail || 'Failed to prepare class briefing export.');
+      }
+      const data = await response.json();
+      setExportState({ isOpen: true, isLoading: false, error: '', data, target: 'briefing' });
+    } catch (err) {
+      setExportState({ isOpen: true, isLoading: false, error: err.message || 'Failed to prepare class briefing export.', data: null, target: 'briefing' });
+    }
+  };
+
   const openStudentFocusExport = async () => {
     if (!activeClassId || !token || !selectedStudent?.student_id || !selectedConceptId) return;
     setExportState({ isOpen: true, isLoading: true, error: '', data: null, target: 'student' });
@@ -749,7 +767,16 @@ const ConceptAnalyticsPage = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={openClassBriefingExport}
+            disabled={!activeClassId}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download className="h-4 w-4" />
+            Export briefing
+          </button>
           <select
             value={activeClassId}
             onChange={(event) => setActiveClassId(event.target.value)}
