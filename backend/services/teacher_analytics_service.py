@@ -1186,6 +1186,84 @@ class TeacherAnalyticsService:
             concept_label=trend.concept_label,
         )
 
+    def get_concept_compare_export(
+        self,
+        *,
+        teacher_id: UUID,
+        class_id: UUID,
+        left_concept_id: str,
+        right_concept_id: str,
+    ) -> TeacherExportOut:
+        teacher_class = self._require_teacher_class(teacher_id=teacher_id, class_id=class_id)
+        comparison = self.get_concept_compare(
+            teacher_id=teacher_id,
+            class_id=class_id,
+            left_concept_id=left_concept_id,
+            right_concept_id=right_concept_id,
+        )
+
+        sections = [
+            TeacherExportSectionOut(
+                title="Comparison headline",
+                items=[comparison.summary.headline, comparison.summary.rationale],
+            ),
+            TeacherExportSectionOut(
+                title="Concept summary",
+                items=[
+                    f"{comparison.left.concept_label}: {self._format_percentage(comparison.summary.avg_left_score)} average score, "
+                    f"{comparison.summary.left_weaker_count} students weaker here.",
+                    f"{comparison.right.concept_label}: {self._format_percentage(comparison.summary.avg_right_score)} average score, "
+                    f"{comparison.summary.right_weaker_count} students weaker here.",
+                    f"Both blocked count: {comparison.summary.both_blocked_count}",
+                    f"Both ready count: {comparison.summary.both_ready_count}",
+                ],
+            ),
+            TeacherExportSectionOut(
+                title="Students driving the difference",
+                items=[
+                    (
+                        f"{student.student_name}: {student.comparison_signal.replace('_', ' ')}. "
+                        f"{comparison.left.concept_label}={self._format_percentage(student.left.concept_score)}, "
+                        f"{comparison.right.concept_label}={self._format_percentage(student.right.concept_score)}"
+                    )
+                    for student in comparison.students
+                ],
+            ),
+        ]
+        subtitle = (
+            f"{teacher_class.name} • {comparison.left.concept_label} vs {comparison.right.concept_label} • "
+            f"{teacher_class.subject.title()} {teacher_class.sss_level} Term {teacher_class.term}"
+        )
+        return TeacherExportOut(
+            export_kind="concept_compare",
+            class_id=class_id,
+            class_name=teacher_class.name,
+            subject=teacher_class.subject,
+            sss_level=teacher_class.sss_level,
+            term=teacher_class.term,
+            title=f"{comparison.left.concept_label} vs {comparison.right.concept_label}",
+            subtitle=subtitle,
+            generated_at=datetime.now(timezone.utc),
+            file_name=(
+                f"{self._slugify(teacher_class.name, fallback='class')}-"
+                f"{self._slugify(comparison.left.concept_label, fallback='left')}-vs-"
+                f"{self._slugify(comparison.right.concept_label, fallback='right')}.md"
+            ),
+            share_text=(
+                f"{comparison.summary.headline} "
+                f"Recommended focus: "
+                f"{comparison.left.concept_label if comparison.summary.recommended_focus_side == 'left' else comparison.right.concept_label if comparison.summary.recommended_focus_side == 'right' else 'split support across both concepts'}."
+            ),
+            markdown=self._build_markdown(
+                title=f"{comparison.left.concept_label} vs {comparison.right.concept_label}",
+                subtitle=subtitle,
+                sections=sections,
+            ),
+            sections=sections,
+            concept_id=comparison.left.concept_id,
+            concept_label=f"{comparison.left.concept_label} vs {comparison.right.concept_label}",
+        )
+
     def get_assignment_outcomes(
         self,
         *,

@@ -582,6 +582,25 @@ const ConceptAnalyticsPage = () => {
     );
   };
 
+  const openConceptCompareExport = async () => {
+    if (!activeClassId || !token || !selectedConceptId || !compareConceptId || selectedConceptId === compareConceptId) return;
+    setExportState({ isOpen: true, isLoading: true, error: '', data: null, target: 'compare' });
+    try {
+      const response = await fetch(
+        `${apiUrl}/teachers/classes/${activeClassId}/concept-compare/export?left_concept_id=${encodeURIComponent(selectedConceptId)}&right_concept_id=${encodeURIComponent(compareConceptId)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.detail || 'Failed to prepare concept comparison export.');
+      }
+      const data = await response.json();
+      setExportState({ isOpen: true, isLoading: false, error: '', data, target: 'compare' });
+    } catch (err) {
+      setExportState({ isOpen: true, isLoading: false, error: err.message || 'Failed to prepare concept comparison export.', data: null, target: 'compare' });
+    }
+  };
+
   const createStudentIntervention = async (student) => {
     if (!activeClassId || !activeClass || !token || !conceptStudents) return;
     const key = `${student.student_id}-${conceptStudents.concept_id}`;
@@ -1681,7 +1700,17 @@ const ConceptAnalyticsPage = () => {
                       Compare two mapped graph concepts across the same class roster and see which one is the stronger blocker.
                     </p>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={openConceptCompareExport}
+                      disabled={!conceptCompare}
+                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Download className="h-4 w-4" />
+                      Export compare
+                    </button>
+                    <div className="grid gap-3 sm:grid-cols-2">
                     <label className="flex flex-col gap-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">
                       Focus concept
                       <select
@@ -1712,6 +1741,7 @@ const ConceptAnalyticsPage = () => {
                           ))}
                       </select>
                     </label>
+                    </div>
                   </div>
                 </div>
 

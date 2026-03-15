@@ -531,6 +531,29 @@ def test_teachers_endpoints_success(monkeypatch):
                 ],
             }
 
+        def get_concept_compare_export(self, *, teacher_id, class_id, left_concept_id, right_concept_id):
+            return {
+                "export_kind": "concept_compare",
+                "class_id": str(class_id),
+                "class_name": "SSS2 Math A",
+                "subject": "math",
+                "sss_level": "SSS2",
+                "term": 1,
+                "title": "Fractions vs Ratio",
+                "subtitle": "SSS2 Math A • Fractions vs Ratio • Math SSS2 Term 1",
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "file_name": "fractions-vs-ratio.md",
+                "share_text": "Fractions is the stronger blocker across the class.",
+                "markdown": "# Fractions vs Ratio\n\n## Comparison headline",
+                "sections": [
+                    {"title": "Comparison headline", "items": ["Fractions is the stronger blocker across the class."]},
+                ],
+                "student_id": None,
+                "student_name": None,
+                "concept_id": left_concept_id,
+                "concept_label": "Fractions vs Ratio",
+            }
+
         def get_concept_student_drilldown(self, *, teacher_id, class_id, concept_id):
             return {
                 "class_id": str(class_id),
@@ -650,6 +673,9 @@ def test_teachers_endpoints_success(monkeypatch):
     concept_compare_resp = client.get(
         f"/api/v1/teachers/classes/{class_id}/concept-compare?left_concept_id=math:sss2:t1:fractions&right_concept_id=math:sss2:t1:ratio"
     )
+    concept_compare_export_resp = client.get(
+        f"/api/v1/teachers/classes/{class_id}/concept-compare/export?left_concept_id=math:sss2:t1:fractions&right_concept_id=math:sss2:t1:ratio"
+    )
     concept_students_resp = client.get(f"/api/v1/teachers/classes/{class_id}/concepts/math:sss2:t1:fractions/students")
     timeline_resp = client.get(f"/api/v1/teachers/classes/{class_id}/students/{student_id}/timeline")
     concept_trend_resp = client.get(f"/api/v1/teachers/classes/{class_id}/students/{student_id}/concepts/math:sss2:t1:fractions/trend")
@@ -736,6 +762,7 @@ def test_teachers_endpoints_success(monkeypatch):
     assert repeat_risk_resp.status_code == 200
     assert risk_matrix_resp.status_code == 200
     assert concept_compare_resp.status_code == 200
+    assert concept_compare_export_resp.status_code == 200
     assert concept_students_resp.status_code == 200
     assert timeline_resp.status_code == 200
     assert concept_trend_resp.status_code == 200

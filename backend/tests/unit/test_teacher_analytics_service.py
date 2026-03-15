@@ -480,3 +480,21 @@ def test_teacher_student_focus_export_contains_student_and_concept_evidence():
     assert "Ada James" in out.share_text
     assert "Focus summary" in out.markdown
     assert any(section.title == "Blocking prerequisites" for section in out.sections)
+
+
+def test_teacher_concept_compare_export_contains_teacher_ready_story():
+    repo = FakeTeacherAnalyticsRepo()
+    service = TeacherAnalyticsService(repo)
+
+    out = service.get_concept_compare_export(
+        teacher_id=repo.teacher_id,
+        class_id=repo.class_id,
+        left_concept_id="math:sss2:t1:fractions",
+        right_concept_id="math:sss2:t1:ratio",
+    )
+
+    assert out.export_kind == "concept_compare"
+    assert out.class_id == repo.class_id
+    assert "Fractions vs Ratio" in out.title
+    assert "Comparison headline" in out.markdown
+    assert any(section.title == "Students driving the difference" for section in out.sections)
