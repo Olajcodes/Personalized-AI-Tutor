@@ -272,6 +272,20 @@ def test_teacher_analytics_graph_playbook_returns_actionable_steps():
     assert any(action.action_type == "support_students" for action in out.actions)
 
 
+def test_teacher_intervention_queue_prioritises_student_level_graph_repairs():
+    repo = FakeTeacherAnalyticsRepo()
+    service = TeacherAnalyticsService(repo)
+
+    out = service.get_intervention_queue(teacher_id=repo.teacher_id, class_id=repo.class_id)
+
+    assert out.class_id == repo.class_id
+    assert out.total_items >= 1
+    assert out.urgent_items >= 1
+    assert out.student_targeted_items >= 1
+    assert out.items[0].recommendation_type in {"repair_prerequisite", "repeat_risk_support"}
+    assert out.items[0].student_id in {repo.student_a, repo.student_b}
+
+
 def test_teacher_next_cluster_plan_repairs_prerequisite_before_reteach():
     repo = FakeTeacherAnalyticsRepo()
     service = TeacherAnalyticsService(repo)

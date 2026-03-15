@@ -142,6 +142,32 @@ class TeacherGraphPlaybookOut(BaseModel):
     actions: list[TeacherGraphPlaybookActionOut] = Field(default_factory=list)
 
 
+class TeacherInterventionQueueItemOut(BaseModel):
+    queue_id: str
+    priority: Literal["urgent", "high", "medium"]
+    recommendation_type: Literal["repair_prerequisite", "reteach_concept", "repeat_risk_support", "collect_evidence"]
+    headline: str
+    rationale: str
+    student_id: UUID | None = None
+    student_name: str | None = None
+    concept_id: str | None = None
+    concept_label: str | None = None
+    topic_id: UUID | None = None
+    topic_title: str | None = None
+    blocking_prerequisite_labels: list[str] = Field(default_factory=list)
+    suggested_assignment_type: AssignmentType | None = None
+    suggested_intervention_type: InterventionType | None = None
+
+
+class TeacherInterventionQueueOut(BaseModel):
+    class_id: UUID
+    total_items: int = 0
+    urgent_items: int = 0
+    student_targeted_items: int = 0
+    class_scope_items: int = 0
+    items: list[TeacherInterventionQueueItemOut] = Field(default_factory=list)
+
+
 class TeacherNextLessonClusterConceptOut(BaseModel):
     concept_id: str
     concept_label: str

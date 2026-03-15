@@ -79,6 +79,7 @@ const ConceptAnalyticsPage = () => {
   const [heatmap, setHeatmap] = useState([]);
   const [graphSummary, setGraphSummary] = useState(null);
   const [graphPlaybook, setGraphPlaybook] = useState([]);
+  const [interventionQueue, setInterventionQueue] = useState(null);
   const [nextClusterPlan, setNextClusterPlan] = useState(null);
   const [selectedConceptId, setSelectedConceptId] = useState('');
   const [compareConceptId, setCompareConceptId] = useState('');
@@ -102,6 +103,7 @@ const ConceptAnalyticsPage = () => {
   const [interventionUpdateStatus, setInterventionUpdateStatus] = useState({});
   const [bulkInterventionStatus, setBulkInterventionStatus] = useState(null);
   const [bulkAssignmentStatus, setBulkAssignmentStatus] = useState(null);
+  const [queueActionStatus, setQueueActionStatus] = useState({});
   const [isLoadingClasses, setIsLoadingClasses] = useState(true);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [isLoadingConceptStudents, setIsLoadingConceptStudents] = useState(false);
@@ -152,6 +154,7 @@ const ConceptAnalyticsPage = () => {
         setHeatmap([]);
         setGraphSummary(null);
         setGraphPlaybook([]);
+        setInterventionQueue(null);
         setNextClusterPlan(null);
         setSelectedConceptId('');
         setConceptStudents(null);
@@ -169,11 +172,12 @@ const ConceptAnalyticsPage = () => {
       try {
         setIsLoadingDetails(true);
         setError('');
-        const [dashboardRes, heatmapRes, graphRes, playbookRes, nextClusterRes, alertsRes, outcomesRes, assignmentOutcomesRes, repeatRiskRes, riskMatrixRes] = await Promise.all([
+        const [dashboardRes, heatmapRes, graphRes, playbookRes, interventionQueueRes, nextClusterRes, alertsRes, outcomesRes, assignmentOutcomesRes, repeatRiskRes, riskMatrixRes] = await Promise.all([
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/dashboard`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/heatmap`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/graph-summary`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/graph-playbook`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${apiUrl}/teachers/classes/${activeClassId}/intervention-queue`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/next-cluster-plan`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/alerts`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/intervention-outcomes`, { headers: { Authorization: `Bearer ${token}` } }),
@@ -182,17 +186,18 @@ const ConceptAnalyticsPage = () => {
           fetch(`${apiUrl}/teachers/classes/${activeClassId}/risk-matrix`, { headers: { Authorization: `Bearer ${token}` } }),
         ]);
 
-        if (!dashboardRes.ok || !heatmapRes.ok || !graphRes.ok || !playbookRes.ok || !nextClusterRes.ok || !alertsRes.ok || !outcomesRes.ok || !assignmentOutcomesRes.ok || !repeatRiskRes.ok || !riskMatrixRes.ok) {
-          const firstFailure = [dashboardRes, heatmapRes, graphRes, playbookRes, nextClusterRes, alertsRes, outcomesRes, assignmentOutcomesRes, repeatRiskRes, riskMatrixRes].find((response) => !response.ok);
+        if (!dashboardRes.ok || !heatmapRes.ok || !graphRes.ok || !playbookRes.ok || !interventionQueueRes.ok || !nextClusterRes.ok || !alertsRes.ok || !outcomesRes.ok || !assignmentOutcomesRes.ok || !repeatRiskRes.ok || !riskMatrixRes.ok) {
+          const firstFailure = [dashboardRes, heatmapRes, graphRes, playbookRes, interventionQueueRes, nextClusterRes, alertsRes, outcomesRes, assignmentOutcomesRes, repeatRiskRes, riskMatrixRes].find((response) => !response.ok);
           const detail = await firstFailure.json().catch(() => null);
           throw new Error(detail?.detail || 'Failed to load teacher analytics.');
         }
 
-        const [dashboardData, heatmapData, graphData, playbookData, nextClusterData, alertsData, outcomesData, assignmentOutcomesData, repeatRiskData, riskMatrixData] = await Promise.all([
+        const [dashboardData, heatmapData, graphData, playbookData, interventionQueueData, nextClusterData, alertsData, outcomesData, assignmentOutcomesData, repeatRiskData, riskMatrixData] = await Promise.all([
           dashboardRes.json(),
           heatmapRes.json(),
           graphRes.json(),
           playbookRes.json(),
+          interventionQueueRes.json(),
           nextClusterRes.json(),
           alertsRes.json(),
           outcomesRes.json(),
@@ -205,6 +210,7 @@ const ConceptAnalyticsPage = () => {
         setHeatmap(Array.isArray(heatmapData?.points) ? heatmapData.points : []);
         setGraphSummary(graphData || null);
         setGraphPlaybook(Array.isArray(playbookData?.actions) ? playbookData.actions : []);
+        setInterventionQueue(interventionQueueData || null);
         setNextClusterPlan(nextClusterData || null);
         setSelectedConceptId(
           graphData?.weakest_blockers?.[0]?.concept_id ||
@@ -231,6 +237,7 @@ const ConceptAnalyticsPage = () => {
         setHeatmap([]);
         setGraphSummary(null);
         setGraphPlaybook([]);
+        setInterventionQueue(null);
         setNextClusterPlan(null);
         setSelectedConceptId('');
         setCompareConceptId('');
@@ -784,6 +791,41 @@ const ConceptAnalyticsPage = () => {
     }
   };
 
+  const createQueueIntervention = async (item) => {
+    if (!activeClassId || !activeClass || !token || !item?.student_id) return;
+    const key = item.queue_id;
+    try {
+      setQueueActionStatus((current) => ({ ...current, [key]: { state: 'loading', message: 'Creating intervention...' } }));
+      const response = await fetch(`${apiUrl}/teachers/interventions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          class_id: activeClassId,
+          student_id: item.student_id,
+          intervention_type: item.suggested_intervention_type || 'support_plan',
+          concept_id: item.concept_id,
+          concept_label: item.concept_label,
+          severity: item.priority === 'urgent' ? 'high' : 'medium',
+          subject: activeClass.subject,
+          sss_level: activeClass.sss_level,
+          term: activeClass.term,
+          notes: item.headline,
+          action_plan: item.rationale,
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.detail || 'Failed to create intervention.');
+      }
+      setQueueActionStatus((current) => ({ ...current, [key]: { state: 'success', message: 'Intervention created.' } }));
+    } catch (err) {
+      setQueueActionStatus((current) => ({ ...current, [key]: { state: 'error', message: err.message || 'Failed to create intervention.' } }));
+    }
+  };
+
   const openStudentFocus = (student, focusConcept = null, cell = null) => {
     const resolvedConcept = focusConcept || student?.driving_concepts?.[0] || null;
     if (resolvedConcept?.concept_id) {
@@ -1191,6 +1233,121 @@ const ConceptAnalyticsPage = () => {
                       </div>
                     ))}
                   </div>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="mb-6 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-800">Intervention Queue</h2>
+                    <p className="text-xs text-slate-500">Prioritized next actions from graph blockers and repeat-risk evidence.</p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                    {interventionQueue?.total_items || 0} items
+                  </span>
+                </div>
+
+                {!interventionQueue?.items?.length ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm font-semibold text-slate-400">
+                    No intervention queue items are active for this class right now.
+                  </div>
+                ) : (
+                  <>
+                    <div className="mb-4 grid gap-3 sm:grid-cols-4">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Urgent</p>
+                        <p className="mt-2 text-2xl font-black text-rose-600">{interventionQueue.urgent_items || 0}</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Student-targeted</p>
+                        <p className="mt-2 text-2xl font-black text-indigo-600">{interventionQueue.student_targeted_items || 0}</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Class-scope</p>
+                        <p className="mt-2 text-2xl font-black text-slate-900">{interventionQueue.class_scope_items || 0}</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Top focus</p>
+                        <p className="mt-2 text-sm font-black text-slate-900">{interventionQueue.items[0]?.concept_label || 'None'}</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {interventionQueue.items.map((item) => (
+                        <div key={item.queue_id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                item.priority === 'urgent'
+                                  ? 'bg-rose-100 text-rose-700'
+                                  : item.priority === 'high'
+                                    ? 'bg-amber-100 text-amber-700'
+                                    : 'bg-slate-200 text-slate-700'
+                              }`}>
+                                {item.recommendation_type.replace('_', ' ')}
+                              </div>
+                              <h3 className="mt-3 text-base font-bold text-slate-900">{item.headline}</h3>
+                              <p className="mt-2 text-sm leading-6 text-slate-600">{item.rationale}</p>
+                            </div>
+                            <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 shadow-sm">
+                              {item.priority}
+                            </span>
+                          </div>
+
+                          <div className="mt-4 grid gap-2 text-xs text-slate-500 sm:grid-cols-3">
+                            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                              <p className="font-black uppercase tracking-[0.16em] text-slate-400">Student</p>
+                              <p className="mt-1 text-sm font-semibold text-slate-800">{item.student_name || 'Class scope'}</p>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                              <p className="font-black uppercase tracking-[0.16em] text-slate-400">Concept</p>
+                              <p className="mt-1 text-sm font-semibold text-slate-800">{item.concept_label || 'Unmapped'}</p>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                              <p className="font-black uppercase tracking-[0.16em] text-slate-400">Blockers</p>
+                              <p className="mt-1 text-sm font-semibold text-slate-800">
+                                {item.blocking_prerequisite_labels?.length ? item.blocking_prerequisite_labels.join(', ') : 'None'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 flex flex-wrap items-center gap-3">
+                            {item.concept_id ? (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedConceptId(item.concept_id)}
+                                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-100"
+                              >
+                                Focus node
+                              </button>
+                            ) : null}
+                            {item.student_id ? (
+                              <button
+                                type="button"
+                                onClick={() => createQueueIntervention(item)}
+                                className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-white transition hover:bg-slate-800"
+                              >
+                                Create intervention
+                              </button>
+                            ) : null}
+                            {queueActionStatus[item.queue_id] ? (
+                              <span
+                                className={`text-xs font-semibold ${
+                                  queueActionStatus[item.queue_id].state === 'error'
+                                    ? 'text-rose-600'
+                                    : queueActionStatus[item.queue_id].state === 'success'
+                                      ? 'text-emerald-600'
+                                      : 'text-slate-500'
+                                }`}
+                              >
+                                {queueActionStatus[item.queue_id].message}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
 

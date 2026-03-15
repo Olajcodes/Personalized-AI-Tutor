@@ -230,6 +230,33 @@ def test_teachers_endpoints_success(monkeypatch):
                 ],
             }
 
+        def get_intervention_queue(self, *, teacher_id, class_id):
+            return {
+                "class_id": str(class_id),
+                "total_items": 2,
+                "urgent_items": 1,
+                "student_targeted_items": 2,
+                "class_scope_items": 0,
+                "items": [
+                    {
+                        "queue_id": "repair_prerequisite:student-1:math:sss2:t1:fractions",
+                        "priority": "urgent",
+                        "recommendation_type": "repair_prerequisite",
+                        "headline": "Repair Number Sense before reteaching Fractions for Student One.",
+                        "rationale": "Repair the blocking prerequisite before reteaching this concept.",
+                        "student_id": str(student_id),
+                        "student_name": "Student One",
+                        "concept_id": "math:sss2:t1:fractions",
+                        "concept_label": "Fractions",
+                        "topic_id": str(class_id),
+                        "topic_title": "Fractions",
+                        "blocking_prerequisite_labels": ["Number Sense"],
+                        "suggested_assignment_type": "revision",
+                        "suggested_intervention_type": "support_plan",
+                    }
+                ],
+            }
+
         def get_next_lesson_cluster_plan(self, *, teacher_id, class_id):
             return {
                 "class_id": str(class_id),
@@ -662,6 +689,7 @@ def test_teachers_endpoints_success(monkeypatch):
     heatmap_resp = client.get(f"/api/v1/teachers/classes/{class_id}/heatmap")
     graph_resp = client.get(f"/api/v1/teachers/classes/{class_id}/graph-summary")
     playbook_resp = client.get(f"/api/v1/teachers/classes/{class_id}/graph-playbook")
+    intervention_queue_resp = client.get(f"/api/v1/teachers/classes/{class_id}/intervention-queue")
     cluster_plan_resp = client.get(f"/api/v1/teachers/classes/{class_id}/next-cluster-plan")
     cluster_plan_export_resp = client.get(f"/api/v1/teachers/classes/{class_id}/next-cluster-plan/export")
     class_briefing_export_resp = client.get(f"/api/v1/teachers/classes/{class_id}/briefing/export")
@@ -753,6 +781,7 @@ def test_teachers_endpoints_success(monkeypatch):
     assert heatmap_resp.status_code == 200
     assert graph_resp.status_code == 200
     assert playbook_resp.status_code == 200
+    assert intervention_queue_resp.status_code == 200
     assert cluster_plan_resp.status_code == 200
     assert cluster_plan_export_resp.status_code == 200
     assert class_briefing_export_resp.status_code == 200

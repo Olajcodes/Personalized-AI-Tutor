@@ -35,6 +35,8 @@ from backend.schemas.teacher_schema import (
     TeacherNextLessonClusterConceptOut,
     TeacherNextLessonClusterPlanOut,
     TeacherGraphSignalOut,
+    TeacherInterventionQueueItemOut,
+    TeacherInterventionQueueOut,
     TeacherHeatmapPointOut,
     TeacherRepeatRiskConceptOut,
     TeacherRepeatRiskStudentOut,
@@ -566,6 +568,115 @@ class TeacherAnalyticsService:
             )
 
         return TeacherGraphPlaybookOut(class_id=class_id, actions=actions)
+
+    def get_intervention_queue(self, *, teacher_id: UUID, class_id: UUID) -> TeacherInterventionQueueOut:
+        graph = self.get_class_graph_summary(teacher_id=teacher_id, class_id=class_id)
+        repeat_risk = self.get_repeat_risk_summary(teacher_id=teacher_id, class_id=class_id)
+
+        items: list[TeacherInterventionQueueItemOut] = []
+        seen: set[tuple[str, str | None, str | None]] = set()
+
+        def _append_item(item: TeacherInterventionQueueItemOut) -> None:
+            key = (item.recommendation_type, str(item.student_id) if item.student_id else None, str(item.concept_id or ""))
+            if key in seen:
+                return
+            seen.add(key)
+            items.append(item)
+
+        for node in graph.weakest_blockers[:3]:
+            drilldown = self.get_concept_student_drilldown(
+                teacher_id=teacher_id,
+                class_id=class_id,
+                concept_id=node.concept_id,
+            )
+            for student in drilldown.students[:2]:
+                if student.status not in {"blocked", "needs_attention"}:
+                    continue
+                recommendation_type = "repair_prerequisite" if student.status == "blocked" else "reteach_concept"
+                priority = "urgent" if student.status == "blocked" else "high"
+                headline = (
+                    f"Repair {student.blocking_prerequisite_labels[0]} before reteaching {drilldown.concept_label} for {student.student_name}."
+                    if student.blocking_prerequisite_labels
+                    else f"Reteach {drilldown.concept_label} for {student.student_name} with a short checkpoint."
+                )
+                _append_item(
+                    TeacherInterventionQueueItemOut(
+                        queue_id=f"{recommendation_type}:{student.student_id}:{drilldown.concept_id}",
+                        priority=priority,
+                        recommendation_type=recommendation_type,
+                        headline=headline,
+                        rationale=student.recommended_action,
+                        student_id=student.student_id,
+                        student_name=student.student_name,
+                        concept_id=drilldown.concept_id,
+                        concept_label=drilldown.concept_label,
+                        topic_id=drilldown.topic_id,
+                        topic_title=drilldown.topic_title,
+                        blocking_prerequisite_labels=list(student.blocking_prerequisite_labels or []),
+                        suggested_assignment_type="revision",
+                        suggested_intervention_type="support_plan",
+                    )
+                )
+
+        for student in repeat_risk.students[:4]:
+            focus_concept = student.driving_concepts[0] if student.driving_concepts else None
+            if not focus_concept:
+                continue
+            _append_item(
+                TeacherInterventionQueueItemOut(
+                    queue_id=f"repeat_risk:{student.student_id}:{focus_concept.concept_id}",
+                    priority="urgent" if student.risk_status == "repeat_blocker" else "high",
+                    recommendation_type="repeat_risk_support",
+                    headline=f"Stabilize {focus_concept.concept_label} for {student.student_name} before the weakness spreads further.",
+                    rationale=student.recommended_action,
+                    student_id=student.student_id,
+                    student_name=student.student_name,
+                    concept_id=focus_concept.concept_id,
+                    concept_label=focus_concept.concept_label,
+                    topic_id=focus_concept.topic_id,
+                    topic_title=focus_concept.topic_title,
+                    blocking_prerequisite_labels=list(focus_concept.blocking_prerequisite_labels or []),
+                    suggested_assignment_type="revision",
+                    suggested_intervention_type="support_plan",
+                )
+            )
+
+        if not items:
+            focus = graph.weakest_blockers[0] if graph.weakest_blockers else (graph.nodes[0] if graph.nodes else None)
+            if focus:
+                _append_item(
+                    TeacherInterventionQueueItemOut(
+                        queue_id=f"collect_evidence::{focus.concept_id}",
+                        priority="medium",
+                        recommendation_type="collect_evidence",
+                        headline=f"Collect stronger evidence on {focus.concept_label} before choosing a narrower intervention.",
+                        rationale=focus.recommended_action,
+                        concept_id=focus.concept_id,
+                        concept_label=focus.concept_label,
+                        topic_id=focus.topic_id,
+                        topic_title=focus.topic_title,
+                        blocking_prerequisite_labels=list(focus.blocking_prerequisite_labels or []),
+                        suggested_assignment_type="quiz",
+                        suggested_intervention_type=None,
+                    )
+                )
+
+        items.sort(
+            key=lambda item: (
+                {"urgent": 0, "high": 1, "medium": 2}[item.priority],
+                item.student_name or "",
+                item.concept_label or "",
+            )
+        )
+
+        return TeacherInterventionQueueOut(
+            class_id=class_id,
+            total_items=len(items),
+            urgent_items=sum(1 for item in items if item.priority == "urgent"),
+            student_targeted_items=sum(1 for item in items if item.student_id is not None),
+            class_scope_items=sum(1 for item in items if item.student_id is None),
+            items=items[:10],
+        )
 
     def get_next_lesson_cluster_plan(self, *, teacher_id: UUID, class_id: UUID) -> TeacherNextLessonClusterPlanOut:
         graph = self.get_class_graph_summary(teacher_id=teacher_id, class_id=class_id)
