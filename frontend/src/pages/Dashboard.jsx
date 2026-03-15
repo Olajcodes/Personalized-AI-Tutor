@@ -234,6 +234,11 @@ export default function Dashboard() {
         navigate(`/lesson/${topicId}`);
     }, [activeId, activeSubject, apiUrl, currentLevel, currentTerm, dashboardSignal, navigate, token]);
 
+    const openGraphPath = useCallback(() => {
+        const query = activeSubject ? `?subject=${encodeURIComponent(activeSubject)}` : '';
+        navigate(`/graph-path${query}`);
+    }, [activeSubject, navigate]);
+
     const dashboardTasks = useMemo(() => {
         const tasks = [];
         const nextStep = dashboardSignal?.payload?.next_step || effectiveMapData?.next_step || null;
@@ -349,6 +354,13 @@ export default function Dashboard() {
                                         Open {dashboardSignal.subject}
                                     </button>
                                 )}
+                                <button
+                                    type="button"
+                                    onClick={openGraphPath}
+                                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                                >
+                                    Full graph view
+                                </button>
                                 {dashboardSignal.payload.next_step?.recommended_topic_id && (
                                     <button
                                         type="button"
@@ -415,6 +427,19 @@ export default function Dashboard() {
                         mapData={effectiveMapData}
                         onSelectTopic={openTopicFromGraph}
                     />
+                )}
+
+                {activeSubject && !isLoadingMap && !mapError && (
+                    <div className="mb-8 flex justify-end">
+                        <button
+                            type="button"
+                            onClick={openGraphPath}
+                            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50"
+                        >
+                            Open full graph explorer
+                            <ArrowRight className="h-4 w-4" />
+                        </button>
+                    </div>
                 )}
 
                 <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">

@@ -30,6 +30,7 @@ const AssessmentSplash = lazy(() => import('./pages/AssessmentSplash'));
 
 // Core Student Pages
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+const GraphPathPage = lazy(() => import('./pages/GraphPathPage'));
 const CoursePage = lazy(() => import('./pages/CoursePage')); 
 const LessonPage = lazy(() => import('./pages/LessonPage'));
 const QuizPage = lazy(() => import('./pages/QuizPage'));
@@ -100,6 +101,7 @@ function App() {
               {/* Student Layout */}
               <Route element={<StudentLayout />}>
                 <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/graph-path" element={<GraphPathPage />} />
                 <Route path="/course/:subject" element={<CoursePage />} /> 
                 <Route path="/lesson/:topicId" element={<LessonPage />} />
                 <Route path="/mastery-path" element={<ExplainMistakePage />} />
