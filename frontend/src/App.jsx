@@ -10,6 +10,7 @@ import { UserProvider } from './context/UserContext';
 // --- Layout Components (KEEP THESE STANDARD) ---
 // Layouts are used across many pages, so keeping them standard is usually better
 import Navbar from './components/Navbar';
+import PresentationWalkthroughDock from './components/PresentationWalkthroughDock';
 import RuntimeDebugDock from './components/RuntimeDebugDock';
 import TeacherSidebar from './components/TeacherSidebar';
 import LandingLayout from './layouts/LandingLayout'; 
@@ -61,6 +62,7 @@ const StudentLayout = () => (
   <div className="min-h-screen bg-slate-50 flex flex-col">
     <Navbar />
     <div className="flex-1"><Outlet /></div>
+    <PresentationWalkthroughDock />
     <RuntimeDebugDock />
   </div>
 );
@@ -68,7 +70,10 @@ const StudentLayout = () => (
 const TeacherLayout = () => (
   <div className="flex min-h-screen bg-slate-50">
     <TeacherSidebar />
-    <div className="flex-1 h-screen overflow-y-auto"><Outlet /></div>
+    <div className="flex-1 h-screen overflow-y-auto">
+      <Outlet />
+      <PresentationWalkthroughDock />
+    </div>
   </div>
 );
 

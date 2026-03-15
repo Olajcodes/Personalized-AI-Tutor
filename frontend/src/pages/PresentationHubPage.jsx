@@ -1,9 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Bot, GitBranch, GraduationCap, Loader2, MonitorPlay, School, Server } from 'lucide-react';
+import { ArrowRight, Bot, GitBranch, GraduationCap, Loader2, MonitorPlay, PlayCircle, School, Server, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
+import {
+  createPresentationWalkthroughSteps,
+  readPresentationWalkthrough,
+  startPresentationWalkthrough,
+  stopPresentationWalkthrough,
+  subscribePresentationWalkthrough,
+} from '../services/presentationWalkthrough';
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
 
@@ -57,6 +64,9 @@ export default function PresentationHubPage() {
   const [studentBootstrap, setStudentBootstrap] = useState(null);
   const [teacherClasses, setTeacherClasses] = useState([]);
   const [error, setError] = useState('');
+  const [activeWalkthrough, setActiveWalkthrough] = useState(() => readPresentationWalkthrough());
+
+  useEffect(() => subscribePresentationWalkthrough(setActiveWalkthrough), []);
 
   useEffect(() => {
     if (!token) return;
@@ -136,6 +146,11 @@ export default function PresentationHubPage() {
   const studentNextTopicId = studentCourse?.next_step?.recommended_topic_id || null;
   const studentSubject = studentBootstrap?.active_subject || initialSubject;
   const primaryTeacherClass = teacherClasses[0] || null;
+  const walkthroughSteps = useMemo(() => createPresentationWalkthroughSteps({
+    subject: studentSubject,
+    recommendedTopicId: studentNextTopicId,
+    teacherClassId: primaryTeacherClass?.id || null,
+  }), [primaryTeacherClass?.id, studentNextTopicId, studentSubject]);
 
   const runtimeCards = useMemo(() => ([
     {
@@ -176,6 +191,25 @@ export default function PresentationHubPage() {
     },
   ]), [aiCoreHealth, aiCoreUrl, backendHealth, primaryTeacherClass, role, studentCourse, studentData]);
 
+  const startWalkthrough = () => {
+    const walkthrough = startPresentationWalkthrough({
+      subject: studentSubject,
+      recommendedTopicId: studentNextTopicId,
+      teacherClassId: primaryTeacherClass?.id || null,
+    });
+    const firstPath = walkthrough?.steps?.[0]?.path;
+    if (firstPath) {
+      navigate(firstPath);
+    }
+  };
+
+  const resumeWalkthrough = () => {
+    const currentPath = activeWalkthrough?.steps?.[activeWalkthrough?.currentStepIndex || 0]?.path;
+    if (currentPath) {
+      navigate(currentPath);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.12),_transparent_36%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)] p-6 md:p-8">
       <div className="mx-auto max-w-7xl space-y-8">
@@ -194,12 +228,44 @@ export default function PresentationHubPage() {
             <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 px-5 py-4">
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Recommended walkthrough</p>
               <ol className="mt-3 space-y-2 text-sm font-semibold text-slate-700">
-                <li>1. Start with runtime health</li>
-                <li>2. Open the student graph explorer</li>
-                <li>3. Show the student graph briefing</li>
-                <li>4. Jump to teacher presentation mode</li>
+                {walkthroughSteps.map((step, index) => (
+                  <li key={step.id}>{index + 1}. {step.title}</li>
+                ))}
               </ol>
             </div>
+          </div>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={startWalkthrough}
+              className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800"
+            >
+              <PlayCircle className="h-4 w-4" />
+              Start walkthrough
+            </button>
+            {activeWalkthrough?.active && (
+              <>
+                <button
+                  type="button"
+                  onClick={resumeWalkthrough}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+                >
+                  <ArrowRight className="h-4 w-4" />
+                  Resume walkthrough
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    stopPresentationWalkthrough();
+                    setActiveWalkthrough(null);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+                >
+                  <X className="h-4 w-4" />
+                  End walkthrough
+                </button>
+              </>
+            )}
           </div>
         </section>
 
