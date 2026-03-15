@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowUpRight, Clock3, Download, MessageSquareMore, ShieldAlert, TrendingUp, UserRound, X } from 'lucide-react';
+import { ArrowUpRight, Clock3, Download, MessageSquareMore, Printer, ShieldAlert, TrendingUp, UserRound, X } from 'lucide-react';
 
 const formatDateTime = (value) => {
   if (!value) return 'Not available';
@@ -48,6 +48,7 @@ const TeacherStudentFocusDrawer = ({
   isLoading,
   onExport,
   isExporting,
+  onOpenReport,
 }) => {
   if (!isOpen || !student) return null;
 
@@ -66,6 +67,14 @@ const TeacherStudentFocusDrawer = ({
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onOpenReport}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-600 transition hover:bg-slate-100 hover:text-slate-800"
+            >
+              <Printer className="h-4 w-4" />
+              Report
+            </button>
             <button
               type="button"
               onClick={onExport}

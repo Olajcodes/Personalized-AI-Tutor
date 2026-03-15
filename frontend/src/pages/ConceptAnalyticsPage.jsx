@@ -516,6 +516,15 @@ const ConceptAnalyticsPage = () => {
     }
   };
 
+  const openStudentReportPage = () => {
+    if (!activeClassId || !selectedStudent?.student_id || !selectedConceptId) return;
+    window.open(
+      `/teacher/students/${activeClassId}/${selectedStudent.student_id}/concepts/${encodeURIComponent(selectedConceptId)}/report`,
+      '_blank',
+      'noopener,noreferrer',
+    );
+  };
+
   const createStudentIntervention = async (student) => {
     if (!activeClassId || !activeClass || !token || !conceptStudents) return;
     const key = `${student.student_id}-${conceptStudents.concept_id}`;
@@ -1879,6 +1888,7 @@ const ConceptAnalyticsPage = () => {
         isLoading={isLoadingStudentTimeline}
         onExport={openStudentFocusExport}
         isExporting={exportState.isOpen && exportState.isLoading && exportState.target === 'student' && Boolean(selectedStudent)}
+        onOpenReport={openStudentReportPage}
       />
       <TeacherExportModal
         isOpen={exportState.isOpen}

@@ -42,6 +42,7 @@ const Completed = lazy(() => import('./pages/Completed'));
 const ModuleQuizPage = lazy(() => import('./pages/ModuleQuizPage'));
 const ConceptAnalyticsPage = lazy(() => import('./pages/ConceptAnalyticsPage'));
 const TeacherBriefingPage = lazy(() => import('./pages/TeacherBriefingPage'));
+const TeacherStudentReportPage = lazy(() => import('./pages/TeacherStudentReportPage'));
 
 // --- Loading Fallback ---
 const PageLoader = () => (
@@ -118,6 +119,7 @@ function App() {
                 <Route index element={<Navigate to="analytics" />} />
                 <Route path="analytics" element={<ConceptAnalyticsPage />} />
                 <Route path="briefing/:classId" element={<TeacherBriefingPage />} />
+                <Route path="students/:classId/:studentId/concepts/:conceptId/report" element={<TeacherStudentReportPage />} />
               </Route>
 
             </Route>
