@@ -9,6 +9,7 @@ import InterventionTimeline from '../components/InterventionTimeline';
 import LearningMap from '../components/LearningMap';
 import LearningTasks from '../components/LearningTasks';
 import Leaderboard from '../components/Leaderboard';
+import PresentationCueCard from '../components/PresentationCueCard';
 import Footer from '../components/Footer';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
@@ -315,6 +316,20 @@ export default function Dashboard() {
                         recommendation={activeSubject ? effectiveMapData?.next_step : null}
                         recentEvidence={activeSubject ? effectiveMapData?.recent_evidence : null}
                         recommendationStory={activeSubject ? effectiveMapData?.recommendation_story : null}
+                    />
+                </div>
+
+                <div className="mb-8">
+                    <PresentationCueCard
+                        stepId="dashboard"
+                        nextClickLabel={dashboardSignal?.payload?.next_step?.recommended_topic_id ? 'Resume now' : 'Full graph view'}
+                        speakerNotes={[
+                            'Open with the graph-backed recommendation, not the tutor panel.',
+                            'Point out that the intervention summary and evidence timeline are live, not mock data.',
+                            dashboardSignal?.payload?.next_step?.recommended_topic_title
+                                ? `Use "Resume now" to jump straight into ${dashboardSignal.payload.next_step.recommended_topic_title}.`
+                                : 'If no lesson is available yet, use "Full graph view" to explain blockers and ready nodes.',
+                        ]}
                     />
                 </div>
 

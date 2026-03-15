@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Clipboard, Download, Loader2, Presentation, Printer, Sparkles } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import PresentationCueCard from '../components/PresentationCueCard';
 import TeacherClassGraph from '../components/teacher/TeacherClassGraph';
 
 const formatDateTime = (value) => {
@@ -83,6 +84,16 @@ const TeacherPresentationPage = () => {
   return (
     <main className="min-h-screen bg-slate-50 p-8 print:bg-white print:p-0">
       <div className="mx-auto max-w-7xl space-y-6">
+        <PresentationCueCard
+          stepId="teacher-presentation"
+          nextClickLabel="Intervention queue"
+          speakerNotes={[
+            'Now switch the story from the student path to the teacher response layer.',
+            'Start with the graph signal, then point to the intervention queue and the outcome snapshot.',
+            'Use the next cluster plan to explain how the graph becomes a practical teaching plan.',
+          ]}
+        />
+
         <div className="flex flex-col gap-4 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm print:hidden">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>

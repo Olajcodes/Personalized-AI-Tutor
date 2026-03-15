@@ -14,6 +14,7 @@ import {
 
 import LearningMap from '../components/LearningMap';
 import InterventionTimeline from '../components/InterventionTimeline';
+import PresentationCueCard from '../components/PresentationCueCard';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
 
@@ -242,6 +243,20 @@ export default function GraphPathPage() {
               </span>
             </button>
           </div>
+        </div>
+
+        <div className="mb-8">
+          <PresentationCueCard
+            stepId="graph-path"
+            nextClickLabel={recommendedTopic?.recommended_topic_id ? 'Open recommended lesson' : 'Briefing'}
+            speakerNotes={[
+              'Use this page to prove the graph is shaping the route, not a fixed topic order.',
+              'Point to ready nodes, blocked nodes, and the evidence events count before clicking deeper.',
+              recommendedTopic?.recommended_topic_title
+                ? `Call out ${recommendedTopic.recommended_topic_title} as the graph-selected next lesson.`
+                : 'If no lesson is recommended yet, move to the briefing to summarize the current graph story.',
+            ]}
+          />
         </div>
 
         {isLoading ? (

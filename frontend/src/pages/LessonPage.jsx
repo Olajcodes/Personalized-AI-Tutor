@@ -23,6 +23,7 @@ import {
 
 import CourseSidebar from '../components/CourseSidebar';
 import InterventionTimeline from '../components/InterventionTimeline';
+import PresentationCueCard from '../components/PresentationCueCard';
 import LessonKnowledgeGraph from '../components/lesson/LessonKnowledgeGraph';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
@@ -950,6 +951,17 @@ export default function LessonPage() {
         </div>
 
         <div className="grid gap-6 p-4 md:p-8 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.9fr)]">
+          <div className="xl:col-span-2">
+            <PresentationCueCard
+              stepId="lesson"
+              nextClickLabel="Graph view"
+              speakerNotes={[
+                'This is the graph-first lesson cockpit, not a static lesson page with a chatbot attached.',
+                `Use ${lesson?.title ? `"${lesson.title}"` : 'the lesson'} to show how the graph recommendation flows into content, tutor actions, and checkpointing.`,
+                'Click "Graph view" next to reconnect this lesson to the wider concept map, then point out Check understanding or Take quiz.',
+              ]}
+            />
+          </div>
           <motion.section
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
