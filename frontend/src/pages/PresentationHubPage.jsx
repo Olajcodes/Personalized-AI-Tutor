@@ -304,6 +304,13 @@ export default function PresentationHubPage() {
                 </p>
                 <div className="mt-5 grid gap-4">
                   <QuickLinkCard
+                    title="Demo mode"
+                    subtitle="Open the speaker notes, live checks, and exact run-of-show for presentation day."
+                    label="Open demo mode"
+                    icon={PlayCircle}
+                    onClick={() => navigate('/demo-mode')}
+                  />
+                  <QuickLinkCard
                     title="Student dashboard"
                     subtitle="Open the live dashboard where graph-backed recommendations and intervention timelines surface first."
                     label="Open dashboard"
