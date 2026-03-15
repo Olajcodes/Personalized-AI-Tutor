@@ -361,6 +361,13 @@ export default function Dashboard() {
                                 >
                                     Full graph view
                                 </button>
+                                <button
+                                    type="button"
+                                    onClick={() => navigate(activeSubject ? `/graph-briefing?subject=${encodeURIComponent(activeSubject)}` : '/graph-briefing')}
+                                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                                >
+                                    Briefing
+                                </button>
                                 {dashboardSignal.payload.next_step?.recommended_topic_id && (
                                     <button
                                         type="button"
@@ -430,7 +437,14 @@ export default function Dashboard() {
                 )}
 
                 {activeSubject && !isLoadingMap && !mapError && (
-                    <div className="mb-8 flex justify-end">
+                    <div className="mb-8 flex justify-end gap-3">
+                        <button
+                            type="button"
+                            onClick={() => navigate(`/graph-briefing?subject=${encodeURIComponent(activeSubject)}`)}
+                            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50"
+                        >
+                            Open graph briefing
+                        </button>
                         <button
                             type="button"
                             onClick={openGraphPath}

@@ -934,6 +934,13 @@ export default function LessonPage() {
                 <GitBranch size={16} />
                 Graph view
               </button>
+              <button
+                type="button"
+                onClick={() => navigate(`/graph-briefing?subject=${encodeURIComponent(currentSubject)}`)}
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100"
+              >
+                Briefing
+              </button>
               <button type="button" onClick={() => navigate(`/quiz/${topicId}`)} className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700">
                 Take quiz
                 <ArrowRight size={16} />
