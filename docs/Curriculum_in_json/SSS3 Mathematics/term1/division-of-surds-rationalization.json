@@ -1,0 +1,140 @@
+{
+  "subject": "math",
+  "sss_level": "SSS3",
+  "term": 1,
+  "week": 2,
+  "topic_title": "DIVISION OF SURDS (RATIONALIZATION)",
+  "topic_slug": "division-of-surds-rationalization",
+  "source_title": "First Term SSS3 Mathematics",
+  "learning_objectives": [
+    "Understand division of surds (rationalization)"
+  ],
+  "sections": [
+    {
+      "heading": "Content",
+      "content": "Division of Surd (Rationalization)\nMultiplication of Surd involving and conjugate of binomial surd.\nExpression with Surds\nExamples\n1. \n = 3 2."
+    },
+    {
+      "heading": "7 7",
+      "content": "Note: When a fraction has Surd as the denomination, the Surd is rationalized.\nTo rationalize the denominator of a rational surd, means to rationalize denominator remove the square root sign from the denominator.\nTwo types are considered"
+    },
+    {
+      "heading": "(a) Monomial denominator",
+      "content": "(i)\n   ab b\n(ii)"
+    },
+    {
+      "heading": "  ",
+      "content": " ab b\n(iii)\n(iv)\n "
+    },
+    {
+      "heading": "5 7  2 3",
+      "content": "45  21"
+    },
+    {
+      "heading": "7  3  10",
+      "content": "9  5  7  3"
+    },
+    {
+      "heading": "3  5 ",
+      "content": "7  3 3 5"
+    },
+    {
+      "heading": "10   10 5  2 5",
+      "content": "3 5 3  5 3"
+    },
+    {
+      "heading": "2  ",
+      "content": "(2)\n(3)"
+    },
+    {
+      "heading": "BINOMIAL DENOMINATOR:",
+      "content": "Conjugate of a binominal surd\nWhen an expression contains two terms e.g. 6 \nsurd, it is known as BINOMINAL SURD."
+    },
+    {
+      "heading": "5, 3 ",
+      "content": "3, 2  4\nand one or both of them contains\nTo rationalize binominal surd, multiply it by its conjugate i.e change the sign of the denominator and use the result to multiply both the numerator and the denominator.\ne.g."
+    },
+    {
+      "heading": "2  4",
+      "content": "is the Conjugate of"
+    },
+    {
+      "heading": "2  4",
+      "content": "i.e. the sign between the terms is changed or reversed."
+    },
+    {
+      "heading": "Example:",
+      "content": "Simplify"
+    },
+    {
+      "heading": "(1) ",
+      "content": "(2)"
+    },
+    {
+      "heading": "6 2",
+      "content": "="
+    },
+    {
+      "heading": "(4  2)  1 7",
+      "content": "(2)"
+    },
+    {
+      "heading": "2 5  3",
+      "content": "5 3  3 5\n= 2 5 "
+    },
+    {
+      "heading": "5 3  3",
+      "content": "3  5"
+    },
+    {
+      "heading": "5 5",
+      "content": "3  3 5"
+    },
+    {
+      "heading": "3  3 5",
+      "content": "= 10"
+    },
+    {
+      "heading": "25  5",
+      "content": "9  9"
+    },
+    {
+      "heading": "= (10 15  3",
+      "content": "15  (6  5)  (5  3)"
+    },
+    {
+      "heading": "15  30  15",
+      "content": "= 13"
+    },
+    {
+      "heading": "75  45",
+      "content": "15  45"
+    },
+    {
+      "heading": "  1   1 ",
+      "content": "\n=   "
+    },
+    {
+      "heading": " 2  1 2  1",
+      "content": "=  "
+    },
+    {
+      "heading": " 2 ",
+      "content": "= 3  3\n"
+    },
+    {
+      "heading": "  4 12",
+      "content": "Evaluation: Rationalize the following 1. 2. 3."
+    }
+  ],
+  "keywords": [
+    "division",
+    "surds",
+    "rationalization",
+    "content",
+    "monomial",
+    "denominator",
+    "binomial",
+    "example"
+  ]
+}

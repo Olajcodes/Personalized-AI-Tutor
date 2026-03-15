@@ -1,0 +1,38 @@
+{
+  "subject": "english",
+  "sss_level": "SSS1",
+  "term": 1,
+  "source_title": "First Term SS1 English Language",
+  "week": 2,
+  "topic_title": "Adverbs: Types and Formation",
+  "topic_slug": "adverbs-types-and-formation",
+  "learning_objectives": [
+    "Define an adverb and state what it modifies",
+    "Explain how adverbs are formed from other word classes",
+    "Distinguish adjuncts, disjuncts, and conjuncts with examples"
+  ],
+  "sections": [
+    {
+      "heading": "Definition",
+      "content": "An adverb is a word that modifies verbs, adjectives, and other adverbs."
+    },
+    {
+      "heading": "Formation of Adverbs",
+      "content": "Many adverbs are formed from adjectives by adding -ly:\n  certain→certainly, fortunate→fortunately, careful→carefully, quick→quickly\n\nSome adverbs showing direction end in -wards:\n  downwards, forwards, backwards\n\nSome adverbs expressing manner or viewpoint end in -wise:\n  clockwise, foodwise, moneywise\n\nMany adverbs have no special ending:\n  always, early, fast, quite, often, very, when, hard, late, so"
+    },
+    {
+      "heading": "Types of Adverbs",
+      "content": "ADJUNCTS – tell us how, when, where, or to what extent the action of the verb is performed.\n  He came at 6 o'clock. (when) | She ran fast. (how)\n\nDISJUNCTS – express the attitude or viewpoint of the speaker.\n  Luckily, she arrived. | Frankly, we were in the wrong.\n  Ola is certainly the best. | Foolishly, he fell.\n  Others: honestly, seriously, strangely, undoubtedly, happily, fortunately\n\nCONJUNCTS – perform a connective function between sentences or clauses.\n  It was a hard task; nevertheless, we performed well.\n  She is hardworking; besides, she is intelligent.\n  Others: consequently, meanwhile, otherwise, similarly, then, alternately"
+    }
+  ],
+  "keywords": [
+    "adverb",
+    "adjunct",
+    "disjunct",
+    "conjunct",
+    "modifier",
+    "formation",
+    "-ly suffix",
+    "viewpoint adverb"
+  ]
+}
