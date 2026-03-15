@@ -9,7 +9,7 @@
   "sections": [
     {
       "heading": "Definition",
-      "content": "Comprehension means understanding."
+      "content": "Comprehension means understanding. It involves reading a passage and answering questions based on it."
     },
     {
       "heading": "Hints",
@@ -21,5 +21,10 @@
     "reading",
     "exam tips",
     "answering questions"
+  ],
+  "learning_objectives": [
+    "Define comprehension and its purpose",
+    "Apply strategies for answering comprehension questions",
+    "Avoid common errors when answering comprehension questions"
   ]
 }
