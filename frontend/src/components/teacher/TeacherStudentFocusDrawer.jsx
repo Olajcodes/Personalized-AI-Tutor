@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowUpRight, Clock3, MessageSquareMore, ShieldAlert, TrendingUp, UserRound, X } from 'lucide-react';
+import { ArrowUpRight, Clock3, Download, MessageSquareMore, ShieldAlert, TrendingUp, UserRound, X } from 'lucide-react';
 
 const formatDateTime = (value) => {
   if (!value) return 'Not available';
@@ -46,6 +46,8 @@ const TeacherStudentFocusDrawer = ({
   isLoadingTrend,
   timeline,
   isLoading,
+  onExport,
+  isExporting,
 }) => {
   if (!isOpen || !student) return null;
 
@@ -63,13 +65,23 @@ const TeacherStudentFocusDrawer = ({
               {student.status.replace('_', ' ')} on {conceptLabel}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onExport}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-600 transition hover:bg-slate-100 hover:text-slate-800"
+            >
+              <Download className="h-4 w-4" />
+              {isExporting ? 'Preparing...' : 'Export'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">

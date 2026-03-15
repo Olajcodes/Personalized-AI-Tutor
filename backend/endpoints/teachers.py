@@ -29,6 +29,7 @@ from backend.schemas.teacher_schema import (
     TeacherClassEnrollIn,
     TeacherClassEnrollOut,
     TeacherClassHeatmapOut,
+    TeacherExportOut,
     TeacherInterventionOutcomeSummaryOut,
     TeacherClassListOut,
     TeacherNextLessonClusterPlanOut,
@@ -219,6 +220,21 @@ def class_next_cluster_plan(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 
+@router.get("/classes/{class_id}/next-cluster-plan/export", response_model=TeacherExportOut)
+def class_next_cluster_plan_export(
+    class_id: UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return a teacher-ready export package for the graph-derived next lesson cluster plan."""
+    try:
+        return _analytics_service(db).get_next_cluster_plan_export(teacher_id=current_user.id, class_id=class_id)
+    except TeacherServiceUnauthorizedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except TeacherServiceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
 @router.get("/classes/{class_id}/alerts", response_model=TeacherAlertsOut)
 def class_alerts(
     class_id: UUID,
@@ -333,6 +349,28 @@ def student_concept_trend(
             student_id=student_id,
             concept_id=concept_id,
             days=days,
+        )
+    except TeacherServiceUnauthorizedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except TeacherServiceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+@router.get("/classes/{class_id}/students/{student_id}/concepts/{concept_id}/export", response_model=TeacherExportOut)
+def student_concept_export(
+    class_id: UUID,
+    student_id: UUID,
+    concept_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return a teacher-ready export package for one student's focused concept evidence."""
+    try:
+        return _analytics_service(db).get_student_focus_export(
+            teacher_id=current_user.id,
+            class_id=class_id,
+            student_id=student_id,
+            concept_id=concept_id,
         )
     except TeacherServiceUnauthorizedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))

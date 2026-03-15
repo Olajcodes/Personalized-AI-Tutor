@@ -21,6 +21,7 @@ class FakeTeacherAnalyticsRepo:
         self.teacher_class = SimpleNamespace(
             id=self.class_id,
             teacher_id=self.teacher_id,
+            name="SSS2 Math A",
             subject="math",
             sss_level="SSS2",
             term=1,
@@ -390,3 +391,38 @@ def test_teacher_student_concept_trend_returns_current_scores_and_recent_deltas(
     assert out.tracked_concepts[0].role == "focus"
     assert any(item.role == "prerequisite" and item.concept_label == "Number Sense" for item in out.tracked_concepts)
     assert out.recent_events[0].source == "practice"
+
+
+def test_teacher_next_cluster_plan_export_contains_teacher_ready_markdown():
+    repo = FakeTeacherAnalyticsRepo()
+    service = TeacherAnalyticsService(repo)
+
+    out = service.get_next_cluster_plan_export(teacher_id=repo.teacher_id, class_id=repo.class_id)
+
+    assert out.export_kind == "next_cluster_plan"
+    assert out.class_id == repo.class_id
+    assert out.subject == "math"
+    assert out.file_name.endswith(".md")
+    assert "Repair" in out.share_text
+    assert "Planning headline" in out.markdown
+    assert any(section.title == "Teach next" for section in out.sections)
+
+
+def test_teacher_student_focus_export_contains_student_and_concept_evidence():
+    repo = FakeTeacherAnalyticsRepo()
+    service = TeacherAnalyticsService(repo)
+
+    out = service.get_student_focus_export(
+        teacher_id=repo.teacher_id,
+        class_id=repo.class_id,
+        student_id=repo.student_a,
+        concept_id="math:sss2:t1:fractions",
+    )
+
+    assert out.export_kind == "student_focus"
+    assert out.student_id == repo.student_a
+    assert out.concept_label == "Fractions"
+    assert out.file_name.endswith(".md")
+    assert "Ada James" in out.share_text
+    assert "Focus summary" in out.markdown
+    assert any(section.title == "Blocking prerequisites" for section in out.sections)

@@ -16,6 +16,8 @@ from backend.schemas.teacher_schema import (
     TeacherConceptStudentOut,
     TeacherConceptTrendEventOut,
     TeacherConceptTrendSnapshotOut,
+    TeacherExportOut,
+    TeacherExportSectionOut,
     TeacherClassGraphOut,
     TeacherGraphEdgeOut,
     TeacherInterventionOutcomeOut,
@@ -115,6 +117,28 @@ class TeacherAnalyticsService:
             blocking_prerequisite_labels=list(node.blocking_prerequisite_labels or []),
             recommended_action=node.recommended_action,
         )
+
+    @staticmethod
+    def _slugify(value: str | None, *, fallback: str = "export") -> str:
+        token = re.sub(r"[^a-z0-9]+", "-", str(value or "").strip().lower()).strip("-")
+        return token or fallback
+
+    @staticmethod
+    def _format_percentage(value: float | None) -> str:
+        if value is None:
+            return "Unassessed"
+        return f"{round(float(value) * 100)}%"
+
+    @staticmethod
+    def _build_markdown(*, title: str, subtitle: str, sections: list[TeacherExportSectionOut]) -> str:
+        lines = [f"# {title}", "", subtitle]
+        for section in sections:
+            lines.extend(["", f"## {section.title}"])
+            if not section.items:
+                lines.append("- No data available.")
+                continue
+            lines.extend([f"- {item}" for item in section.items])
+        return "\n".join(lines).strip()
 
     def _require_teacher_user(self, teacher_id: UUID):
         user = self.repo.get_user(teacher_id)
@@ -642,6 +666,76 @@ class TeacherAnalyticsService:
             suggested_actions=playbook.actions[:2],
         )
 
+    def get_next_cluster_plan_export(self, *, teacher_id: UUID, class_id: UUID) -> TeacherExportOut:
+        teacher_class = self._require_teacher_class(teacher_id=teacher_id, class_id=class_id)
+        plan = self.get_next_lesson_cluster_plan(teacher_id=teacher_id, class_id=class_id)
+        graph = self.get_class_graph_summary(teacher_id=teacher_id, class_id=class_id)
+
+        sections = [
+            TeacherExportSectionOut(
+                title="Planning headline",
+                items=[
+                    plan.headline,
+                    plan.rationale,
+                    f"Graph signal: {graph.graph_signal.headline}",
+                ],
+            ),
+            TeacherExportSectionOut(
+                title="Repair first",
+                items=[
+                    f"{item.concept_label} ({item.topic_title or 'Mapped concept node'}): {item.recommended_action}"
+                    for item in plan.repair_first
+                ],
+            ),
+            TeacherExportSectionOut(
+                title="Teach next",
+                items=[
+                    f"{item.concept_label} ({item.topic_title or 'Mapped concept node'}): {item.recommended_action}"
+                    for item in plan.teach_next
+                ],
+            ),
+            TeacherExportSectionOut(
+                title="Watchlist",
+                items=[
+                    f"{item.concept_label} ({item.topic_title or 'Mapped concept node'}): {item.recommended_action}"
+                    for item in plan.watchlist
+                ],
+            ),
+            TeacherExportSectionOut(
+                title="Suggested actions",
+                items=[
+                    f"{action.title}: {action.summary}"
+                    for action in plan.suggested_actions
+                ],
+            ),
+        ]
+        subtitle = (
+            f"{teacher_class.name} • {teacher_class.subject.title()} • {teacher_class.sss_level} Term {teacher_class.term}. "
+            f"Plan status: {plan.plan_status.replace('_', ' ')}."
+        )
+        return TeacherExportOut(
+            export_kind="next_cluster_plan",
+            class_id=class_id,
+            class_name=teacher_class.name,
+            subject=teacher_class.subject,
+            sss_level=teacher_class.sss_level,
+            term=teacher_class.term,
+            title=f"{teacher_class.name} cluster plan",
+            subtitle=subtitle,
+            generated_at=datetime.now(timezone.utc),
+            file_name=(
+                f"{self._slugify(teacher_class.name, fallback='class')}-"
+                f"term{teacher_class.term}-next-cluster-plan.md"
+            ),
+            share_text=f"{plan.headline} {plan.rationale}",
+            markdown=self._build_markdown(
+                title=f"{teacher_class.name} cluster plan",
+                subtitle=subtitle,
+                sections=sections,
+            ),
+            sections=sections,
+        )
+
     def get_concept_student_drilldown(
         self,
         *,
@@ -885,6 +979,109 @@ class TeacherAnalyticsService:
             evidence_event_count=len(recent_events),
             tracked_concepts=tracked_concepts,
             recent_events=recent_events[:8],
+        )
+
+    def get_student_focus_export(
+        self,
+        *,
+        teacher_id: UUID,
+        class_id: UUID,
+        student_id: UUID,
+        concept_id: str,
+    ) -> TeacherExportOut:
+        teacher_class = self._require_teacher_class(teacher_id=teacher_id, class_id=class_id)
+        trend = self.get_student_concept_trend(
+            teacher_id=teacher_id,
+            class_id=class_id,
+            student_id=student_id,
+            concept_id=concept_id,
+            days=30,
+        )
+        drilldown = self.get_concept_student_drilldown(
+            teacher_id=teacher_id,
+            class_id=class_id,
+            concept_id=concept_id,
+        )
+        student = next((item for item in drilldown.students if item.student_id == student_id), None)
+        if not student:
+            raise TeacherServiceNotFoundError("Student is not part of the focused concept drilldown.")
+        timeline = self.get_student_timeline(
+            teacher_id=teacher_id,
+            class_id=class_id,
+            student_id=student_id,
+            limit=8,
+        )
+
+        sections = [
+            TeacherExportSectionOut(
+                title="Focus summary",
+                items=[
+                    f"Status: {trend.status.replace('_', ' ')}",
+                    f"Current concept mastery: {self._format_percentage(trend.current_score)}",
+                    f"Overall mastery: {self._format_percentage(student.overall_mastery_score)}",
+                    f"Net delta (30d): {trend.net_delta_30d:+.2f}",
+                    f"Evidence events: {trend.evidence_event_count}",
+                    f"Recommended action: {student.recommended_action}",
+                ],
+            ),
+            TeacherExportSectionOut(
+                title="Blocking prerequisites",
+                items=list(trend.blocking_prerequisite_labels),
+            ),
+            TeacherExportSectionOut(
+                title="Tracked concept path",
+                items=[
+                    f"{item.concept_label} [{item.role}]: {self._format_percentage(item.current_score)}"
+                    for item in trend.tracked_concepts
+                ],
+            ),
+            TeacherExportSectionOut(
+                title="Recent concept evidence",
+                items=[
+                    f"{item.concept_label}: {item.delta:+.2f} via {item.source} on {item.occurred_at.isoformat()}"
+                    for item in trend.recent_events
+                ],
+            ),
+            TeacherExportSectionOut(
+                title="Recent timeline",
+                items=[
+                    f"{event.event_type.replace('_', ' ')} on {event.occurred_at.isoformat()}"
+                    for event in timeline.timeline
+                ],
+            ),
+        ]
+        subtitle = (
+            f"{student.student_name} • {trend.concept_label} • {teacher_class.name} "
+            f"({teacher_class.subject.title()} {teacher_class.sss_level} Term {teacher_class.term})"
+        )
+        return TeacherExportOut(
+            export_kind="student_focus",
+            class_id=class_id,
+            class_name=teacher_class.name,
+            subject=teacher_class.subject,
+            sss_level=teacher_class.sss_level,
+            term=teacher_class.term,
+            title=f"{student.student_name} focus on {trend.concept_label}",
+            subtitle=subtitle,
+            generated_at=datetime.now(timezone.utc),
+            file_name=(
+                f"{self._slugify(student.student_name, fallback='student')}-"
+                f"{self._slugify(trend.concept_label, fallback='concept')}-focus.md"
+            ),
+            share_text=(
+                f"{student.student_name} is {trend.status.replace('_', ' ')} on {trend.concept_label}. "
+                f"Recommended action: {student.recommended_action}"
+            ),
+            markdown=self._build_markdown(
+                title=f"{student.student_name} focus on {trend.concept_label}",
+                subtitle=subtitle,
+                sections=sections,
+            ),
+            sections=sections,
+            student_id=student.student_id,
+            student_name=student.student_name,
+            concept_id=trend.concept_id,
+            concept_label=trend.concept_label,
         )
 
     def get_assignment_outcomes(self, *, teacher_id: UUID, class_id: UUID) -> TeacherAssignmentOutcomeSummaryOut:

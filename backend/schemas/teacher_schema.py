@@ -164,6 +164,31 @@ class TeacherNextLessonClusterPlanOut(BaseModel):
     suggested_actions: list[TeacherGraphPlaybookActionOut] = Field(default_factory=list)
 
 
+class TeacherExportSectionOut(BaseModel):
+    title: str
+    items: list[str] = Field(default_factory=list)
+
+
+class TeacherExportOut(BaseModel):
+    export_kind: Literal["next_cluster_plan", "student_focus"]
+    class_id: UUID
+    class_name: str
+    subject: Subject
+    sss_level: SSSLevel
+    term: Literal[1, 2, 3]
+    title: str
+    subtitle: str
+    generated_at: datetime
+    file_name: str
+    share_text: str
+    markdown: str
+    sections: list[TeacherExportSectionOut] = Field(default_factory=list)
+    student_id: UUID | None = None
+    student_name: str | None = None
+    concept_id: str | None = None
+    concept_label: str | None = None
+
+
 class TeacherConceptStudentOut(BaseModel):
     student_id: UUID
     student_name: str

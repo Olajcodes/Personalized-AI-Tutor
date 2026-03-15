@@ -5,6 +5,7 @@ import {
   BarChart3,
   BookOpenCheck,
   BrainCircuit,
+  Download,
   Flame,
   GitBranch,
   Loader2,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import TeacherClassGraph from '../components/teacher/TeacherClassGraph';
+import TeacherExportModal from '../components/teacher/TeacherExportModal';
 import TeacherStudentFocusDrawer from '../components/teacher/TeacherStudentFocusDrawer';
 
 const actionRefId = (action) => {
@@ -88,6 +90,7 @@ const ConceptAnalyticsPage = () => {
   const [studentTimeline, setStudentTimeline] = useState([]);
   const [studentConceptTrend, setStudentConceptTrend] = useState(null);
   const [alerts, setAlerts] = useState([]);
+  const [exportState, setExportState] = useState({ isOpen: false, isLoading: false, error: '', data: null, target: '' });
   const [assignmentStatus, setAssignmentStatus] = useState({});
   const [interventionStatus, setInterventionStatus] = useState({});
   const [interventionUpdateStatus, setInterventionUpdateStatus] = useState({});
@@ -412,6 +415,43 @@ const ConceptAnalyticsPage = () => {
       setAssignmentStatus((current) => ({ ...current, [key]: { state: 'success', message: 'Assignment created for this class.' } }));
     } catch (err) {
       setAssignmentStatus((current) => ({ ...current, [key]: { state: 'error', message: err.message || 'Failed to create assignment.' } }));
+    }
+  };
+
+  const openClusterPlanExport = async () => {
+    if (!activeClassId || !token) return;
+    setExportState({ isOpen: true, isLoading: true, error: '', data: null, target: 'plan' });
+    try {
+      const response = await fetch(`${apiUrl}/teachers/classes/${activeClassId}/next-cluster-plan/export`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.detail || 'Failed to prepare cluster plan export.');
+      }
+      const data = await response.json();
+      setExportState({ isOpen: true, isLoading: false, error: '', data, target: 'plan' });
+    } catch (err) {
+      setExportState({ isOpen: true, isLoading: false, error: err.message || 'Failed to prepare cluster plan export.', data: null, target: 'plan' });
+    }
+  };
+
+  const openStudentFocusExport = async () => {
+    if (!activeClassId || !token || !selectedStudent?.student_id || !selectedConceptId) return;
+    setExportState({ isOpen: true, isLoading: true, error: '', data: null, target: 'student' });
+    try {
+      const response = await fetch(
+        `${apiUrl}/teachers/classes/${activeClassId}/students/${selectedStudent.student_id}/concepts/${encodeURIComponent(selectedConceptId)}/export`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.detail || 'Failed to prepare student focus export.');
+      }
+      const data = await response.json();
+      setExportState({ isOpen: true, isLoading: false, error: '', data, target: 'student' });
+    } catch (err) {
+      setExportState({ isOpen: true, isLoading: false, error: err.message || 'Failed to prepare student focus export.', data: null, target: 'student' });
     }
   };
 
@@ -880,9 +920,20 @@ const ConceptAnalyticsPage = () => {
                     <h2 className="text-lg font-bold text-slate-800">Next Lesson Cluster Plan</h2>
                     <p className="text-xs text-slate-500">Use the class graph to decide what to repair first, what to teach next, and what to monitor while you move the class forward.</p>
                   </div>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
-                    {String(nextClusterPlan?.plan_status || 'collect_evidence').replace('_', ' ')}
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={openClusterPlanExport}
+                      disabled={!nextClusterPlan}
+                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Download className="h-4 w-4" />
+                      Export plan
+                    </button>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                      {String(nextClusterPlan?.plan_status || 'collect_evidence').replace('_', ' ')}
+                    </span>
+                  </div>
                 </div>
 
                 {!nextClusterPlan ? (
@@ -1725,6 +1776,15 @@ const ConceptAnalyticsPage = () => {
         isLoadingTrend={isLoadingStudentConceptTrend}
         timeline={studentTimeline}
         isLoading={isLoadingStudentTimeline}
+        onExport={openStudentFocusExport}
+        isExporting={exportState.isOpen && exportState.isLoading && exportState.target === 'student' && Boolean(selectedStudent)}
+      />
+      <TeacherExportModal
+        isOpen={exportState.isOpen}
+        onClose={() => setExportState({ isOpen: false, isLoading: false, error: '', data: null, target: '' })}
+        exportData={exportState.data}
+        isLoading={exportState.isLoading}
+        error={exportState.error}
       />
     </main>
   );

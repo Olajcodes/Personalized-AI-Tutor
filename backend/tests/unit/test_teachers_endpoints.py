@@ -279,6 +279,29 @@ def test_teachers_endpoints_success(monkeypatch):
                 ],
             }
 
+        def get_next_cluster_plan_export(self, *, teacher_id, class_id):
+            return {
+                "export_kind": "next_cluster_plan",
+                "class_id": str(class_id),
+                "class_name": "SSS2 Math A",
+                "subject": "math",
+                "sss_level": "SSS2",
+                "term": 1,
+                "title": "SSS2 Math A cluster plan",
+                "subtitle": "SSS2 Math A • Math • SSS2 Term 1",
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "file_name": "sss2-math-a-term1-next-cluster-plan.md",
+                "share_text": "Repair Number Sense before reteaching Fractions.",
+                "markdown": "# SSS2 Math A cluster plan",
+                "sections": [
+                    {"title": "Planning headline", "items": ["Repair Number Sense before reteaching Fractions."]},
+                ],
+                "student_id": None,
+                "student_name": None,
+                "concept_id": None,
+                "concept_label": None,
+            }
+
         def get_class_alerts(self, *, teacher_id, class_id):
             return {"class_id": str(class_id), "alerts": []}
 
@@ -484,6 +507,29 @@ def test_teachers_endpoints_success(monkeypatch):
                 ],
             }
 
+        def get_student_focus_export(self, *, teacher_id, class_id, student_id, concept_id):
+            return {
+                "export_kind": "student_focus",
+                "class_id": str(class_id),
+                "class_name": "SSS2 Math A",
+                "subject": "math",
+                "sss_level": "SSS2",
+                "term": 1,
+                "title": "Student One focus on Fractions",
+                "subtitle": "Student One • Fractions • SSS2 Math A",
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "file_name": "student-one-fractions-focus.md",
+                "share_text": "Student One is blocked on Fractions.",
+                "markdown": "# Student One focus on Fractions",
+                "sections": [
+                    {"title": "Focus summary", "items": ["Status: blocked"]},
+                ],
+                "student_id": str(student_id),
+                "student_name": "Student One",
+                "concept_id": concept_id,
+                "concept_label": "Fractions",
+            }
+
     monkeypatch.setattr("backend.endpoints.teachers._teacher_service", lambda db: _TeacherService())
     monkeypatch.setattr("backend.endpoints.teachers._analytics_service", lambda db: _AnalyticsService())
 
@@ -505,6 +551,7 @@ def test_teachers_endpoints_success(monkeypatch):
     graph_resp = client.get(f"/api/v1/teachers/classes/{class_id}/graph-summary")
     playbook_resp = client.get(f"/api/v1/teachers/classes/{class_id}/graph-playbook")
     cluster_plan_resp = client.get(f"/api/v1/teachers/classes/{class_id}/next-cluster-plan")
+    cluster_plan_export_resp = client.get(f"/api/v1/teachers/classes/{class_id}/next-cluster-plan/export")
     alerts_resp = client.get(f"/api/v1/teachers/classes/{class_id}/alerts")
     outcomes_resp = client.get(f"/api/v1/teachers/classes/{class_id}/intervention-outcomes")
     assignment_outcomes_resp = client.get(f"/api/v1/teachers/classes/{class_id}/assignment-outcomes")
@@ -513,6 +560,7 @@ def test_teachers_endpoints_success(monkeypatch):
     concept_students_resp = client.get(f"/api/v1/teachers/classes/{class_id}/concepts/math:sss2:t1:fractions/students")
     timeline_resp = client.get(f"/api/v1/teachers/classes/{class_id}/students/{student_id}/timeline")
     concept_trend_resp = client.get(f"/api/v1/teachers/classes/{class_id}/students/{student_id}/concepts/math:sss2:t1:fractions/trend")
+    concept_export_resp = client.get(f"/api/v1/teachers/classes/{class_id}/students/{student_id}/concepts/math:sss2:t1:fractions/export")
     assignment_resp = client.post(
         "/api/v1/teachers/assignments",
         json={
@@ -587,6 +635,7 @@ def test_teachers_endpoints_success(monkeypatch):
     assert graph_resp.status_code == 200
     assert playbook_resp.status_code == 200
     assert cluster_plan_resp.status_code == 200
+    assert cluster_plan_export_resp.status_code == 200
     assert alerts_resp.status_code == 200
     assert outcomes_resp.status_code == 200
     assert assignment_outcomes_resp.status_code == 200
@@ -595,6 +644,7 @@ def test_teachers_endpoints_success(monkeypatch):
     assert concept_students_resp.status_code == 200
     assert timeline_resp.status_code == 200
     assert concept_trend_resp.status_code == 200
+    assert concept_export_resp.status_code == 200
     assert assignment_resp.status_code == 201
     assert bulk_assignment_resp.status_code == 201
     assert intervention_resp.status_code == 201
