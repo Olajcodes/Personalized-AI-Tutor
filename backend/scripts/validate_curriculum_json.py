@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from collections import defaultdict
 from pathlib import Path
+import sys
 
 from backend.services.admin_curriculum_service import (
     AdminCurriculumService,
@@ -13,6 +14,17 @@ from backend.services.admin_curriculum_service import (
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CURRICULUM_ROOT = REPO_ROOT / "docs" / "Curriculum_in_json"
+
+
+def _emit_line(message: str) -> None:
+    text = f"{message}\n"
+    stream = sys.stdout
+    if hasattr(stream, "buffer"):
+        encoding = getattr(stream, "encoding", None) or "utf-8"
+        stream.buffer.write(text.encode(encoding, errors="replace"))
+        stream.flush()
+        return
+    stream.write(text)
 
 
 def _warning_detail(*, file_path: Path, message: str, suggestion: str) -> dict[str, str]:
@@ -136,25 +148,25 @@ def main() -> int:
     args = _parse_args()
     result = validate_curriculum_json_root(Path(args.source_root))
 
-    print(f"Validated JSON files: {result['file_count']}")
-    print(f"Errors: {result['error_count']}")
-    print(f"Warnings: {result['warning_count']}")
+    _emit_line(f"Validated JSON files: {result['file_count']}")
+    _emit_line(f"Errors: {result['error_count']}")
+    _emit_line(f"Warnings: {result['warning_count']}")
 
     if result["errors"]:
-        print("Errors:")
+        _emit_line("Errors:")
         for entry in result["errors"]:
-            print(f"  - {entry}")
+            _emit_line(f"  - {entry}")
 
     if result["warnings"]:
-        print("Warnings:")
+        _emit_line("Warnings:")
         warning_details = result.get("warning_details") or []
         if warning_details:
             for item in warning_details:
-                print(f"  - {item['file']}: {item['message']}")
-                print(f"    suggestion: {item['suggestion']}")
+                _emit_line(f"  - {item['file']}: {item['message']}")
+                _emit_line(f"    suggestion: {item['suggestion']}")
         else:
             for entry in result["warnings"]:
-                print(f"  - {entry}")
+                _emit_line(f"  - {entry}")
 
     if result["errors"] or (args.strict_warnings and result["warnings"]):
         return 1

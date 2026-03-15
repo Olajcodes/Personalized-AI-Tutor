@@ -1,8 +1,9 @@
+import io
 import json
 
 import pytest
 
-from backend.scripts.validate_curriculum_json import validate_curriculum_json_root
+from backend.scripts.validate_curriculum_json import _emit_line, validate_curriculum_json_root
 from backend.services.admin_curriculum_service import AdminCurriculumValidationError
 
 
@@ -65,3 +66,22 @@ def test_validate_curriculum_json_root_includes_fix_suggestions_for_warnings(tmp
     assert any("learning objectives" in item["suggestion"].lower() for item in warning_details)
     assert any("split the topic" in item["suggestion"].lower() for item in warning_details)
     assert any("expand" in item["suggestion"].lower() for item in warning_details)
+
+
+def test_emit_line_replaces_unencodable_console_characters(monkeypatch):
+    class FakeStdout:
+        encoding = "cp1252"
+
+        def __init__(self):
+            self.buffer = io.BytesIO()
+
+        def flush(self):
+            return None
+
+    fake_stdout = FakeStdout()
+    monkeypatch.setattr("backend.scripts.validate_curriculum_json.sys.stdout", fake_stdout)
+
+    _emit_line("bad char \uf03d")
+
+    rendered = fake_stdout.buffer.getvalue().decode("cp1252")
+    assert "bad char" in rendered
