@@ -84,6 +84,10 @@ const ConceptAnalyticsPage = () => {
   const [compareConceptId, setCompareConceptId] = useState('');
   const [conceptStudents, setConceptStudents] = useState(null);
   const [conceptCompare, setConceptCompare] = useState(null);
+  const [primaryCompareStudentId, setPrimaryCompareStudentId] = useState('');
+  const [secondaryCompareStudentId, setSecondaryCompareStudentId] = useState('');
+  const [primaryCompareTrend, setPrimaryCompareTrend] = useState(null);
+  const [secondaryCompareTrend, setSecondaryCompareTrend] = useState(null);
   const [interventionOutcomes, setInterventionOutcomes] = useState(null);
   const [assignmentOutcomes, setAssignmentOutcomes] = useState(null);
   const [repeatRisk, setRepeatRisk] = useState(null);
@@ -102,6 +106,7 @@ const ConceptAnalyticsPage = () => {
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [isLoadingConceptStudents, setIsLoadingConceptStudents] = useState(false);
   const [isLoadingConceptCompare, setIsLoadingConceptCompare] = useState(false);
+  const [isLoadingStudentCompare, setIsLoadingStudentCompare] = useState(false);
   const [isLoadingStudentTimeline, setIsLoadingStudentTimeline] = useState(false);
   const [isLoadingStudentConceptTrend, setIsLoadingStudentConceptTrend] = useState(false);
   const [error, setError] = useState('');
@@ -207,8 +212,12 @@ const ConceptAnalyticsPage = () => {
             ''
         );
         setCompareConceptId('');
+        setPrimaryCompareStudentId('');
+        setSecondaryCompareStudentId('');
         setConceptStudents(null);
         setConceptCompare(null);
+        setPrimaryCompareTrend(null);
+        setSecondaryCompareTrend(null);
         setInterventionOutcomes(outcomesData || null);
         setAssignmentOutcomes(assignmentOutcomesData || null);
         setRepeatRisk(repeatRiskData || null);
@@ -225,8 +234,12 @@ const ConceptAnalyticsPage = () => {
         setNextClusterPlan(null);
         setSelectedConceptId('');
         setCompareConceptId('');
+        setPrimaryCompareStudentId('');
+        setSecondaryCompareStudentId('');
         setConceptStudents(null);
         setConceptCompare(null);
+        setPrimaryCompareTrend(null);
+        setSecondaryCompareTrend(null);
         setInterventionOutcomes(null);
         setAssignmentOutcomes(null);
         setRepeatRisk(null);
@@ -285,6 +298,11 @@ const ConceptAnalyticsPage = () => {
         setSelectedStudent(null);
         setStudentTimeline([]);
         setStudentConceptTrend(null);
+        const studentIds = Array.isArray(data?.students) ? data.students.map((student) => student.student_id) : [];
+        setPrimaryCompareStudentId(studentIds[0] || '');
+        setSecondaryCompareStudentId(studentIds.find((studentId) => studentId !== studentIds[0]) || '');
+        setPrimaryCompareTrend(null);
+        setSecondaryCompareTrend(null);
       } catch (err) {
         setConceptStudents(null);
         setBulkAssignmentStatus(null);
@@ -292,6 +310,10 @@ const ConceptAnalyticsPage = () => {
         setSelectedStudent(null);
         setStudentTimeline([]);
         setStudentConceptTrend(null);
+        setPrimaryCompareStudentId('');
+        setSecondaryCompareStudentId('');
+        setPrimaryCompareTrend(null);
+        setSecondaryCompareTrend(null);
         setError(err.message || 'Failed to load concept student drilldown.');
       } finally {
         setIsLoadingConceptStudents(false);
@@ -330,6 +352,46 @@ const ConceptAnalyticsPage = () => {
 
     fetchConceptCompare();
   }, [activeClassId, apiUrl, compareConceptId, selectedConceptId, token]);
+
+  useEffect(() => {
+    const fetchStudentCompare = async () => {
+      if (!token || !activeClassId || !selectedConceptId || !primaryCompareStudentId || !secondaryCompareStudentId || primaryCompareStudentId === secondaryCompareStudentId) {
+        setPrimaryCompareTrend(null);
+        setSecondaryCompareTrend(null);
+        return;
+      }
+
+      try {
+        setIsLoadingStudentCompare(true);
+        const [primaryResponse, secondaryResponse] = await Promise.all([
+          fetch(
+            `${apiUrl}/teachers/classes/${activeClassId}/students/${primaryCompareStudentId}/concepts/${encodeURIComponent(selectedConceptId)}/trend?days=30`,
+            { headers: { Authorization: `Bearer ${token}` } },
+          ),
+          fetch(
+            `${apiUrl}/teachers/classes/${activeClassId}/students/${secondaryCompareStudentId}/concepts/${encodeURIComponent(selectedConceptId)}/trend?days=30`,
+            { headers: { Authorization: `Bearer ${token}` } },
+          ),
+        ]);
+        if (!primaryResponse.ok || !secondaryResponse.ok) {
+          const firstFailure = [primaryResponse, secondaryResponse].find((response) => !response.ok);
+          const detail = await firstFailure.json().catch(() => null);
+          throw new Error(detail?.detail || 'Failed to load student comparison trends.');
+        }
+        const [primaryData, secondaryData] = await Promise.all([primaryResponse.json(), secondaryResponse.json()]);
+        setPrimaryCompareTrend(primaryData || null);
+        setSecondaryCompareTrend(secondaryData || null);
+      } catch (err) {
+        setPrimaryCompareTrend(null);
+        setSecondaryCompareTrend(null);
+        setError(err.message || 'Failed to load student comparison trends.');
+      } finally {
+        setIsLoadingStudentCompare(false);
+      }
+    };
+
+    fetchStudentCompare();
+  }, [activeClassId, apiUrl, primaryCompareStudentId, secondaryCompareStudentId, selectedConceptId, token]);
 
   useEffect(() => {
     const fetchStudentTimeline = async () => {
@@ -441,6 +503,14 @@ const ConceptAnalyticsPage = () => {
       status: node.status,
     }));
   }, [graphSummary?.nodes]);
+  const studentCompareOptions = useMemo(() => {
+    const students = Array.isArray(conceptStudents?.students) ? conceptStudents.students : [];
+    return students.map((student) => ({
+      value: student.student_id,
+      label: student.student_name,
+      status: student.status,
+    }));
+  }, [conceptStudents?.students]);
 
   const graphMetrics = graphSummary?.metrics || null;
   const graphSignal = graphSummary?.graph_signal || null;
@@ -476,6 +546,44 @@ const ConceptAnalyticsPage = () => {
       ? Number(filteredInterventionOutcomeRows.reduce((sum, item) => sum + Number(item.net_mastery_delta || 0), 0) / filteredInterventionOutcomeRows.length).toFixed(2)
       : Number(0).toFixed(2),
   }), [filteredInterventionOutcomeRows]);
+  const studentCompareNarrative = useMemo(() => {
+    if (!primaryCompareTrend || !secondaryCompareTrend) return null;
+    const primaryLabel = studentCompareOptions.find((item) => item.value === primaryCompareStudentId)?.label || 'Primary student';
+    const secondaryLabel = studentCompareOptions.find((item) => item.value === secondaryCompareStudentId)?.label || 'Secondary student';
+    const primaryScore = Number(primaryCompareTrend.current_score ?? -1);
+    const secondaryScore = Number(secondaryCompareTrend.current_score ?? -1);
+    const primaryBlocked = primaryCompareTrend.status === 'blocked';
+    const secondaryBlocked = secondaryCompareTrend.status === 'blocked';
+
+    if (primaryBlocked && secondaryBlocked) {
+      return {
+        headline: 'Both students are blocked on this concept.',
+        rationale: 'Use the prerequisite lists to split support instead of assigning them the same repair path blindly.',
+      };
+    }
+    if (primaryBlocked || primaryScore < secondaryScore) {
+      return {
+        headline: `${primaryLabel} needs deeper repair first.`,
+        rationale: 'Their concept path is weaker on the current node, so they should get the prerequisite-first intervention.',
+      };
+    }
+    if (secondaryBlocked || secondaryScore < primaryScore) {
+      return {
+        headline: `${secondaryLabel} needs deeper repair first.`,
+        rationale: 'Their concept path is weaker on the current node, so they should get the prerequisite-first intervention.',
+      };
+    }
+    return {
+      headline: 'Both students are tracking similarly on this concept.',
+      rationale: 'You can use the delta and blocker details to decide whether to group them or differentiate the next task.',
+    };
+  }, [
+    primaryCompareStudentId,
+    primaryCompareTrend,
+    secondaryCompareStudentId,
+    secondaryCompareTrend,
+    studentCompareOptions,
+  ]);
 
   const createSuggestedAssignment = async (action) => {
     if (!activeClassId || !activeClass || !token) return;
@@ -1481,6 +1589,121 @@ const ConceptAnalyticsPage = () => {
                         </div>
                       </div>
                     ))
+                  )}
+                </div>
+
+                <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <h3 className="text-sm font-black uppercase tracking-[0.18em] text-slate-600">Compare students on this concept</h3>
+                      <p className="mt-2 text-xs leading-6 text-slate-500">
+                        Compare two students on the selected graph node to see whether they need the same intervention or different next steps.
+                      </p>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="flex flex-col gap-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">
+                        Student A
+                        <select
+                          value={primaryCompareStudentId}
+                          onChange={(event) => setPrimaryCompareStudentId(event.target.value)}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-700"
+                        >
+                          {studentCompareOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="flex flex-col gap-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">
+                        Student B
+                        <select
+                          value={secondaryCompareStudentId}
+                          onChange={(event) => setSecondaryCompareStudentId(event.target.value)}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-700"
+                        >
+                          {studentCompareOptions
+                            .filter((option) => option.value !== primaryCompareStudentId)
+                            .map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                    </div>
+                  </div>
+
+                  {isLoadingStudentCompare ? (
+                    <div className="mt-4 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm font-semibold text-slate-500">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Comparing student concept paths...
+                    </div>
+                  ) : !primaryCompareTrend || !secondaryCompareTrend ? (
+                    <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center text-sm font-semibold text-slate-400">
+                      Choose two different students from this node to compare their concept trend.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50 p-4">
+                        <p className="text-sm font-black text-slate-900">{studentCompareNarrative?.headline}</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-600">{studentCompareNarrative?.rationale}</p>
+                      </div>
+                      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                        {[{
+                          key: 'primary',
+                          studentId: primaryCompareStudentId,
+                          trend: primaryCompareTrend,
+                        }, {
+                          key: 'secondary',
+                          studentId: secondaryCompareStudentId,
+                          trend: secondaryCompareTrend,
+                        }].map(({ key, studentId, trend }) => {
+                          const studentLabel = studentCompareOptions.find((item) => item.value === studentId)?.label || 'Student';
+                          return (
+                            <div key={key} className="rounded-2xl border border-slate-200 bg-white p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-bold text-slate-900">{studentLabel}</p>
+                                  <p className="mt-1 text-xs text-slate-500">{trend.status.replace('_', ' ')} on {trend.concept_label}</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const sourceStudent = conceptStudents?.students?.find((item) => item.student_id === studentId);
+                                    if (sourceStudent) openStudentFocus(sourceStudent, { concept_id: selectedConceptId, concept_label: trend.concept_label, status: trend.status }, { status: trend.status, concept_score: trend.current_score, blocking_prerequisite_labels: trend.blocking_prerequisite_labels });
+                                  }}
+                                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-600 transition hover:bg-slate-100 hover:text-slate-800"
+                                >
+                                  Open focus
+                                </button>
+                              </div>
+                              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Current score</p>
+                                  <p className="mt-2 text-xl font-black text-slate-900">
+                                    {trend.current_score == null ? 'Unassessed' : `${Math.round(Number(trend.current_score) * 100)}%`}
+                                  </p>
+                                </div>
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Net delta (30d)</p>
+                                  <p className={`mt-2 text-xl font-black ${Number(trend.net_delta_30d || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    {Number(trend.net_delta_30d || 0) >= 0 ? '+' : ''}{Number(trend.net_delta_30d || 0).toFixed(2)}
+                                  </p>
+                                </div>
+                              </div>
+                              {trend.blocking_prerequisite_labels?.length ? (
+                                <p className="mt-4 text-xs leading-6 text-amber-700">
+                                  Blocked by: {trend.blocking_prerequisite_labels.join(', ')}
+                                </p>
+                              ) : (
+                                <p className="mt-4 text-xs leading-6 text-slate-500">No blocking prerequisite is currently holding this student back.</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
