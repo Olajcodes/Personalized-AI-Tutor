@@ -368,6 +368,13 @@ export default function Dashboard() {
                                 >
                                     Briefing
                                 </button>
+                                <button
+                                    type="button"
+                                    onClick={() => navigate('/presentation-hub')}
+                                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                                >
+                                    Presentation hub
+                                </button>
                                 {dashboardSignal.payload.next_step?.recommended_topic_id && (
                                     <button
                                         type="button"
@@ -438,6 +445,13 @@ export default function Dashboard() {
 
                 {activeSubject && !isLoadingMap && !mapError && (
                     <div className="mb-8 flex justify-end gap-3">
+                        <button
+                            type="button"
+                            onClick={() => navigate('/presentation-hub')}
+                            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50"
+                        >
+                            Open presentation hub
+                        </button>
                         <button
                             type="button"
                             onClick={() => navigate(`/graph-briefing?subject=${encodeURIComponent(activeSubject)}`)}

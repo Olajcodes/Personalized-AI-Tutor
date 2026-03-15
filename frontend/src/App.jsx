@@ -32,6 +32,7 @@ const AssessmentSplash = lazy(() => import('./pages/AssessmentSplash'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const GraphPathPage = lazy(() => import('./pages/GraphPathPage'));
 const GraphBriefingPage = lazy(() => import('./pages/GraphBriefingPage'));
+const PresentationHubPage = lazy(() => import('./pages/PresentationHubPage'));
 const CoursePage = lazy(() => import('./pages/CoursePage')); 
 const LessonPage = lazy(() => import('./pages/LessonPage'));
 const QuizPage = lazy(() => import('./pages/QuizPage'));
@@ -98,6 +99,7 @@ function App() {
               <Route path="/subject-selection" element={<SubjectSelection />} />
               <Route path="/learning-preferences" element={<LearningPreferences />} />
               <Route path="/assessment-splash" element={<AssessmentSplash />} />
+              <Route path="/presentation-hub" element={<PresentationHubPage />} />
 
               {/* Student Layout */}
               <Route element={<StudentLayout />}>
