@@ -492,6 +492,11 @@ const ConceptAnalyticsPage = () => {
     }
   };
 
+  const openClassBriefingPage = () => {
+    if (!activeClassId) return;
+    window.open(`/teacher/briefing/${activeClassId}`, '_blank', 'noopener,noreferrer');
+  };
+
   const openStudentFocusExport = async () => {
     if (!activeClassId || !token || !selectedStudent?.student_id || !selectedConceptId) return;
     setExportState({ isOpen: true, isLoading: true, error: '', data: null, target: 'student' });
@@ -768,6 +773,15 @@ const ConceptAnalyticsPage = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={openClassBriefingPage}
+            disabled={!activeClassId}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <NotebookPen className="h-4 w-4" />
+            Open briefing
+          </button>
           <button
             type="button"
             onClick={openClassBriefingExport}
