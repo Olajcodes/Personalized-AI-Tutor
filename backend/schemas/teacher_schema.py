@@ -128,6 +128,7 @@ class TeacherGraphPlaybookActionOut(BaseModel):
     title: str
     summary: str
     severity: Severity
+    target_concept_id: str | None = None
     target_concept_label: str | None = None
     target_topic_id: UUID | None = None
     target_topic_title: str | None = None
@@ -272,6 +273,8 @@ class TeacherInterventionOutcomeOut(BaseModel):
     student_id: UUID
     student_name: str
     intervention_type: InterventionType
+    concept_id: str | None = None
+    concept_label: str | None = None
     severity: Severity
     status: Literal["open", "resolved", "dismissed"]
     outcome_status: Literal["improving", "flat", "declining", "no_evidence"]
@@ -300,6 +303,8 @@ class TeacherAssignmentOutcomeOut(BaseModel):
     assignment_type: AssignmentType
     status: Literal["assigned", "completed", "cancelled"]
     ref_id: str
+    concept_id: str | None = None
+    concept_label: str | None = None
     target_scope: Literal["class", "student"]
     student_id: UUID | None = None
     student_name: str | None = None
@@ -391,6 +396,8 @@ class TeacherAssignmentCreateIn(BaseModel):
     class_id: UUID | None = None
     student_id: UUID | None = None
     assignment_type: AssignmentType
+    concept_id: str | None = Field(default=None, max_length=255)
+    concept_label: str | None = Field(default=None, max_length=255)
     ref_id: str = Field(min_length=1, max_length=255)
     title: str = Field(min_length=1, max_length=255)
     instructions: str | None = Field(default=None, max_length=2000)
@@ -406,6 +413,8 @@ class TeacherAssignmentOut(BaseModel):
     class_id: UUID | None = None
     student_id: UUID | None = None
     assignment_type: AssignmentType
+    concept_id: str | None = None
+    concept_label: str | None = None
     ref_id: str
     title: str
     instructions: str | None = None
@@ -422,6 +431,8 @@ class TeacherBulkAssignmentCreateIn(BaseModel):
     class_id: UUID | None = None
     student_ids: list[UUID] = Field(min_length=1, max_length=500)
     assignment_type: AssignmentType
+    concept_id: str | None = Field(default=None, max_length=255)
+    concept_label: str | None = Field(default=None, max_length=255)
     ref_id: str = Field(min_length=1, max_length=255)
     title: str = Field(min_length=1, max_length=255)
     instructions: str | None = Field(default=None, max_length=2000)
@@ -441,6 +452,8 @@ class TeacherInterventionCreateIn(BaseModel):
     class_id: UUID | None = None
     student_id: UUID
     intervention_type: InterventionType
+    concept_id: str | None = Field(default=None, max_length=255)
+    concept_label: str | None = Field(default=None, max_length=255)
     severity: Severity = "medium"
     subject: Subject
     sss_level: SSSLevel
@@ -453,6 +466,8 @@ class TeacherBulkInterventionCreateIn(BaseModel):
     class_id: UUID | None = None
     student_ids: list[UUID] = Field(min_length=1, max_length=500)
     intervention_type: InterventionType
+    concept_id: str | None = Field(default=None, max_length=255)
+    concept_label: str | None = Field(default=None, max_length=255)
     severity: Severity = "medium"
     subject: Subject
     sss_level: SSSLevel
@@ -477,6 +492,8 @@ class TeacherInterventionOut(BaseModel):
     class_id: UUID | None = None
     student_id: UUID
     intervention_type: InterventionType
+    concept_id: str | None = None
+    concept_label: str | None = None
     severity: Severity
     subject: Subject
     sss_level: SSSLevel

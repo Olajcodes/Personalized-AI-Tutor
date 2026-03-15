@@ -40,6 +40,8 @@ class TeacherAssignment(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         index=True,
     )
     assignment_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    concept_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    concept_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
     ref_id: Mapped[str] = mapped_column(String(255), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     instructions: Mapped[str | None] = mapped_column(String(2000), nullable=True)

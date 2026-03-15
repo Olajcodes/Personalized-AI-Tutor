@@ -21,7 +21,7 @@ import TeacherExportModal from '../components/teacher/TeacherExportModal';
 import TeacherStudentFocusDrawer from '../components/teacher/TeacherStudentFocusDrawer';
 
 const actionRefId = (action) => {
-  const raw = String(action?.target_topic_id || action?.target_concept_label || action?.title || 'graph-action').trim().toLowerCase();
+  const raw = String(action?.target_concept_id || action?.target_topic_id || action?.target_concept_label || action?.title || 'graph-action').trim().toLowerCase();
   return `graph-${String(action?.action_type || 'action').replace(/[^a-z0-9]+/gi, '-')}-${raw.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '')}`;
 };
 
@@ -340,6 +340,42 @@ const ConceptAnalyticsPage = () => {
     fetchStudentConceptTrend();
   }, [activeClassId, apiUrl, selectedConceptId, selectedStudent?.student_id, token]);
 
+  useEffect(() => {
+    const fetchConceptScopedOutcomes = async () => {
+      if (!token || !activeClassId) {
+        setInterventionOutcomes(null);
+        setAssignmentOutcomes(null);
+        return;
+      }
+      try {
+        const query = selectedConceptId ? `?concept_id=${encodeURIComponent(selectedConceptId)}` : '';
+        const [interventionsRes, assignmentsRes] = await Promise.all([
+          fetch(`${apiUrl}/teachers/classes/${activeClassId}/intervention-outcomes${query}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${apiUrl}/teachers/classes/${activeClassId}/assignment-outcomes${query}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+        if (!interventionsRes.ok || !assignmentsRes.ok) {
+          const firstFailure = [interventionsRes, assignmentsRes].find((response) => !response.ok);
+          const detail = await firstFailure.json().catch(() => null);
+          throw new Error(detail?.detail || 'Failed to load concept-scoped outcomes.');
+        }
+        const [interventionsData, assignmentsData] = await Promise.all([
+          interventionsRes.json(),
+          assignmentsRes.json(),
+        ]);
+        setInterventionOutcomes(interventionsData || null);
+        setAssignmentOutcomes(assignmentsData || null);
+      } catch (err) {
+        setError(err.message || 'Failed to load concept-scoped outcomes.');
+      }
+    };
+
+    fetchConceptScopedOutcomes();
+  }, [activeClassId, apiUrl, selectedConceptId, token]);
+
   const activeClass = useMemo(
     () => classes.find((item) => item.id === activeClassId) || null,
     [activeClassId, classes],
@@ -386,7 +422,7 @@ const ConceptAnalyticsPage = () => {
 
   const createSuggestedAssignment = async (action) => {
     if (!activeClassId || !activeClass || !token) return;
-    const key = `${action.action_type}-${action.target_topic_id || action.target_concept_label || action.title}`;
+    const key = `${action.action_type}-${action.target_concept_id || action.target_topic_id || action.target_concept_label || action.title}`;
     try {
       setAssignmentStatus((current) => ({ ...current, [key]: { state: 'loading', message: 'Creating assignment...' } }));
       const response = await fetch(`${apiUrl}/teachers/assignments`, {
@@ -399,6 +435,8 @@ const ConceptAnalyticsPage = () => {
           class_id: activeClassId,
           student_id: null,
           assignment_type: action.suggested_assignment_type || 'revision',
+          concept_id: action.target_concept_id || null,
+          concept_label: action.target_concept_label || null,
           ref_id: actionRefId(action),
           title: action.title,
           instructions: action.summary,
@@ -470,6 +508,8 @@ const ConceptAnalyticsPage = () => {
           class_id: activeClassId,
           student_id: student.student_id,
           intervention_type: 'support_plan',
+          concept_id: conceptStudents.concept_id,
+          concept_label: conceptStudents.concept_label,
           severity: student.status === 'blocked' ? 'high' : 'medium',
           subject: activeClass.subject,
           sss_level: activeClass.sss_level,
@@ -506,6 +546,8 @@ const ConceptAnalyticsPage = () => {
           class_id: activeClassId,
           student_id: student.student_id,
           intervention_type: 'support_plan',
+          concept_id: focusConcept.concept_id,
+          concept_label: focusConcept.concept_label,
           severity: student.risk_status === 'repeat_blocker' ? 'high' : 'medium',
           subject: activeClass.subject,
           sss_level: activeClass.sss_level,
@@ -578,6 +620,8 @@ const ConceptAnalyticsPage = () => {
           class_id: activeClassId,
           student_ids: targetStudents.map((student) => student.student_id),
           intervention_type: 'support_plan',
+          concept_id: conceptStudents.concept_id,
+          concept_label: conceptStudents.concept_label,
           severity: targetStudents.some((student) => student.status === 'blocked') ? 'high' : 'medium',
           subject: activeClass.subject,
           sss_level: activeClass.sss_level,
@@ -624,6 +668,8 @@ const ConceptAnalyticsPage = () => {
           class_id: activeClassId,
           student_ids: targetStudents.map((student) => student.student_id),
           assignment_type: 'revision',
+          concept_id: conceptStudents.concept_id,
+          concept_label: conceptStudents.concept_label,
           ref_id: `${conceptStudents.concept_id}-repair-pack`,
           title: `${conceptStudents.concept_label} Repair Pack`,
           instructions: `Repair the blocker and revisit ${conceptStudents.concept_label}. Complete the follow-up questions after revision.`,
@@ -893,17 +939,17 @@ const ConceptAnalyticsPage = () => {
                             >
                               Create {action.suggested_assignment_type}
                             </button>
-                            {assignmentStatus[`${action.action_type}-${action.target_topic_id || action.target_concept_label || action.title}`] ? (
+                            {assignmentStatus[`${action.action_type}-${action.target_concept_id || action.target_topic_id || action.target_concept_label || action.title}`] ? (
                               <span
                                 className={`text-xs font-semibold ${
-                                  assignmentStatus[`${action.action_type}-${action.target_topic_id || action.target_concept_label || action.title}`].state === 'error'
+                                  assignmentStatus[`${action.action_type}-${action.target_concept_id || action.target_topic_id || action.target_concept_label || action.title}`].state === 'error'
                                     ? 'text-rose-600'
-                                    : assignmentStatus[`${action.action_type}-${action.target_topic_id || action.target_concept_label || action.title}`].state === 'success'
+                                    : assignmentStatus[`${action.action_type}-${action.target_concept_id || action.target_topic_id || action.target_concept_label || action.title}`].state === 'success'
                                       ? 'text-emerald-600'
                                       : 'text-slate-500'
                                 }`}
                               >
-                                {assignmentStatus[`${action.action_type}-${action.target_topic_id || action.target_concept_label || action.title}`].message}
+                                {assignmentStatus[`${action.action_type}-${action.target_concept_id || action.target_topic_id || action.target_concept_label || action.title}`].message}
                               </span>
                             ) : null}
                           </div>
@@ -1039,17 +1085,17 @@ const ConceptAnalyticsPage = () => {
                                   >
                                     Create {action.suggested_assignment_type}
                                   </button>
-                                  {assignmentStatus[`${action.action_type}-${action.target_topic_id || action.target_concept_label || action.title}`] ? (
+                                  {assignmentStatus[`${action.action_type}-${action.target_concept_id || action.target_topic_id || action.target_concept_label || action.title}`] ? (
                                     <span
                                       className={`text-xs font-semibold ${
-                                        assignmentStatus[`${action.action_type}-${action.target_topic_id || action.target_concept_label || action.title}`].state === 'error'
+                                        assignmentStatus[`${action.action_type}-${action.target_concept_id || action.target_topic_id || action.target_concept_label || action.title}`].state === 'error'
                                           ? 'text-rose-600'
-                                          : assignmentStatus[`${action.action_type}-${action.target_topic_id || action.target_concept_label || action.title}`].state === 'success'
+                                          : assignmentStatus[`${action.action_type}-${action.target_concept_id || action.target_topic_id || action.target_concept_label || action.title}`].state === 'success'
                                             ? 'text-emerald-600'
                                             : 'text-slate-500'
                                       }`}
                                     >
-                                      {assignmentStatus[`${action.action_type}-${action.target_topic_id || action.target_concept_label || action.title}`].message}
+                                      {assignmentStatus[`${action.action_type}-${action.target_concept_id || action.target_topic_id || action.target_concept_label || action.title}`].message}
                                     </span>
                                   ) : null}
                                 </div>
@@ -1528,6 +1574,11 @@ const ConceptAnalyticsPage = () => {
                     Showing student-targeted assignment outcomes for {selectedStudent.student_name}. Class-wide assignments are hidden in this focused view.
                   </div>
                 ) : null}
+                {selectedConceptId ? (
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-600">
+                    Exact concept filter: {conceptStudents?.concept_label || humanizeConceptId(selectedConceptId)}
+                  </div>
+                ) : null}
 
                 <div className="mt-6 grid gap-3 sm:grid-cols-2">
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -1560,6 +1611,7 @@ const ConceptAnalyticsPage = () => {
                             <p className="mt-1 text-xs text-slate-500">
                               {outcome.assignment_type} • {outcome.target_scope} assignment • {outcome.status}
                             </p>
+                            {outcome.concept_label ? <p className="mt-1 text-[11px] font-semibold text-amber-700">{outcome.concept_label}</p> : null}
                             {outcome.student_name ? <p className="mt-1 text-[11px] font-semibold text-indigo-600">{outcome.student_name}</p> : null}
                           </div>
                           <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
@@ -1600,6 +1652,11 @@ const ConceptAnalyticsPage = () => {
                     Showing intervention outcomes for {selectedStudent.student_name}.
                   </div>
                 ) : null}
+                {selectedConceptId ? (
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-600">
+                    Exact concept filter: {conceptStudents?.concept_label || humanizeConceptId(selectedConceptId)}
+                  </div>
+                ) : null}
 
                 <div className="mt-6 grid gap-3 sm:grid-cols-2">
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -1629,6 +1686,9 @@ const ConceptAnalyticsPage = () => {
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <p className="text-sm font-bold text-slate-900">{outcome.student_name}</p>
+                            {outcome.concept_label ? (
+                              <p className="mt-1 text-[11px] font-semibold text-amber-700">{outcome.concept_label}</p>
+                            ) : null}
                             <p className="mt-1 text-xs text-slate-500">{outcome.intervention_type.replace('_', ' ')} • {outcome.status}</p>
                           </div>
                           <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${

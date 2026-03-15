@@ -305,7 +305,7 @@ def test_teachers_endpoints_success(monkeypatch):
         def get_class_alerts(self, *, teacher_id, class_id):
             return {"class_id": str(class_id), "alerts": []}
 
-        def get_intervention_outcomes(self, *, teacher_id, class_id):
+        def get_intervention_outcomes(self, *, teacher_id, class_id, concept_id=None):
             return {
                 "class_id": str(class_id),
                 "total_interventions": 1,
@@ -321,6 +321,8 @@ def test_teachers_endpoints_success(monkeypatch):
                         "student_name": "Student One",
                         "intervention_type": "support_plan",
                         "severity": "high",
+                        "concept_id": concept_id or "math:sss2:t1:fractions",
+                        "concept_label": "Fractions",
                         "status": "open",
                         "outcome_status": "improving",
                         "net_mastery_delta": 0.12,
@@ -333,7 +335,7 @@ def test_teachers_endpoints_success(monkeypatch):
                 ],
             }
 
-        def get_assignment_outcomes(self, *, teacher_id, class_id):
+        def get_assignment_outcomes(self, *, teacher_id, class_id, concept_id=None):
             return {
                 "class_id": str(class_id),
                 "total_assignments": 1,
@@ -349,6 +351,8 @@ def test_teachers_endpoints_success(monkeypatch):
                         "assignment_type": "revision",
                         "status": "assigned",
                         "ref_id": "fractions-repair-pack",
+                        "concept_id": concept_id or "math:sss2:t1:fractions",
+                        "concept_label": "Fractions",
                         "target_scope": "student",
                         "student_id": str(student_id),
                         "student_name": "Student One",

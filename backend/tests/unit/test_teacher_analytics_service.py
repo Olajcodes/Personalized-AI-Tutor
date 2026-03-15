@@ -159,6 +159,8 @@ class FakeTeacherAnalyticsRepo:
                 id=self.intervention_id,
                 student_id=self.student_a,
                 intervention_type="support_plan",
+                concept_id="math:sss2:t1:fractions",
+                concept_label="Fractions",
                 severity="high",
                 status="open",
                 created_at=now - timedelta(days=3),
@@ -175,6 +177,8 @@ class FakeTeacherAnalyticsRepo:
                 class_id=self.class_id,
                 student_id=self.student_a,
                 assignment_type="revision",
+                concept_id="math:sss2:t1:fractions",
+                concept_label="Fractions",
                 ref_id="fractions-repair-pack",
                 title="Fractions Repair Pack",
                 status="assigned",
@@ -308,6 +312,8 @@ def test_teacher_analytics_intervention_outcomes_show_real_follow_through():
     assert out.total_interventions == 1
     assert out.improving_interventions == 1
     assert out.outcomes[0].outcome_status == "improving"
+    assert out.outcomes[0].concept_id == "math:sss2:t1:fractions"
+    assert out.outcomes[0].concept_label == "Fractions"
     assert out.outcomes[0].net_mastery_delta > 0
 
 
@@ -338,8 +344,24 @@ def test_teacher_assignment_outcomes_show_real_follow_through():
     assert out.outcomes[0].assignment_id == repo.assignment_id
     assert out.outcomes[0].student_id == repo.student_a
     assert out.outcomes[0].student_name == "Ada James"
+    assert out.outcomes[0].concept_id == "math:sss2:t1:fractions"
+    assert out.outcomes[0].concept_label == "Fractions"
     assert out.outcomes[0].engaged_student_count == 1
     assert out.outcomes[0].net_mastery_delta > 0
+
+
+def test_teacher_assignment_outcomes_can_filter_by_exact_concept_tag():
+    repo = FakeTeacherAnalyticsRepo()
+    service = TeacherAnalyticsService(repo)
+
+    out = service.get_assignment_outcomes(
+        teacher_id=repo.teacher_id,
+        class_id=repo.class_id,
+        concept_id="math:sss2:t1:fractions",
+    )
+
+    assert len(out.outcomes) == 1
+    assert out.outcomes[0].concept_id == "math:sss2:t1:fractions"
 
 
 def test_teacher_risk_matrix_returns_student_vs_concept_view():

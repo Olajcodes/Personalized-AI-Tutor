@@ -253,12 +253,17 @@ def class_alerts(
 @router.get("/classes/{class_id}/intervention-outcomes", response_model=TeacherInterventionOutcomeSummaryOut)
 def class_intervention_outcomes(
     class_id: UUID,
+    concept_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     """Return whether recent teacher interventions are followed by real mastery movement."""
     try:
-        return _analytics_service(db).get_intervention_outcomes(teacher_id=current_user.id, class_id=class_id)
+        return _analytics_service(db).get_intervention_outcomes(
+            teacher_id=current_user.id,
+            class_id=class_id,
+            concept_id=concept_id,
+        )
     except TeacherServiceUnauthorizedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except TeacherServiceNotFoundError as exc:
@@ -268,12 +273,17 @@ def class_intervention_outcomes(
 @router.get("/classes/{class_id}/assignment-outcomes", response_model=TeacherAssignmentOutcomeSummaryOut)
 def class_assignment_outcomes(
     class_id: UUID,
+    concept_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     """Return whether recent teacher assignments are followed by activity and mastery movement."""
     try:
-        return _analytics_service(db).get_assignment_outcomes(teacher_id=current_user.id, class_id=class_id)
+        return _analytics_service(db).get_assignment_outcomes(
+            teacher_id=current_user.id,
+            class_id=class_id,
+            concept_id=concept_id,
+        )
     except TeacherServiceUnauthorizedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except TeacherServiceNotFoundError as exc:

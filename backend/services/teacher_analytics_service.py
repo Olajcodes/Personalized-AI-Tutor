@@ -492,6 +492,7 @@ class TeacherAnalyticsService:
                         else f"Reinforce the prerequisite path feeding into {focus_blocker.concept_label}."
                     ),
                     severity="high" if focus_blocker.status == "blocked" else "medium",
+                    target_concept_id=focus_blocker.concept_id,
                     target_concept_label=focus_blocker.concept_label,
                     target_topic_id=focus_blocker.topic_id,
                     target_topic_title=focus_blocker.topic_title,
@@ -509,6 +510,7 @@ class TeacherAnalyticsService:
                     title=f"Run a focused checkpoint on {weak_focus.concept_label}",
                     summary="The class has the prerequisites, but mastery on this concept cluster is still below target.",
                     severity="medium",
+                    target_concept_id=weak_focus.concept_id,
                     target_concept_label=weak_focus.concept_label,
                     target_topic_id=weak_focus.topic_id,
                     target_topic_title=weak_focus.topic_title,
@@ -526,6 +528,7 @@ class TeacherAnalyticsService:
                     title=f"Advance from {advance_focus.concept_label} into the next lesson cluster",
                     summary="This concept is strong enough to anchor the next class move without overloading weak prerequisites.",
                     severity="low",
+                    target_concept_id=advance_focus.concept_id,
                     target_concept_label=advance_focus.concept_label,
                     target_topic_id=advance_focus.topic_id,
                     target_topic_title=advance_focus.topic_title,
@@ -538,12 +541,17 @@ class TeacherAnalyticsService:
         if alerts.alerts:
             high_count = sum(1 for alert in alerts.alerts if alert.severity == "high")
             medium_count = sum(1 for alert in alerts.alerts if alert.severity == "medium")
+            focus_node = next(
+                (node for node in graph.nodes if node.concept_label == graph.graph_signal.focus_concept_label),
+                None,
+            )
             actions.append(
                 TeacherGraphPlaybookActionOut(
                     action_type="support_students",
                     title="Open targeted support for at-risk students",
                     summary=f"{high_count} high-severity and {medium_count} medium-severity alerts are active in this class.",
                     severity="high" if high_count > 0 else "medium",
+                    target_concept_id=focus_node.concept_id if focus_node else None,
                     target_concept_label=graph.graph_signal.focus_concept_label,
                     suggested_assignment_type="revision",
                     suggested_intervention_type="support_plan",
@@ -1084,7 +1092,13 @@ class TeacherAnalyticsService:
             concept_label=trend.concept_label,
         )
 
-    def get_assignment_outcomes(self, *, teacher_id: UUID, class_id: UUID) -> TeacherAssignmentOutcomeSummaryOut:
+    def get_assignment_outcomes(
+        self,
+        *,
+        teacher_id: UUID,
+        class_id: UUID,
+        concept_id: str | None = None,
+    ) -> TeacherAssignmentOutcomeSummaryOut:
         self._require_teacher_user(teacher_id)
         teacher_class = self._require_teacher_class(teacher_id=teacher_id, class_id=class_id)
 
@@ -1094,6 +1108,8 @@ class TeacherAnalyticsService:
             term=teacher_class.term,
             limit=50,
         )
+        if concept_id:
+            assignments = [row for row in assignments if str(getattr(row, "concept_id", "") or "").strip() == concept_id]
         if not assignments:
             return TeacherAssignmentOutcomeSummaryOut(class_id=class_id)
 
@@ -1141,15 +1157,23 @@ class TeacherAnalyticsService:
             ]
 
             net_delta = 0.0
+            evidence_event_count = 0
             for event in candidate_mastery:
+                event_matched = False
                 for entry in list(event.new_mastery or []):
+                    entry_concept_id = str(entry.get("concept_id") or "").strip()
+                    if row.concept_id and entry_concept_id and entry_concept_id != row.concept_id:
+                        continue
                     net_delta += float(entry.get("delta", 0.0) or 0.0)
+                    event_matched = True
+                if event_matched:
+                    evidence_event_count += 1
 
             engaged_students = {event.student_id for event in candidate_mastery} | {
                 activity.student_id for activity in candidate_activity
             }
 
-            if not engaged_students and not candidate_mastery:
+            if not engaged_students and evidence_event_count == 0:
                 outcome_status = "no_evidence"
             elif net_delta > 0.05:
                 outcome_status = "improving"
@@ -1165,6 +1189,8 @@ class TeacherAnalyticsService:
                     assignment_type=row.assignment_type,
                     status=row.status,
                     ref_id=row.ref_id,
+                    concept_id=row.concept_id,
+                    concept_label=row.concept_label,
                     target_scope="student" if row.student_id else "class",
                     student_id=row.student_id,
                     student_name=(
@@ -1174,7 +1200,7 @@ class TeacherAnalyticsService:
                     ),
                     target_student_count=len(target_student_ids),
                     engaged_student_count=len(engaged_students),
-                    evidence_event_count=len(candidate_mastery),
+                    evidence_event_count=evidence_event_count,
                     outcome_status=outcome_status,
                     net_mastery_delta=round(net_delta, 4),
                     due_at=row.due_at,
@@ -1201,7 +1227,13 @@ class TeacherAnalyticsService:
             outcomes=outcomes[:12],
         )
 
-    def get_intervention_outcomes(self, *, teacher_id: UUID, class_id: UUID) -> TeacherInterventionOutcomeSummaryOut:
+    def get_intervention_outcomes(
+        self,
+        *,
+        teacher_id: UUID,
+        class_id: UUID,
+        concept_id: str | None = None,
+    ) -> TeacherInterventionOutcomeSummaryOut:
         self._require_teacher_user(teacher_id)
         teacher_class = self._require_teacher_class(teacher_id=teacher_id, class_id=class_id)
 
@@ -1211,6 +1243,8 @@ class TeacherAnalyticsService:
             term=teacher_class.term,
             limit=50,
         )
+        if concept_id:
+            interventions = [row for row in interventions if str(getattr(row, "concept_id", "") or "").strip() == concept_id]
         if not interventions:
             return TeacherInterventionOutcomeSummaryOut(class_id=class_id)
 
@@ -1236,11 +1270,19 @@ class TeacherAnalyticsService:
                 if row.created_at <= event.created_at <= window_end
             ]
             net_delta = 0.0
+            evidence_event_count = 0
             for event in candidate_events:
+                event_matched = False
                 for entry in list(event.new_mastery or []):
+                    entry_concept_id = str(entry.get("concept_id") or "").strip()
+                    if row.concept_id and entry_concept_id and entry_concept_id != row.concept_id:
+                        continue
                     net_delta += float(entry.get("delta", 0.0) or 0.0)
+                    event_matched = True
+                if event_matched:
+                    evidence_event_count += 1
 
-            if not candidate_events:
+            if evidence_event_count == 0:
                 outcome_status = "no_evidence"
             elif net_delta > 0.05:
                 outcome_status = "improving"
@@ -1269,11 +1311,13 @@ class TeacherAnalyticsService:
                     student_id=row.student_id,
                     student_name=display_name,
                     intervention_type=row.intervention_type,
+                    concept_id=row.concept_id,
+                    concept_label=row.concept_label,
                     severity=row.severity,
                     status=row.status,
                     outcome_status=outcome_status,
                     net_mastery_delta=round(net_delta, 4),
-                    evidence_event_count=len(candidate_events),
+                    evidence_event_count=evidence_event_count,
                     created_at=row.created_at,
                     latest_mastery_event_at=candidate_events[0].created_at if candidate_events else None,
                     notes=row.notes,

@@ -96,6 +96,8 @@ class FakeTeacherRepo:
             class_id=payload.get("class_id"),
             student_id=payload.get("student_id"),
             assignment_type=payload["assignment_type"],
+            concept_id=payload.get("concept_id"),
+            concept_label=payload.get("concept_label"),
             ref_id=payload["ref_id"],
             title=payload["title"],
             instructions=payload["instructions"],
@@ -115,6 +117,8 @@ class FakeTeacherRepo:
             class_id=payload.get("class_id"),
             student_id=payload["student_id"],
             intervention_type=payload["intervention_type"],
+            concept_id=payload.get("concept_id"),
+            concept_label=payload.get("concept_label"),
             severity=payload["severity"],
             subject=payload["subject"],
             sss_level=payload["sss_level"],
@@ -137,6 +141,8 @@ class FakeTeacherRepo:
                     class_id=payload.get("class_id"),
                     student_id=payload.get("student_id"),
                     assignment_type=payload["assignment_type"],
+                    concept_id=payload.get("concept_id"),
+                    concept_label=payload.get("concept_label"),
                     ref_id=payload["ref_id"],
                     title=payload["title"],
                     instructions=payload["instructions"],
@@ -161,6 +167,8 @@ class FakeTeacherRepo:
                     class_id=payload.get("class_id"),
                     student_id=payload["student_id"],
                     intervention_type=payload["intervention_type"],
+                    concept_id=payload.get("concept_id"),
+                    concept_label=payload.get("concept_label"),
                     severity=payload["severity"],
                     subject=payload["subject"],
                     sss_level=payload["sss_level"],
@@ -184,6 +192,8 @@ class FakeTeacherRepo:
             class_id=self.class_id,
             student_id=self.student_id,
             intervention_type="note",
+            concept_id="math:sss2:t1:linear-equations",
+            concept_label="Linear Equations",
             severity="medium",
             subject="math",
             sss_level="SSS2",
@@ -203,6 +213,8 @@ class FakeTeacherRepo:
             class_id=self.class_id,
             student_id=self.student_id,
             intervention_type="note",
+            concept_id="math:sss2:t1:linear-equations",
+            concept_label="Linear Equations",
             severity="medium",
             subject="math",
             sss_level="SSS2",
@@ -277,6 +289,8 @@ def test_teacher_service_create_intervention_success():
         class_id=repo.class_id,
         student_id=repo.student_id,
         intervention_type="note",
+        concept_id="math:sss2:t1:linear-equations",
+        concept_label="Linear Equations",
         severity="medium",
         subject="math",
         sss_level="SSS2",
@@ -288,6 +302,8 @@ def test_teacher_service_create_intervention_success():
     out = service.create_intervention(teacher_id=repo.teacher_id, payload=payload)
     assert out.student_id == repo.student_id
     assert out.intervention_type == "note"
+    assert out.concept_id == "math:sss2:t1:linear-equations"
+    assert out.concept_label == "Linear Equations"
     assert out.status == "open"
 
 

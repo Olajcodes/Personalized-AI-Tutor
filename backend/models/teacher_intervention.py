@@ -40,6 +40,8 @@ class TeacherIntervention(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         index=True,
     )
     intervention_type: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    concept_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    concept_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
     severity: Mapped[str] = mapped_column(String(20), nullable=False, default="medium", index=True)
     subject: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     sss_level: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
