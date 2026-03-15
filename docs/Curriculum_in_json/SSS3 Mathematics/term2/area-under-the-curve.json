@@ -11,12 +11,12 @@
   ],
   "sections": [
     {
-      "heading": "Content",
-      "content": "EXAMPLE\nSOLUTION\nLet u = , = =\n. =\n= + c = + c."
+      "heading": "Concept",
+      "content": "AREA UNDER THE CURVE:\nThe integral is called the definite integral of the function f(x) with a and b the lower and upper limits of the integral.\nEXAMPLE\nEvaluate.\nSOLUTION\n=[ + c\n=\n= = 913.5\nASSESSMENT: Integrate the following:\n)\nUsing substitution method, evaluate ."
     },
     {
-      "heading": "AREA UNDER THE CURVE",
-      "content": "The integral is called the definite integral of the function f(x) with a and b the lower and upper limits of the integral.\nEXAMPLE\nEvaluate.\nSOLUTION\n=[ + c\n=\n= = 913.5\nASSESSMENT: Integrate the following:\n)\nUsing substitution method, evaluate ."
+      "heading": "Examples and Practice",
+      "content": "Content:\nEXAMPLE\nSOLUTION\nLet u = , = =\n. =\n= + c = + c."
     }
   ],
   "keywords": [
