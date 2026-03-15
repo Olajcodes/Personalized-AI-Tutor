@@ -11,6 +11,7 @@ import {
   Loader2,
   NotebookPen,
   Route,
+  Sparkles,
   ShieldAlert,
   UserRoundSearch,
   Users,
@@ -669,6 +670,11 @@ const ConceptAnalyticsPage = () => {
     window.open(`/teacher/briefing/${activeClassId}`, '_blank', 'noopener,noreferrer');
   };
 
+  const openTeacherPresentationPage = () => {
+    if (!activeClassId) return;
+    window.open(`/teacher/presentation/${activeClassId}`, '_blank', 'noopener,noreferrer');
+  };
+
   const openStudentFocusExport = async () => {
     if (!activeClassId || !token || !selectedStudent?.student_id || !selectedConceptId) return;
     setExportState({ isOpen: true, isLoading: true, error: '', data: null, target: 'student' });
@@ -1008,6 +1014,15 @@ const ConceptAnalyticsPage = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={openTeacherPresentationPage}
+            disabled={!activeClassId}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black uppercase tracking-[0.16em] text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Sparkles className="h-4 w-4" />
+            Presentation mode
+          </button>
           <button
             type="button"
             onClick={openClassBriefingPage}

@@ -42,6 +42,7 @@ from backend.schemas.teacher_schema import (
     TeacherInterventionOut,
     TeacherRepeatRiskSummaryOut,
     TeacherRiskMatrixOut,
+    TeacherPresentationOut,
     TeacherStudentTimelineOut,
     TeacherStudentConceptTrendOut,
 )
@@ -261,6 +262,21 @@ def class_briefing_export(
     """Return a teacher-ready class briefing package with graph signal, plan, and current evidence."""
     try:
         return _analytics_service(db).get_class_briefing_export(teacher_id=current_user.id, class_id=class_id)
+    except TeacherServiceUnauthorizedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except TeacherServiceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+@router.get("/classes/{class_id}/presentation", response_model=TeacherPresentationOut)
+def class_presentation(
+    class_id: UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return a single presentation-ready teacher payload for demo and briefing flows."""
+    try:
+        return _analytics_service(db).get_class_presentation(teacher_id=current_user.id, class_id=class_id)
     except TeacherServiceUnauthorizedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except TeacherServiceNotFoundError as exc:

@@ -582,3 +582,19 @@ class TeacherInterventionOut(BaseModel):
     resolved_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class TeacherPresentationOut(BaseModel):
+    class_id: UUID
+    class_name: str
+    subject: Subject
+    sss_level: SSSLevel
+    term: Literal[1, 2, 3]
+    generated_at: datetime
+    dashboard: TeacherClassDashboardOut
+    graph_summary: TeacherClassGraphOut
+    intervention_queue: TeacherInterventionQueueOut
+    next_cluster_plan: TeacherNextLessonClusterPlanOut
+    assignment_outcomes: TeacherAssignmentOutcomeSummaryOut
+    intervention_outcomes: TeacherInterventionOutcomeSummaryOut
+    briefing: TeacherExportOut

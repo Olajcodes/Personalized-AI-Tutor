@@ -352,6 +352,23 @@ def test_teachers_endpoints_success(monkeypatch):
                 "concept_label": None,
             }
 
+        def get_class_presentation(self, *, teacher_id, class_id):
+            return {
+                "class_id": str(class_id),
+                "class_name": "SSS2 Math A",
+                "subject": "math",
+                "sss_level": "SSS2",
+                "term": 1,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "dashboard": self.get_class_dashboard(teacher_id=teacher_id, class_id=class_id),
+                "graph_summary": self.get_class_graph_summary(teacher_id=teacher_id, class_id=class_id),
+                "intervention_queue": self.get_intervention_queue(teacher_id=teacher_id, class_id=class_id),
+                "next_cluster_plan": self.get_next_lesson_cluster_plan(teacher_id=teacher_id, class_id=class_id),
+                "assignment_outcomes": self.get_assignment_outcomes(teacher_id=teacher_id, class_id=class_id),
+                "intervention_outcomes": self.get_intervention_outcomes(teacher_id=teacher_id, class_id=class_id),
+                "briefing": self.get_class_briefing_export(teacher_id=teacher_id, class_id=class_id),
+            }
+
         def get_class_alerts(self, *, teacher_id, class_id):
             return {"class_id": str(class_id), "alerts": []}
 
@@ -693,6 +710,7 @@ def test_teachers_endpoints_success(monkeypatch):
     cluster_plan_resp = client.get(f"/api/v1/teachers/classes/{class_id}/next-cluster-plan")
     cluster_plan_export_resp = client.get(f"/api/v1/teachers/classes/{class_id}/next-cluster-plan/export")
     class_briefing_export_resp = client.get(f"/api/v1/teachers/classes/{class_id}/briefing/export")
+    class_presentation_resp = client.get(f"/api/v1/teachers/classes/{class_id}/presentation")
     alerts_resp = client.get(f"/api/v1/teachers/classes/{class_id}/alerts")
     outcomes_resp = client.get(f"/api/v1/teachers/classes/{class_id}/intervention-outcomes")
     assignment_outcomes_resp = client.get(f"/api/v1/teachers/classes/{class_id}/assignment-outcomes")
@@ -785,6 +803,7 @@ def test_teachers_endpoints_success(monkeypatch):
     assert cluster_plan_resp.status_code == 200
     assert cluster_plan_export_resp.status_code == 200
     assert class_briefing_export_resp.status_code == 200
+    assert class_presentation_resp.status_code == 200
     assert alerts_resp.status_code == 200
     assert outcomes_resp.status_code == 200
     assert assignment_outcomes_resp.status_code == 200

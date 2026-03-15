@@ -476,6 +476,21 @@ def test_teacher_class_briefing_export_combines_graph_and_outcome_story():
     assert any(section.title == "Outcome snapshot" for section in out.sections)
 
 
+def test_teacher_presentation_aggregates_graph_queue_and_outcomes():
+    repo = FakeTeacherAnalyticsRepo()
+    service = TeacherAnalyticsService(repo)
+
+    out = service.get_class_presentation(teacher_id=repo.teacher_id, class_id=repo.class_id)
+
+    assert out.class_id == repo.class_id
+    assert out.class_name == repo.teacher_class.name
+    assert out.graph_summary.graph_signal.status == "repair_prerequisite"
+    assert out.intervention_queue.total_items >= 1
+    assert out.assignment_outcomes.total_assignments == 1
+    assert out.intervention_outcomes.total_interventions == 1
+    assert out.briefing.export_kind == "class_briefing"
+
+
 def test_teacher_student_focus_export_contains_student_and_concept_evidence():
     repo = FakeTeacherAnalyticsRepo()
     service = TeacherAnalyticsService(repo)

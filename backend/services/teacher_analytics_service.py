@@ -41,6 +41,7 @@ from backend.schemas.teacher_schema import (
     TeacherRepeatRiskConceptOut,
     TeacherRepeatRiskStudentOut,
     TeacherRepeatRiskSummaryOut,
+    TeacherPresentationOut,
     TeacherRiskMatrixCellOut,
     TeacherRiskMatrixConceptOut,
     TeacherRiskMatrixOut,
@@ -947,6 +948,24 @@ class TeacherAnalyticsService:
                 sections=sections,
             ),
             sections=sections,
+        )
+
+    def get_class_presentation(self, *, teacher_id: UUID, class_id: UUID) -> TeacherPresentationOut:
+        teacher_class = self._require_teacher_class(teacher_id=teacher_id, class_id=class_id)
+        return TeacherPresentationOut(
+            class_id=class_id,
+            class_name=teacher_class.name,
+            subject=teacher_class.subject,
+            sss_level=teacher_class.sss_level,
+            term=teacher_class.term,
+            generated_at=datetime.now(timezone.utc),
+            dashboard=self.get_class_dashboard(teacher_id=teacher_id, class_id=class_id),
+            graph_summary=self.get_class_graph_summary(teacher_id=teacher_id, class_id=class_id),
+            intervention_queue=self.get_intervention_queue(teacher_id=teacher_id, class_id=class_id),
+            next_cluster_plan=self.get_next_lesson_cluster_plan(teacher_id=teacher_id, class_id=class_id),
+            assignment_outcomes=self.get_assignment_outcomes(teacher_id=teacher_id, class_id=class_id),
+            intervention_outcomes=self.get_intervention_outcomes(teacher_id=teacher_id, class_id=class_id),
+            briefing=self.get_class_briefing_export(teacher_id=teacher_id, class_id=class_id),
         )
 
     def get_concept_student_drilldown(
