@@ -1,8 +1,11 @@
 """System health endpoints."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
 from backend.services.system_health_service import SystemHealthService
+from backend.services.demo_validation_service import DemoValidationService
+from backend.core.database import get_db
 
 router = APIRouter(prefix="/system", tags=["System"])
 
@@ -17,3 +20,9 @@ def health():
     LLM/API readiness is also reported based on configured ai-core/LLM settings.
     """
     return _health_service.snapshot()
+
+
+@router.get("/demo")
+def demo_readiness(db: Session = Depends(get_db)):
+    """Return demo readiness validation for the configured demo scope."""
+    return DemoValidationService(db).snapshot()

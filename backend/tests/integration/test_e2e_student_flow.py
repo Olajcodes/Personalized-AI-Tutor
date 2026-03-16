@@ -68,6 +68,7 @@ def setup_database(monkeypatch):
             title=f"E2E Linear Equations {topic_id.hex[:8]}",
             description="E2E seeded topic",
             is_approved=True,
+            curriculum_version_id=uuid4(),
         )
     )
     db.add(

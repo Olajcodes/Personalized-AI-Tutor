@@ -158,6 +158,28 @@ The backend health payload now includes:
 - `tutor.assessment.start`
 - `tutor.assessment.submit`
 
+## Demo Data (Presentation Mode)
+
+Seed a demo teacher + student cohort (requires approved curriculum versions for the chosen scope):
+
+```powershell
+python -m backend.scripts.seed_demo_data `
+  --subject math `
+  --sss-level SSS1 `
+  --term 1 `
+  --teacher-email demo.teacher@masteryai.local `
+  --student-email demo.student@masteryai.local `
+  --class-name "Graph-First Cohort"
+```
+
+Reset demo users and their related activity/mastery data:
+
+```powershell
+python -m backend.scripts.reset_demo_state `
+  --teacher-email demo.teacher@masteryai.local `
+  --student-email demo.student@masteryai.local
+```
+
 ## API Surface (Base Prefix: `/api/v1`)
 
 Major route groups:
