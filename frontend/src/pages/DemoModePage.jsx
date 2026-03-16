@@ -130,6 +130,7 @@ export default function DemoModePage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [backendHealth, setBackendHealth] = useState(null);
+  const [demoReadiness, setDemoReadiness] = useState(null);
   const [aiCoreHealth, setAiCoreHealth] = useState(null);
   const [studentBootstrap, setStudentBootstrap] = useState(null);
   const [teacherClasses, setTeacherClasses] = useState([]);
@@ -148,6 +149,7 @@ export default function DemoModePage() {
       try {
         const requests = [
           fetch(`${apiUrl}/system/health`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${apiUrl}/system/demo`, { headers: { Authorization: `Bearer ${token}` } }),
         ];
 
         if (aiCoreUrl) {
@@ -176,6 +178,13 @@ export default function DemoModePage() {
           setBackendHealth(await backendResponse.value.json());
         } else {
           setBackendHealth(null);
+        }
+
+        const demoResponse = responses[index++];
+        if (demoResponse.status === 'fulfilled' && demoResponse.value.ok) {
+          setDemoReadiness(await demoResponse.value.json());
+        } else {
+          setDemoReadiness(null);
         }
 
         if (aiCoreUrl) {
@@ -233,6 +242,13 @@ export default function DemoModePage() {
     [primaryTeacherClass?.id, studentCourse?.next_step?.recommended_topic_id, studentSubject],
   );
 
+  const demoMissing = useMemo(() => {
+    const checks = demoReadiness?.checks || {};
+    return Object.entries(checks)
+      .filter(([key, value]) => key !== 'scope' && value && value.status && value.status !== 'ok')
+      .map(([key, value]) => value.detail || `${key} not ready`);
+  }, [demoReadiness]);
+
   const readinessItems = useMemo(() => ([
     {
       title: 'Backend runtime',
@@ -251,6 +267,20 @@ export default function DemoModePage() {
       icon: Bot,
     },
     {
+      title: 'Demo data',
+      status: demoReadiness?.status === 'ready'
+        ? 'ready'
+        : demoReadiness?.status === 'attention'
+          ? 'attention'
+          : demoReadiness
+            ? 'unavailable'
+            : 'unavailable',
+      description: demoReadiness
+        ? (demoMissing.length > 0 ? demoMissing[0] : 'Demo seed is ready for the configured scope.')
+        : 'Demo readiness snapshot is not available yet.',
+      icon: ClipboardList,
+    },
+    {
       title: 'Student graph story',
       status: studentCourse?.next_step ? 'ready' : studentData ? 'attention' : 'unavailable',
       description: studentCourse?.recommendation_story?.headline || (studentData ? 'Student dashboard is available, but no next-step recommendation is loaded yet.' : 'Student session is not available in this account.'),
@@ -266,7 +296,7 @@ export default function DemoModePage() {
           : 'Teacher routes require a teacher account.',
       icon: School,
     },
-  ]), [aiCoreHealth, aiCoreUrl, backendHealth, primaryTeacherClass, role, studentCourse, studentData]);
+  ]), [aiCoreHealth, aiCoreUrl, backendHealth, demoMissing, demoReadiness, primaryTeacherClass, role, studentCourse, studentData]);
 
   const runSheet = useMemo(
     () => buildRunSheet({
@@ -404,6 +434,19 @@ export default function DemoModePage() {
                 />
               ))}
             </section>
+
+            {demoReadiness && demoMissing.length > 0 && (
+              <section className="rounded-[2rem] border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Demo readiness warnings</p>
+                <div className="mt-3 space-y-2">
+                  {demoMissing.map((note) => (
+                    <div key={note} className="rounded-2xl border border-amber-200 bg-white px-4 py-2">
+                      {note}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
               <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
