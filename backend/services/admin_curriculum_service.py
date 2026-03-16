@@ -14,12 +14,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
-from uuid import UUID, uuid5
+from uuid import UUID, uuid4, uuid5
 
 from sqlalchemy.orm import Session
 
 from backend.core.config import settings
 from backend.repositories.admin_curriculum_repo import AdminCurriculumRepository
+from backend.models.topic import Topic
 from backend.repositories.lesson_repo import upsert_lesson_with_blocks
 from backend.repositories.neo4j_graph_repo import (
     Neo4jGraphConfig,
@@ -1016,6 +1017,66 @@ Important rules:
         skipped_rel = [str(path.relative_to(source_root)) for path in skipped]
         return grouped, skipped_rel, undetected
 
+    def _seed_scope_topics_from_json(
+        self,
+        *,
+        source_root: Path,
+        subject: str,
+        sss_level: str,
+        term: int,
+    ) -> list[Topic]:
+        subject_row = self.repo.get_subject_by_slug(subject)
+        if subject_row is None:
+            raise AdminCurriculumValidationError(
+                f"Subject not found for scope: {subject}. Seed subjects before curriculum ingestion."
+            )
+        existing = self.repo.get_scope_topics(subject=subject, sss_level=sss_level, term=term)
+        existing_titles = {str(topic.title).strip().lower() for topic in existing}
+        created: list[Topic] = []
+        for file_path in sorted(source_root.rglob("*.json")):
+            try:
+                payload = self._normalize_json_topic_payload(file_path)
+            except AdminCurriculumValidationError:
+                continue
+            if (
+                str(payload.get("subject", "")).strip().lower() != subject
+                or str(payload.get("sss_level", "")).strip().upper() != sss_level
+                or int(payload.get("term", 0) or 0) != int(term)
+            ):
+                continue
+            title = str(payload.get("topic_title") or "").strip()
+            if not title:
+                continue
+            if title.strip().lower() in existing_titles:
+                continue
+
+            description = None
+            for section in list(payload.get("sections") or []):
+                if not isinstance(section, dict):
+                    continue
+                content = str(section.get("content") or "").strip()
+                if content:
+                    description = content[:500]
+                    break
+            if not description:
+                description = str(payload.get("source_title") or title).strip()[:500] or title
+
+            topic = Topic(
+                id=uuid4(),
+                subject_id=subject_row.id,
+                sss_level=sss_level,
+                term=int(term),
+                title=title,
+                description=description,
+                is_approved=False,
+                curriculum_version_id=None,
+            )
+            self.db.add(topic)
+            self.db.flush()
+            created.append(topic)
+            existing_titles.add(title.strip().lower())
+        return created
+
     def _extract_document_chunks(
         self,
         *,
@@ -1198,6 +1259,20 @@ Important rules:
             sss_level=payload.sss_level,
             term=payload.term,
         )
+        if not scope_topics and self._is_truthy_env(os.getenv("CURRICULUM_AUTO_SEED_TOPICS", "true")):
+            created_topics = self._seed_scope_topics_from_json(
+                source_root=source_root,
+                subject=payload.subject,
+                sss_level=payload.sss_level,
+                term=payload.term,
+            )
+            if created_topics:
+                self.db.commit()
+                scope_topics = self.repo.get_scope_topics(
+                    subject=payload.subject,
+                    sss_level=payload.sss_level,
+                    term=payload.term,
+                )
         if not scope_topics:
             raise AdminCurriculumValidationError(
                 "No topics found for provided scope. Seed topics before curriculum ingestion."
