@@ -3,7 +3,8 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.orm import sessionmaker
 
 from backend.core.config import settings
@@ -13,6 +14,7 @@ from backend.models.lesson import Lesson, LessonBlock
 from backend.models.subject import Subject
 from backend.models.topic import Topic
 from backend.models.user import User
+from backend.models.curriculum_version import CurriculumVersion
 
 
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "").strip()
@@ -29,7 +31,11 @@ if not TEST_DATABASE_URL.startswith("postgresql"):
     )
 
 
-engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
+engine = create_engine(
+    TEST_DATABASE_URL,
+    pool_pre_ping=True,
+    connect_args={"connect_timeout": int(os.getenv("TEST_DB_CONNECT_TIMEOUT", "5"))},
+)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -38,11 +44,23 @@ def override_get_db():
     try:
         yield db
     finally:
-        db.close()
+        try:
+            db.close()
+        except DBAPIError:
+            pass
+
+
+def _ensure_db_available() -> None:
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except OperationalError as exc:
+        pytest.skip(f"E2E student flow skipped: database unavailable ({exc})", allow_module_level=True)
 
 
 @pytest.fixture(autouse=True)
 def setup_database(monkeypatch):
+    _ensure_db_available()
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
 
@@ -58,6 +76,20 @@ def setup_database(monkeypatch):
         subject_by_slug[slug] = subject
 
     topic_id = uuid4()
+    curriculum_version = CurriculumVersion(
+        id=uuid4(),
+        version_name=f"e2e-student-version-{topic_id.hex[:6]}",
+        subject="math",
+        sss_level="SSS2",
+        term=1,
+        source_root="integration-test",
+        source_file_count=1,
+        status="published",
+        metadata_payload={},
+    )
+    db.add(curriculum_version)
+    db.flush()
+    curriculum_version_id = curriculum_version.id
     lesson_id = uuid4()
     db.add(
         Topic(
@@ -68,7 +100,7 @@ def setup_database(monkeypatch):
             title=f"E2E Linear Equations {topic_id.hex[:8]}",
             description="E2E seeded topic",
             is_approved=True,
-            curriculum_version_id=uuid4(),
+            curriculum_version_id=curriculum_version_id,
         )
     )
     db.add(
@@ -103,14 +135,42 @@ def setup_database(monkeypatch):
 
     monkeypatch.setattr(settings, "ai_core_base_url", "")
     monkeypatch.setattr(settings, "ai_core_allow_fallback", True)
+    async def _fake_generate_quiz_questions(**kwargs):
+        count = int(kwargs.get("num_questions") or 1)
+        questions = []
+        for index in range(max(count, 1)):
+            questions.append(
+                {
+                    "id": uuid4(),
+                    "text": f"What is the value of x in 2x + {4 + index} = {10 + index}?",
+                    "options": ["x = 2", "x = 3", "x = 4", "x = 5"],
+                    "correct_answer": "B",
+                    "concept_id": "math:sss2:t1:linear-equations",
+                    "difficulty": kwargs.get("difficulty", "medium"),
+                }
+            )
+        return questions
+
+    monkeypatch.setattr(
+        "backend.services.quiz_generate_service.generate_quiz_questions",
+        _fake_generate_quiz_questions,
+    )
     app.dependency_overrides[get_db] = override_get_db
 
-    yield {"topic_id": topic_id, "created_subject_ids": created_subject_ids}
+    fixture_payload = {
+        "topic_id": topic_id,
+        "created_subject_ids": created_subject_ids,
+        "curriculum_version_id": curriculum_version_id,
+    }
+    yield fixture_payload
 
     cleanup = TestingSessionLocal()
     cleanup.query(LessonBlock).filter(LessonBlock.lesson_id == lesson_id).delete(synchronize_session=False)
     cleanup.query(Lesson).filter(Lesson.id == lesson_id).delete(synchronize_session=False)
     cleanup.query(Topic).filter(Topic.id == topic_id).delete(synchronize_session=False)
+    cleanup.query(CurriculumVersion).filter(
+        CurriculumVersion.id == fixture_payload["curriculum_version_id"]
+    ).delete(synchronize_session=False)
     cleanup.query(User).filter(User.email.like("e2e.student.%@example.com")).delete(synchronize_session=False)
     if created_subject_ids:
         cleanup.query(Subject).filter(Subject.id.in_(created_subject_ids)).delete(synchronize_session=False)
@@ -177,7 +237,7 @@ def test_e2e_student_flow(setup_database):
 
     topics = client.get(
         "/api/v1/learning/topics",
-        params={"student_id": user_id, "subject": "math", "term": 1},
+        params={"student_id": user_id, "subject": "math", "term": 1, "include_unready": True},
     )
     assert topics.status_code == 200
     assert any(item["topic_id"] == str(topic_id) for item in topics.json())
@@ -185,8 +245,9 @@ def test_e2e_student_flow(setup_database):
     lesson = client.get(
         f"/api/v1/learning/topics/{topic_id}/lesson",
         params={"student_id": user_id},
+        headers=headers,
     )
-    assert lesson.status_code == 200
+    assert lesson.status_code == 200, lesson.text
 
     activity = client.post(
         "/api/v1/learning/activity/log",

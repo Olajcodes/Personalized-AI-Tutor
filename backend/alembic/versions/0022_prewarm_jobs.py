@@ -1,7 +1,7 @@
 """create prewarm jobs table
 
 Revision ID: 0022_prewarm_jobs
-Revises: 0021_merge_0019_0020_heads
+Revises: 0021_merge_0019_0020
 Create Date: 2026-03-13
 """
 
@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 
 revision = "0022_prewarm_jobs"
-down_revision = "0021_merge_0019_0020_heads"
+down_revision = "0021_merge_0019_0020"
 branch_labels = None
 depends_on = None
 

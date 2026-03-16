@@ -4,10 +4,12 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.orm import sessionmaker
 
 from backend.core.database import Base, get_db
+from backend.core.config import settings
 from backend.main import app
 from backend.models.governance_hallucination import GovernanceHallucination
 from backend.models.curriculum_ingestion_job import CurriculumIngestionJob
@@ -33,7 +35,11 @@ if not TEST_DATABASE_URL.startswith("postgresql"):
     )
 
 
-engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
+engine = create_engine(
+    TEST_DATABASE_URL,
+    pool_pre_ping=True,
+    connect_args={"connect_timeout": int(os.getenv("TEST_DB_CONNECT_TIMEOUT", "5"))},
+)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -42,11 +48,23 @@ def override_get_db():
     try:
         yield db
     finally:
-        db.close()
+        try:
+            db.close()
+        except DBAPIError:
+            pass
+
+
+def _ensure_db_available() -> None:
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except OperationalError as exc:
+        pytest.skip(f"E2E admin flow skipped: database unavailable ({exc})", allow_module_level=True)
 
 
 @pytest.fixture(autouse=True)
 def setup_database(monkeypatch, tmp_path):
+    _ensure_db_available()
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
 
@@ -59,13 +77,15 @@ def setup_database(monkeypatch, tmp_path):
         db.flush()
 
     topic_id = uuid4()
+    topic_token = uuid4().hex[:8]
+    topic_title = f"Linear Equations {topic_token}"
     db.add(
         Topic(
             id=topic_id,
             subject_id=subject.id,
             sss_level="SSS2",
             term=1,
-            title="Linear Equations",
+            title=topic_title,
             description="E2E admin flow topic",
             is_approved=False,
         )
@@ -88,16 +108,22 @@ def setup_database(monkeypatch, tmp_path):
         )
     )
     db.commit()
+    subject_id = subject.id
     db.close()
 
     curriculum_root = Path(tmp_path) / "curriculum"
     curriculum_root.mkdir(parents=True, exist_ok=True)
-    (curriculum_root / "linear_equations_notes.txt").write_text(
-        "LINEAR EQUATIONS\nDefinition and examples.\nSolve 2x + 4 = 10 by isolating x.",
+    (curriculum_root / f"linear_equations_{topic_token}.txt").write_text(
+        f"{topic_title}\nDefinition and examples.\nSolve 2x + 4 = 10 by isolating x.",
         encoding="utf-8",
     )
 
     app.dependency_overrides[get_db] = override_get_db
+    monkeypatch.setattr(settings, "use_neo4j_graph", False)
+    monkeypatch.setattr(settings, "internal_service_key", "test-internal-key")
+    monkeypatch.setenv("CURRICULUM_CONCEPT_EXTRACT_USE_LLM", "false")
+    monkeypatch.setenv("CURRICULUM_CONCEPT_USE_LLM", "false")
+    monkeypatch.setenv("CURRICULUM_PREREQ_USE_LLM", "false")
     monkeypatch.setattr(QdrantVectorStore, "upsert_chunks", lambda self, rows: None)
     monkeypatch.setattr(
         QdrantVectorStore,
@@ -119,7 +145,13 @@ def setup_database(monkeypatch, tmp_path):
         },
     )
 
-    yield {"topic_id": topic_id, "hall_id": hall_id, "source_root": str(curriculum_root), "created_subject": created_subject, "subject_id": subject.id}
+    yield {
+        "topic_id": topic_id,
+        "hall_id": hall_id,
+        "source_root": str(curriculum_root),
+        "created_subject": created_subject,
+        "subject_id": subject_id,
+    }
 
     cleanup = TestingSessionLocal()
     version_ids = [
@@ -142,7 +174,7 @@ def setup_database(monkeypatch, tmp_path):
     cleanup.query(GovernanceHallucination).filter(GovernanceHallucination.id == hall_id).delete(synchronize_session=False)
     cleanup.query(User).filter(User.email.like("e2e.admin.%@example.com")).delete(synchronize_session=False)
     if created_subject:
-        cleanup.query(Subject).filter(Subject.id == subject.id).delete(synchronize_session=False)
+        cleanup.query(Subject).filter(Subject.id == subject_id).delete(synchronize_session=False)
     cleanup.commit()
     cleanup.close()
     app.dependency_overrides.clear()
@@ -189,7 +221,7 @@ def test_e2e_admin_flow(setup_database):
         },
         headers=headers,
     )
-    assert upload.status_code == 201
+    assert upload.status_code == 201, upload.text
     upload_data = upload.json()
     version_id = upload_data["version_id"]
     job_id = upload_data["job_id"]
@@ -239,6 +271,8 @@ def test_e2e_admin_flow(setup_database):
     )
     assert resolve.status_code == 200
 
+    internal_headers = dict(headers)
+    internal_headers["X-Internal-Service-Key"] = "test-internal-key"
     rag = client.post(
         "/api/v1/internal/rag/retrieve",
         json={
@@ -251,6 +285,7 @@ def test_e2e_admin_flow(setup_database):
             "approved_only": True,
             "curriculum_version_id": version_id,
         },
+        headers=internal_headers,
     )
     assert rag.status_code == 200
     assert len(rag.json()["chunks"]) == 1

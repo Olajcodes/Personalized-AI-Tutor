@@ -33,6 +33,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'https://mastery-backend-7xe8.on
 const safeArray = (value) => (Array.isArray(value) ? value : []);
 const BOOTSTRAP_CACHE_TTL_MS = 45_000;
 const lessonBootstrapCache = new Map();
+const MODE_STORAGE_KEY = 'mastery_tutor_mode';
 
 const iconByIntent = {
   teach: Sparkles,
@@ -40,6 +41,7 @@ const iconByIntent = {
   diagnose: ShieldAlert,
   drill: Zap,
   recap: NotebookPen,
+  'exam-practice': Target,
   assessment_start: Target,
   sparkles: Sparkles,
   lightbulb: Sparkles,
@@ -50,6 +52,15 @@ const iconByIntent = {
   'graduation-cap': BrainCircuit,
   'notebook-pen': NotebookPen,
 };
+
+const TUTOR_MODES = [
+  { id: 'teach', label: 'Teach', description: 'Direct explanation with clear steps.' },
+  { id: 'socratic', label: 'Socratic', description: 'Guided questions to uncover the rule.' },
+  { id: 'diagnose', label: 'Diagnose', description: 'Spot misconceptions and fix gaps.' },
+  { id: 'drill', label: 'Drill', description: 'Short, focused practice prompts.' },
+  { id: 'recap', label: 'Recap', description: 'Summarize key ideas quickly.' },
+  { id: 'exam-practice', label: 'Exam', description: 'Exam-style prompts and timing.' },
+];
 
 const bootstrapCacheKey = ({ studentId, subject, level, term, topicId }) => [studentId, subject, level, term, topicId].join(':');
 
@@ -246,6 +257,11 @@ export default function LessonPage() {
   const [pendingAssessment, setPendingAssessment] = useState(null);
   const [lastAssessmentReview, setLastAssessmentReview] = useState(null);
   const [selectedGraphConcept, setSelectedGraphConcept] = useState(null);
+  const [selectedMode, setSelectedMode] = useState(() => {
+    if (typeof window === 'undefined') return 'teach';
+    const stored = window.localStorage.getItem(MODE_STORAGE_KEY);
+    return TUTOR_MODES.some((mode) => mode.id === stored) ? stored : 'teach';
+  });
   const [isBusy, setIsBusy] = useState(false);
   const [streamPhase, setStreamPhase] = useState('');
   const [status, setStatus] = useState('loading');
@@ -269,6 +285,11 @@ export default function LessonPage() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isBusy, pendingAssessment]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(MODE_STORAGE_KEY, selectedMode);
+  }, [selectedMode]);
 
   useEffect(() => {
     const onResize = () => {
@@ -362,6 +383,47 @@ export default function LessonPage() {
     const average = currentConcepts.reduce((sum, item) => sum + (item.mastery_score || 0), 0) / currentConcepts.length;
     return Math.round(average * 100);
   }, [graphContext]);
+
+  const activeMode = useMemo(
+    () => TUTOR_MODES.find((mode) => mode.id === selectedMode) || TUTOR_MODES[0],
+    [selectedMode],
+  );
+
+  const assessmentStatus = useMemo(() => {
+    if (pendingAssessment) {
+      return {
+        label: 'Checkpoint pending',
+        detail: 'Resume the live checkpoint to log mastery.',
+        tone: 'emerald',
+      };
+    }
+    if (lastAssessmentReview && !lastAssessmentReview.isCorrect) {
+      return {
+        label: 'Needs review',
+        detail: 'Recent checkpoint showed a gap. Retry or bridge the prerequisite.',
+        tone: 'amber',
+      };
+    }
+    if (lastAssessmentReview && lastAssessmentReview.isCorrect) {
+      return {
+        label: 'Mastery demonstrated',
+        detail: 'Checkpoint cleared. Push ahead or try a harder one.',
+        tone: 'indigo',
+      };
+    }
+    if (lesson?.assessment_ready) {
+      return {
+        label: 'Ready for checkpoint',
+        detail: 'Take a 1-minute check to record mastery.',
+        tone: 'emerald',
+      };
+    }
+    return {
+      label: 'Unassessed',
+      detail: 'No mastery evidence recorded yet for this lesson.',
+      tone: 'slate',
+    };
+  }, [pendingAssessment, lastAssessmentReview, lesson?.assessment_ready]);
 
   const appendAssistant = (payload) => {
     setMessages((prev) => [
@@ -463,7 +525,7 @@ export default function LessonPage() {
         topic_id: topicId,
         focus_concept_id: options.focusConceptId || null,
         focus_concept_label: options.focusConceptLabel || null,
-        mode: options.mode || null,
+        mode: options.mode ?? selectedMode ?? null,
         message: trimmed,
       });
     } catch (err) {
@@ -1014,8 +1076,17 @@ export default function LessonPage() {
                   <p className="mt-4 text-sm leading-7 text-slate-700">{bootstrap?.why_this_topic}</p>
                   <div className="mt-5 grid gap-3">
                     <div className="rounded-2xl bg-white p-4">
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Assessment readiness</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-800">{lesson?.assessment_ready ? 'Ready for a 1-minute checkpoint' : 'Lesson context still warming'}</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Assessment status</p>
+                      <p className={`mt-1 text-sm font-semibold ${
+                        assessmentStatus.tone === 'emerald'
+                          ? 'text-emerald-700'
+                          : assessmentStatus.tone === 'amber'
+                            ? 'text-amber-700'
+                            : assessmentStatus.tone === 'indigo'
+                              ? 'text-indigo-700'
+                              : 'text-slate-700'
+                      }`}>{assessmentStatus.label}</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-500">{assessmentStatus.detail}</p>
                     </div>
                     <div className="rounded-2xl bg-white p-4">
                       <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Weak prerequisite</p>
@@ -1119,12 +1190,39 @@ export default function LessonPage() {
                       <p className="text-xs text-slate-500">{streamPhase || 'Lesson-aware, graph-grounded, and cache-warmed'}</p>
                     </div>
                   </div>
-                  <button type="button" onClick={() => sendChat('Teach me like I am completely new to this lesson.')} className="hidden rounded-2xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 md:inline-flex">
+                  <button type="button" onClick={() => sendChat('Teach me like I am completely new to this lesson.', { mode: 'teach' })} className="hidden rounded-2xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 md:inline-flex">
                     Teach from zero
                   </button>
                 </div>
               </div>
               <div className="p-5">
+                <div className="mb-4 rounded-[1.25rem] border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Tutor mode</p>
+                      <p className="mt-1 text-xs leading-6 text-slate-600">{activeMode.description}</p>
+                    </div>
+                    <span className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-indigo-700">
+                      {activeMode.label}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {TUTOR_MODES.map((mode) => (
+                      <button
+                        key={mode.id}
+                        type="button"
+                        onClick={() => setSelectedMode(mode.id)}
+                        className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold transition ${
+                          selectedMode === mode.id
+                            ? 'border-indigo-600 bg-indigo-600 text-white'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-700'
+                        }`}
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="mb-4 grid gap-2 sm:grid-cols-2">
                   {quickActions.map((action) => {
                     const Icon = iconByIntent[action.icon] || iconByIntent[action.intent] || MessageSquare;
@@ -1225,8 +1323,8 @@ export default function LessonPage() {
                     <textarea value={chatInput} onChange={(event) => setChatInput(event.target.value)} rows={3} placeholder="Ask about this lesson, a prerequisite, or how this unlocks the next concept..." className="w-full resize-none border-none bg-transparent px-1 py-1 text-sm text-slate-700 outline-none" />
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
                       <div className="flex flex-wrap gap-2 text-xs">
-                        <button type="button" onClick={() => sendChat('Explain this lesson with one real-life example.')} className="rounded-full bg-slate-100 px-3 py-1.5 font-semibold text-slate-600">Real-life example</button>
-                        <button type="button" onClick={() => sendChat('Show me the common mistake students make here.')} className="rounded-full bg-slate-100 px-3 py-1.5 font-semibold text-slate-600">Common mistake</button>
+                        <button type="button" onClick={() => sendChat('Explain this lesson with one real-life example.', { mode: 'teach' })} className="rounded-full bg-slate-100 px-3 py-1.5 font-semibold text-slate-600">Real-life example</button>
+                        <button type="button" onClick={() => sendChat('Show me the common mistake students make here.', { mode: 'diagnose' })} className="rounded-full bg-slate-100 px-3 py-1.5 font-semibold text-slate-600">Common mistake</button>
                       </div>
                       <button type="submit" disabled={isBusy || !chatInput.trim()} className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60">
                         Send

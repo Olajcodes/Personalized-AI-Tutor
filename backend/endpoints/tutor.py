@@ -290,14 +290,38 @@ async def tutor_recap(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    started_at = time.perf_counter()
     if payload.student_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="student_id must match authenticated user id")
     repo = _session_repo(db)
     if not repo.session_exists_for_student(session_id=payload.session_id, student_id=payload.student_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found for this student.")
     try:
-        return await _service().recap(payload)
+        response = await _service().recap(payload)
+        log_timed_event(
+            logger,
+            "tutor.recap",
+            started_at,
+            outcome="success",
+            student_id=payload.student_id,
+            session_id=payload.session_id,
+            topic_id=payload.topic_id,
+            citations=len(list(response.citations or [])),
+            actions=len(list(response.actions or [])),
+        )
+        return response
     except TutorProviderUnavailableError as exc:
+        log_timed_event(
+            logger,
+            "tutor.recap",
+            started_at,
+            outcome="error",
+            student_id=payload.student_id,
+            session_id=payload.session_id,
+            topic_id=payload.topic_id,
+            error=str(exc),
+            log_level=logging.WARNING,
+        )
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
 
 
@@ -307,14 +331,39 @@ async def tutor_drill(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    started_at = time.perf_counter()
     if payload.student_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="student_id must match authenticated user id")
     repo = _session_repo(db)
     if not repo.session_exists_for_student(session_id=payload.session_id, student_id=payload.student_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found for this student.")
     try:
-        return await _service().drill(payload)
+        response = await _service().drill(payload)
+        log_timed_event(
+            logger,
+            "tutor.drill",
+            started_at,
+            outcome="success",
+            student_id=payload.student_id,
+            session_id=payload.session_id,
+            topic_id=payload.topic_id,
+            difficulty=payload.difficulty,
+            citations=len(list(response.citations or [])),
+            actions=len(list(response.actions or [])),
+        )
+        return response
     except TutorProviderUnavailableError as exc:
+        log_timed_event(
+            logger,
+            "tutor.drill",
+            started_at,
+            outcome="error",
+            student_id=payload.student_id,
+            session_id=payload.session_id,
+            topic_id=payload.topic_id,
+            error=str(exc),
+            log_level=logging.WARNING,
+        )
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
 
 
@@ -324,14 +373,38 @@ async def tutor_prereq_bridge(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    started_at = time.perf_counter()
     if payload.student_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="student_id must match authenticated user id")
     repo = _session_repo(db)
     if not repo.session_exists_for_student(session_id=payload.session_id, student_id=payload.student_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found for this student.")
     try:
-        return await _service().prereq_bridge(payload)
+        response = await _service().prereq_bridge(payload)
+        log_timed_event(
+            logger,
+            "tutor.prereq_bridge",
+            started_at,
+            outcome="success",
+            student_id=payload.student_id,
+            session_id=payload.session_id,
+            topic_id=payload.topic_id,
+            citations=len(list(response.citations or [])),
+            actions=len(list(response.actions or [])),
+        )
+        return response
     except TutorProviderUnavailableError as exc:
+        log_timed_event(
+            logger,
+            "tutor.prereq_bridge",
+            started_at,
+            outcome="error",
+            student_id=payload.student_id,
+            session_id=payload.session_id,
+            topic_id=payload.topic_id,
+            error=str(exc),
+            log_level=logging.WARNING,
+        )
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
 
 
@@ -341,14 +414,39 @@ async def tutor_study_plan(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    started_at = time.perf_counter()
     if payload.student_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="student_id must match authenticated user id")
     repo = _session_repo(db)
     if not repo.session_exists_for_student(session_id=payload.session_id, student_id=payload.student_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found for this student.")
     try:
-        return await _service().study_plan(payload)
+        response = await _service().study_plan(payload)
+        log_timed_event(
+            logger,
+            "tutor.study_plan",
+            started_at,
+            outcome="success",
+            student_id=payload.student_id,
+            session_id=payload.session_id,
+            topic_id=payload.topic_id,
+            horizon_days=payload.horizon_days,
+            citations=len(list(response.citations or [])),
+            actions=len(list(response.actions or [])),
+        )
+        return response
     except TutorProviderUnavailableError as exc:
+        log_timed_event(
+            logger,
+            "tutor.study_plan",
+            started_at,
+            outcome="error",
+            student_id=payload.student_id,
+            session_id=payload.session_id,
+            topic_id=payload.topic_id,
+            error=str(exc),
+            log_level=logging.WARNING,
+        )
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
 
 
@@ -362,6 +460,7 @@ async def tutor_hint(
 
     If a session id is supplied, ownership is validated before generating hint.
     """
+    started_at = time.perf_counter()
     if payload.student_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -374,8 +473,31 @@ async def tutor_hint(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found for this student.")
 
     try:
-        return await _service().hint(payload)
+        response = await _service().hint(payload)
+        log_timed_event(
+            logger,
+            "tutor.hint",
+            started_at,
+            outcome="success",
+            student_id=payload.student_id,
+            session_id=payload.session_id,
+            quiz_id=payload.quiz_id,
+            question_id=payload.question_id,
+        )
+        return response
     except TutorProviderUnavailableError as exc:
+        log_timed_event(
+            logger,
+            "tutor.hint",
+            started_at,
+            outcome="error",
+            student_id=payload.student_id,
+            session_id=payload.session_id,
+            quiz_id=payload.quiz_id,
+            question_id=payload.question_id,
+            error=str(exc),
+            log_level=logging.WARNING,
+        )
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
 
 
@@ -386,6 +508,7 @@ async def tutor_explain_mistake(
     current_user=Depends(get_current_user),
 ):
     """Explain why a student's answer is incorrect with remediation guidance."""
+    started_at = time.perf_counter()
     if payload.student_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -398,6 +521,27 @@ async def tutor_explain_mistake(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found for this student.")
 
     try:
-        return await _service().explain_mistake(payload)
+        response = await _service().explain_mistake(payload)
+        log_timed_event(
+            logger,
+            "tutor.explain_mistake",
+            started_at,
+            outcome="success",
+            student_id=payload.student_id,
+            session_id=payload.session_id,
+            topic_id=payload.topic_id,
+        )
+        return response
     except TutorProviderUnavailableError as exc:
+        log_timed_event(
+            logger,
+            "tutor.explain_mistake",
+            started_at,
+            outcome="error",
+            student_id=payload.student_id,
+            session_id=payload.session_id,
+            topic_id=payload.topic_id,
+            error=str(exc),
+            log_level=logging.WARNING,
+        )
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))

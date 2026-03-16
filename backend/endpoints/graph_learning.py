@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import time
 from typing import Literal
 from uuid import UUID
 
@@ -8,11 +10,13 @@ from sqlalchemy.orm import Session
 
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
+from backend.core.telemetry import log_timed_event
 from backend.schemas.graph_learning_schema import LessonGraphContextOut, WhyThisTopicOut
 from backend.services.lesson_graph_service import LessonGraphValidationError, lesson_graph_service
 
 
 router = APIRouter(prefix="/learning/graph", tags=["Learning Graph"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/lesson-context", response_model=LessonGraphContextOut)
@@ -25,13 +29,14 @@ def get_lesson_graph_context(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    started_at = time.perf_counter()
     if student_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="student_id must match authenticated user id",
         )
     try:
-        return lesson_graph_service.get_lesson_graph_context(
+        response = lesson_graph_service.get_lesson_graph_context(
             db,
             student_id=student_id,
             subject=subject,
@@ -39,7 +44,37 @@ def get_lesson_graph_context(
             term=term,
             topic_id=topic_id,
         )
+        log_timed_event(
+            logger,
+            "learning.graph.lesson_context",
+            started_at,
+            outcome="success",
+            student_id=student_id,
+            topic_id=topic_id,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+            current_count=len(list(response.current_concepts or [])),
+            prereq_count=len(list(response.prerequisite_concepts or [])),
+            downstream_count=len(list(response.downstream_concepts or [])),
+            node_count=len(list(response.graph_nodes or [])),
+            edge_count=len(list(response.graph_edges or [])),
+            next_topic_id=response.next_unlock.topic_id if response.next_unlock else None,
+        )
+        return response
     except LessonGraphValidationError as exc:
+        log_timed_event(
+            logger,
+            "learning.graph.lesson_context",
+            started_at,
+            outcome="error",
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+            topic_id=topic_id,
+            error=str(exc),
+            log_level=logging.WARNING,
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
@@ -53,13 +88,14 @@ def explain_why_this_topic(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    started_at = time.perf_counter()
     if student_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="student_id must match authenticated user id",
         )
     try:
-        return lesson_graph_service.explain_why_this_topic(
+        response = lesson_graph_service.explain_why_this_topic(
             db,
             student_id=student_id,
             subject=subject,
@@ -67,5 +103,32 @@ def explain_why_this_topic(
             term=term,
             topic_id=topic_id,
         )
+        log_timed_event(
+            logger,
+            "learning.graph.why_topic",
+            started_at,
+            outcome="success",
+            student_id=student_id,
+            topic_id=topic_id,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+            prereq_labels=len(list(response.prerequisite_labels or [])),
+            unlock_labels=len(list(response.unlock_labels or [])),
+            next_topic_id=response.recommended_next.topic_id if response.recommended_next else None,
+        )
+        return response
     except LessonGraphValidationError as exc:
+        log_timed_event(
+            logger,
+            "learning.graph.why_topic",
+            started_at,
+            outcome="error",
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+            topic_id=topic_id,
+            error=str(exc),
+            log_level=logging.WARNING,
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

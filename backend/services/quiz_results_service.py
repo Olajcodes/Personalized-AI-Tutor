@@ -18,6 +18,7 @@ from backend.schemas.quiz_schema import (
     QuizResultsResponse,
 )
 from backend.services.learning_path_service import learning_path_service
+from backend.services.prewarm_job_service import PrewarmJobService
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +145,53 @@ class QuizResultsService:
             graph_remediation=graph_remediation,
             recommendation_story=recommendation_story,
         )
+        prewarm_candidates: list[UUID] = []
+        if graph_remediation:
+            def _parse_uuid(value: str | UUID | None) -> UUID | None:
+                if value is None:
+                    return None
+                if isinstance(value, UUID):
+                    return value
+                try:
+                    return UUID(str(value))
+                except (TypeError, ValueError):
+                    return None
+
+            for candidate in [recommended_topic, graph_remediation.recommended_next_topic_id]:
+                candidate_id = _parse_uuid(candidate)
+                if candidate_id is not None:
+                    prewarm_candidates.append(candidate_id)
+
+            if graph_remediation.blocking_prerequisite_id:
+                mapped = self.repo.find_topic_id_for_concept(
+                    concept_id=str(graph_remediation.blocking_prerequisite_id),
+                    subject=str(getattr(quiz, "subject", "")).strip().lower(),
+                    sss_level=str(getattr(quiz, "sss_level", "")).strip(),
+                    term=int(getattr(quiz, "term", 0) or 0),
+                )
+                if mapped is not None:
+                    prewarm_candidates.append(mapped)
+
+        prewarm_enqueued = False
+        if prewarm_candidates:
+            unique_candidates = []
+            seen = set()
+            for candidate in prewarm_candidates:
+                if candidate in seen:
+                    continue
+                seen.add(candidate)
+                unique_candidates.append(candidate)
+            try:
+                prewarm_id = PrewarmJobService(self.repo.db).enqueue_lesson_related(
+                    student_id=student_id,
+                    subject=str(getattr(quiz, "subject", "")).strip().lower(),
+                    sss_level=str(getattr(quiz, "sss_level", "")).strip(),
+                    term=int(getattr(quiz, "term", 0) or 0),
+                    topic_ids=unique_candidates,
+                )
+                prewarm_enqueued = bool(prewarm_id)
+            except Exception:
+                prewarm_enqueued = False
         log_timed_event(
             logger,
             "quiz.results",
@@ -155,6 +203,8 @@ class QuizResultsService:
             concept_breakdown=len(concept_breakdown),
             insights=len(insights),
             recommended_topic_id=recommended_topic or "none",
+            prewarm_candidates=len(prewarm_candidates),
+            prewarm_enqueued=prewarm_enqueued,
         )
         return response
 

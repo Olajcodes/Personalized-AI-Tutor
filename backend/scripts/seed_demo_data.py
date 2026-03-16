@@ -10,6 +10,11 @@ Optional flags (also overridable via env vars):
   --teacher-email demo.teacher@masteryai.local
   --student-email demo.student@masteryai.local
   --class-name "Graph-First Cohort"
+  --seed-secondary / --no-seed-secondary
+  --secondary-student-email demo.student2@masteryai.local
+  --secondary-student-name "Demo Student Two"
+  --secondary-class-name "Graph-First Cohort B"
+  --secondary-student-id <uuid>
   --seed-mastery / --no-seed-mastery
   --seed-assignments / --no-seed-assignments
   --seed-interventions / --no-seed-interventions
@@ -44,6 +49,8 @@ from backend.repositories.graph_repo import GraphRepository
 
 
 SEED_PASSWORD_HASH = "$2b$12$5JY6jsA5q9ODaW6fNfcohOx5l6v3PK2hQd1qi97V6S9bxR5D8Qqbi"
+DEFAULT_MASTER_SCORES = [0.32, 0.52, 0.7, 0.84, 0.61]
+SECONDARY_MASTER_SCORES = [max(0.15, score - 0.12) for score in DEFAULT_MASTER_SCORES]
 
 
 def _env_default(name: str, fallback: str) -> str:
@@ -218,9 +225,10 @@ def _seed_mastery(
     sss_level: str,
     term: int,
     concept_ids: list[str],
+    scores: list[float] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     repo = GraphRepository(db)
-    scores = [0.32, 0.52, 0.7, 0.84, 0.61]
+    scores = list(scores) if scores else DEFAULT_MASTER_SCORES
     concept_breakdown: list[dict] = []
     new_mastery: list[dict] = []
 
@@ -400,6 +408,19 @@ def run() -> None:
     parser.add_argument("--teacher-name", default=_env_default("DEMO_TEACHER_NAME", "Demo Teacher"))
     parser.add_argument("--student-name", default=_env_default("DEMO_STUDENT_NAME", "Demo Student"))
     parser.add_argument("--class-name", default=_env_default("DEMO_CLASS_NAME", "Graph-First Cohort"))
+    parser.add_argument("--seed-secondary", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument(
+        "--secondary-student-email",
+        default=_env_default("DEMO_SECONDARY_STUDENT_EMAIL", "demo.student2@masteryai.local"),
+    )
+    parser.add_argument(
+        "--secondary-student-name",
+        default=_env_default("DEMO_SECONDARY_STUDENT_NAME", "Demo Student Two"),
+    )
+    parser.add_argument(
+        "--secondary-class-name",
+        default=_env_default("DEMO_SECONDARY_CLASS_NAME", "Graph-First Cohort B"),
+    )
     parser.add_argument("--seed-mastery", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--seed-assignments", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--seed-interventions", action=argparse.BooleanOptionalAction, default=True)
@@ -407,6 +428,7 @@ def run() -> None:
     parser.add_argument("--attach-curriculum-version", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--teacher-id", default=_env_default("DEMO_TEACHER_ID", ""))
     parser.add_argument("--student-id", default=_env_default("DEMO_STUDENT_ID", ""))
+    parser.add_argument("--secondary-student-id", default=_env_default("DEMO_SECONDARY_STUDENT_ID", ""))
     args = parser.parse_args()
 
     subject_slug = args.subject.strip().lower()
@@ -415,6 +437,7 @@ def run() -> None:
 
     teacher_id = uuid.UUID(args.teacher_id) if args.teacher_id else None
     student_id = uuid.UUID(args.student_id) if args.student_id else None
+    secondary_student_id = uuid.UUID(args.secondary_student_id) if args.secondary_student_id else None
 
     db: Session = SessionLocal()
     try:
@@ -473,9 +496,23 @@ def run() -> None:
             user_id=student_id,
         )
 
+        secondary_student = None
+        if args.seed_secondary:
+            secondary_student = _upsert_user(
+                db,
+                email=args.secondary_student_email,
+                role="student",
+                display_name=args.secondary_student_name,
+                user_id=secondary_student_id,
+            )
+
         profile = _upsert_profile(db, student_id=student.id, sss_level=sss_level, term=term)
         _ensure_student_subject(db, profile_id=profile.id, subject_id=subject.id)
         _upsert_stats(db, student_id=student.id)
+        if secondary_student:
+            secondary_profile = _upsert_profile(db, student_id=secondary_student.id, sss_level=sss_level, term=term)
+            _ensure_student_subject(db, profile_id=secondary_profile.id, subject_id=subject.id)
+            _upsert_stats(db, student_id=secondary_student.id)
 
         teacher_class = _ensure_teacher_class(
             db,
@@ -486,6 +523,17 @@ def run() -> None:
             name=args.class_name,
         )
         _ensure_enrollment(db, class_id=teacher_class.id, student_id=student.id)
+        secondary_class = None
+        if secondary_student:
+            secondary_class = _ensure_teacher_class(
+                db,
+                teacher_id=teacher.id,
+                subject=subject_slug,
+                sss_level=sss_level,
+                term=term,
+                name=args.secondary_class_name,
+            )
+            _ensure_enrollment(db, class_id=secondary_class.id, student_id=secondary_student.id)
 
         if args.seed_assignments:
             _ensure_assignment(
@@ -498,6 +546,17 @@ def run() -> None:
                 topic=focus_topic,
                 focus_concept_id=focus_concept_id,
             )
+            if secondary_class:
+                _ensure_assignment(
+                    db,
+                    teacher_id=teacher.id,
+                    class_id=secondary_class.id,
+                    subject=subject_slug,
+                    sss_level=sss_level,
+                    term=term,
+                    topic=focus_topic,
+                    focus_concept_id=focus_concept_id,
+                )
 
         if args.seed_interventions:
             _ensure_intervention(
@@ -510,27 +569,41 @@ def run() -> None:
                 term=term,
                 focus_concept_id=focus_concept_id,
             )
+            if secondary_student and secondary_class:
+                _ensure_intervention(
+                    db,
+                    teacher_id=teacher.id,
+                    class_id=secondary_class.id,
+                    student_id=secondary_student.id,
+                    subject=subject_slug,
+                    sss_level=sss_level,
+                    term=term,
+                    focus_concept_id=focus_concept_id,
+                )
 
         if args.seed_mastery and concept_ids:
-            existing_mastery = db.query(StudentConceptMastery).filter(
-                StudentConceptMastery.student_id == student.id,
-                StudentConceptMastery.subject == subject_slug,
-                StudentConceptMastery.sss_level == sss_level,
-                StudentConceptMastery.term == term,
-            ).count()
-            if not existing_mastery:
+            def _seed_student_mastery(target_student: User, *, scores: list[float]) -> None:
+                existing_mastery = db.query(StudentConceptMastery).filter(
+                    StudentConceptMastery.student_id == target_student.id,
+                    StudentConceptMastery.subject == subject_slug,
+                    StudentConceptMastery.sss_level == sss_level,
+                    StudentConceptMastery.term == term,
+                ).count()
+                if existing_mastery:
+                    return
                 concept_breakdown, new_mastery = _seed_mastery(
                     db,
-                    student_id=student.id,
+                    student_id=target_student.id,
                     subject=subject_slug,
                     sss_level=sss_level,
                     term=term,
                     concept_ids=concept_ids[:6],
+                    scores=scores,
                 )
                 db.add(
                     MasteryUpdateEvent(
                         id=uuid.uuid4(),
-                        student_id=student.id,
+                        student_id=target_student.id,
                         quiz_id=None,
                         attempt_id=None,
                         subject=subject_slug,
@@ -541,6 +614,10 @@ def run() -> None:
                         new_mastery=new_mastery,
                     )
                 )
+
+            _seed_student_mastery(student, scores=DEFAULT_MASTER_SCORES)
+            if secondary_student:
+                _seed_student_mastery(secondary_student, scores=SECONDARY_MASTER_SCORES)
 
         if args.seed_activity:
             _ensure_activity_log(
@@ -561,6 +638,25 @@ def run() -> None:
                 ref_id=str(focus_topic.id),
                 duration_seconds=300,
             )
+            if secondary_student:
+                _ensure_activity_log(
+                    db,
+                    student_id=secondary_student.id,
+                    subject=subject_slug,
+                    term=term,
+                    event_type="lesson_viewed",
+                    ref_id=str(focus_topic.id),
+                    duration_seconds=360,
+                )
+                _ensure_activity_log(
+                    db,
+                    student_id=secondary_student.id,
+                    subject=subject_slug,
+                    term=term,
+                    event_type="quiz_submitted",
+                    ref_id=str(focus_topic.id),
+                    duration_seconds=260,
+                )
 
         db.commit()
 
@@ -568,7 +664,11 @@ def run() -> None:
         print(f"Scope: {subject_slug} {sss_level} term {term}")
         print(f"Teacher: {teacher.email} ({teacher.id})")
         print(f"Student: {student.email} ({student.id})")
+        if secondary_student:
+            print(f"Student 2: {secondary_student.email} ({secondary_student.id})")
         print(f"Class: {teacher_class.name} ({teacher_class.id})")
+        if secondary_class:
+            print(f"Class 2: {secondary_class.name} ({secondary_class.id})")
         print(f"Focus topic: {focus_topic.title}")
     except Exception:
         db.rollback()

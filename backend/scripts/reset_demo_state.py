@@ -60,21 +60,30 @@ def run() -> None:
     parser = argparse.ArgumentParser(description="Remove demo users and related activity/graph data.")
     parser.add_argument("--teacher-email", default=_env_default("DEMO_TEACHER_EMAIL", "demo.teacher@masteryai.local"))
     parser.add_argument("--student-email", default=_env_default("DEMO_STUDENT_EMAIL", "demo.student@masteryai.local"))
+    parser.add_argument(
+        "--secondary-student-email",
+        default=_env_default("DEMO_SECONDARY_STUDENT_EMAIL", "demo.student2@masteryai.local"),
+    )
     args = parser.parse_args()
 
     db: Session = SessionLocal()
     try:
         teacher = db.query(User).filter(User.email == args.teacher_email).first()
         student = db.query(User).filter(User.email == args.student_email).first()
+        secondary_student = db.query(User).filter(User.email == args.secondary_student_email).first()
 
         if student:
             _delete_by_student(db, student.id)
+        if secondary_student:
+            _delete_by_student(db, secondary_student.id)
 
         if teacher:
             _delete_by_teacher(db, teacher.id)
 
         if student:
             db.query(User).filter(User.id == student.id).delete(synchronize_session=False)
+        if secondary_student:
+            db.query(User).filter(User.id == secondary_student.id).delete(synchronize_session=False)
         if teacher:
             db.query(User).filter(User.id == teacher.id).delete(synchronize_session=False)
 
@@ -83,6 +92,7 @@ def run() -> None:
         print("Demo reset complete.")
         print(f"Teacher removed: {bool(teacher)} ({args.teacher_email})")
         print(f"Student removed: {bool(student)} ({args.student_email})")
+        print(f"Student 2 removed: {bool(secondary_student)} ({args.secondary_student_email})")
     except Exception:
         db.rollback()
         raise
