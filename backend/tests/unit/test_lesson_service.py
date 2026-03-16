@@ -25,7 +25,15 @@ def test_fetch_topic_lesson_success(monkeypatch):
         svc,
         "get_topic_with_subject",
         lambda db, tid: (
-            _obj(id=tid, subject_id=subject_id, is_approved=True, sss_level="SSS1", term=1, title="Linear Equations"),
+            _obj(
+                id=tid,
+                subject_id=subject_id,
+                is_approved=True,
+                sss_level="SSS1",
+                term=1,
+                title="Linear Equations",
+                curriculum_version_id=uuid.uuid4(),
+            ),
             _obj(slug="math"),
         ),
     )
@@ -99,7 +107,10 @@ def test_fetch_topic_lesson_not_found_when_lesson_missing(monkeypatch):
     monkeypatch.setattr(svc, "student_enrolled_in_subject", lambda db, spid, sid: True)
     monkeypatch.setattr(svc, "get_lesson_with_blocks", lambda db, tid: None)
 
-    with pytest.raises(svc.LessonNotFound, match="Lesson not found"):
+    with pytest.raises(
+        svc.LessonGenerationError,
+        match="No approved curriculum version mapped for this topic",
+    ):
         svc.fetch_topic_lesson(db=None, topic_id=topic_id, student_id=uuid.uuid4())
 
 

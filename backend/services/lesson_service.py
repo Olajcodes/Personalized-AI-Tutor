@@ -703,23 +703,11 @@ def fetch_topic_lesson(db: Session, topic_id: uuid.UUID, student_id: uuid.UUID) 
     legacy_lesson = get_lesson_with_blocks(db, topic.id)
     legacy_blocks = _map_legacy_lesson_blocks(legacy_lesson) if legacy_lesson is not None else []
 
-    # Legacy path for static lesson content when curriculum-backed generation has not been linked yet.
+    # Explicitly require canonical curriculum mapping for lesson delivery.
     if not getattr(topic, "curriculum_version_id", None):
-        if legacy_lesson is None:
-            raise LessonNotFound("Lesson not found")
-        return {
-            "topic_id": str(topic.id),
-            "title": str(getattr(legacy_lesson, "title", topic.title)),
-            "summary": getattr(legacy_lesson, "summary", None),
-            "estimated_duration_minutes": getattr(legacy_lesson, "estimated_duration_minutes", None),
-            "content_blocks": legacy_blocks,
-            "covered_concepts": [],
-            "prerequisites": [],
-            "weakest_concepts": [],
-            "next_unlock": None,
-            "why_this_matters": None,
-            "assessment_ready": False,
-        }
+        raise LessonGenerationError(
+            "No approved curriculum version mapped for this topic. Ingest and approve canonical curriculum JSON first."
+        )
 
     ensure_personalized_lessons_table(db)
     mastery_rows = _get_mastery_rows(
