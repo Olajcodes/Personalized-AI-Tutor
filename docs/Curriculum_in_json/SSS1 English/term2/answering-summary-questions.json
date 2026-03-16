@@ -14,7 +14,11 @@
   "sections": [
     {
       "heading": "Useful Hints",
-      "content": "Indicate which part of the question is being answered. Pick only the information demanded by the question. Keep strictly to the passage and be as brief as possible. Use your own words rather than copying whole sentences."
+      "content": "Indicate which part of the question is being answered. Pick only the information demanded by the question."
+    },
+    {
+      "heading": "Writing Reminders",
+      "content": "Keep strictly to the passage and be as brief as possible. Use your own words rather than copying whole sentences."
     }
   ],
   "keywords": [
