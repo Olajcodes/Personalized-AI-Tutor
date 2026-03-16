@@ -172,6 +172,7 @@ class TutorOrchestrationService:
             "topic_id": str(payload.topic_id) if payload.topic_id else None,
             "focus_concept_id": payload.focus_concept_id,
             "focus_concept_label": payload.focus_concept_label,
+            "mode": payload.mode,
             "message": payload.message,
         }
 

@@ -1277,7 +1277,7 @@ def run_tutor_chat(request: TutorChatRequest) -> TutorChatResponse:
         )
 
     request = request.model_copy(update={"message": safe_message})
-    mode = _infer_tutor_mode_from_message(request.message)
+    mode = request.mode or _infer_tutor_mode_from_message(request.message)
     return _run_structured_tutor_mode(request=request, mode=mode, user_goal=request.message)
 
 

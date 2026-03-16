@@ -44,6 +44,7 @@ class TutorChatRequest(BaseModel):
     topic_id: Optional[str] = None
     focus_concept_id: Optional[str] = None
     focus_concept_label: Optional[str] = None
+    mode: Optional[Literal["teach", "socratic", "diagnose", "drill", "recap", "exam-practice"]] = None
     message: str
 
 

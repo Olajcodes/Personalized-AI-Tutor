@@ -463,6 +463,7 @@ export default function LessonPage() {
         topic_id: topicId,
         focus_concept_id: options.focusConceptId || null,
         focus_concept_label: options.focusConceptLabel || null,
+        mode: options.mode || null,
         message: trimmed,
       });
     } catch (err) {
@@ -648,7 +649,7 @@ export default function LessonPage() {
       await handlePrereqBridge();
       return;
     }
-    sendChat(action.prompt);
+    sendChat(action.prompt, { mode: action.intent });
   };
 
   const explainLastMistake = async () => {
