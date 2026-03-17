@@ -24,6 +24,7 @@ from backend.schemas.tutor_schema import (
     TutorAssessmentSubmitOut,
 )
 from backend.services.activity_service import ActivityService
+from backend.services.lesson_graph_service import LessonGraphValidationError, lesson_graph_service
 from backend.services.graph_client_service import GraphClientValidationError, graph_client_service
 from backend.services.learning_path_service import learning_path_service
 from backend.services.tutor_orchestration_service import (
@@ -182,7 +183,33 @@ class TutorAssessmentService:
 
     async def start_assessment(self, payload: TutorAssessmentStartIn) -> TutorAssessmentStartOut:
         started_at = now_ms()
-        ai_out = await self.orchestration.assessment_start(payload)
+        focus_concept_id = payload.focus_concept_id
+        focus_concept_label = payload.focus_concept_label
+        if not focus_concept_id:
+            try:
+                graph_context = lesson_graph_service.get_lesson_graph_context(
+                    self.db,
+                    student_id=payload.student_id,
+                    subject=payload.subject,
+                    sss_level=payload.sss_level,
+                    term=int(payload.term),
+                    topic_id=payload.topic_id,
+                )
+                current_nodes = list(graph_context.current_concepts or [])
+                if current_nodes:
+                    weakest = min(current_nodes, key=lambda item: float(item.mastery_score))
+                    focus_concept_id = weakest.concept_id
+                    focus_concept_label = weakest.label
+            except LessonGraphValidationError:
+                pass
+
+        effective_payload = payload.model_copy(
+            update={
+                "focus_concept_id": focus_concept_id,
+                "focus_concept_label": focus_concept_label,
+            }
+        )
+        ai_out = await self.orchestration.assessment_start(effective_payload)
         assessment_id = uuid4()
         state = {
             "assessment_id": str(assessment_id),
@@ -191,6 +218,8 @@ class TutorAssessmentService:
             "concept_label": ai_out.concept_label,
             "requested_focus_concept_id": payload.focus_concept_id,
             "requested_focus_concept_label": payload.focus_concept_label,
+            "selected_focus_concept_id": focus_concept_id,
+            "selected_focus_concept_label": focus_concept_label,
             "question": ai_out.question,
             "ideal_answer": ai_out.ideal_answer,
             "hint": ai_out.hint,
@@ -217,7 +246,7 @@ class TutorAssessmentService:
             student_id=payload.student_id,
             session_id=payload.session_id,
             topic_id=payload.topic_id,
-            focus_concept_id=payload.focus_concept_id or response.concept_id,
+            focus_concept_id=focus_concept_id or response.concept_id,
             citations=len(list(response.citations or [])),
         )
         return response
