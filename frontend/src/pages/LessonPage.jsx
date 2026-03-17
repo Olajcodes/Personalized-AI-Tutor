@@ -87,11 +87,20 @@ const createMessageId = () => {
   return `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
-const STREAM_PHASE_LABELS = {
-  retrieving_context: 'Gathering lesson context...',
-  composing_response: 'Drafting the response...',
-  finalizing_response: 'Finalizing actions...',
-};
+  const STREAM_PHASE_LABELS = {
+    retrieving_context: 'Gathering lesson context...',
+    composing_response: 'Drafting the response...',
+    finalizing_response: 'Finalizing actions...',
+  };
+
+  const MODE_LABELS = {
+    teach: 'Teach',
+    socratic: 'Socratic',
+    diagnose: 'Diagnose',
+    drill: 'Drill',
+    recap: 'Recap',
+    'exam-practice': 'Exam Practice',
+  };
 
 const readBootstrapCache = (key) => {
   const entry = lessonBootstrapCache.get(key);
@@ -127,37 +136,55 @@ const prewarmTopics = async ({ token, studentId, subject, sssLevel, term, topicI
   }
 };
 
-function MessageCard({
-  item,
-  onOpenRecommendation,
-  onStartCheckpoint,
-  onOpenPrereqBridge,
-  onStartDrill,
+  const toUserActions = (actions = []) => {
+    return safeArray(actions)
+      .map((action) => String(action || '').trim())
+      .filter((action) => action.length > 0)
+      .filter((action) => !/^[A-Z0-9_:\-]+$/.test(action))
+      .filter((action) => !action.startsWith('http'))
+      .filter((action) => action.length <= 140);
+  };
+
+  function MessageCard({
+    item,
+    onOpenRecommendation,
+    onStartCheckpoint,
+    onOpenPrereqBridge,
+    onStartDrill,
   followUps,
   onFollowUp,
   showFollowUps,
-}) {
-  const isStudent = item.role === 'student';
-  const isStreaming = !isStudent && Boolean(item.streaming);
-  const showCheckpointAction = !isStudent && Boolean(item.recommended_assessment);
-  const showPrereqAction = !isStudent && Boolean(item.prerequisite_warning);
-  const showDrillAction = !isStudent && safeArray(item.concept_focus).length > 0;
-  const showActionChips = !isStudent && safeArray(item.actions).length > 0;
-  const showFollowUpActions = !isStudent && !item.streaming && showFollowUps && safeArray(followUps).length > 0;
-  return (
-    <div className={`flex ${isStudent ? 'justify-end' : 'justify-start'}`}>
-      <div className={`max-w-[92%] rounded-3xl p-4 text-sm ${isStudent ? 'bg-indigo-600 text-white' : 'border border-slate-200 bg-white text-slate-700'}`}>
-        {isStudent ? (
-          <p className="whitespace-pre-wrap">{item.content}</p>
-        ) : (
-          <div className="space-y-3">
-            <div className="whitespace-pre-wrap text-sm leading-7">{item.content || ''}</div>
-            {isStreaming && (
-              <div className="flex items-center gap-2 text-xs text-slate-500">
-                <LoaderCircle className="animate-spin text-indigo-500" size={14} />
-                <span>Streaming response...</span>
+  }) {
+    const isStudent = item.role === 'student';
+    const isStreaming = !isStudent && Boolean(item.streaming);
+    const showCheckpointAction = !isStudent && Boolean(item.recommended_assessment);
+    const showPrereqAction = !isStudent && Boolean(item.prerequisite_warning);
+    const showDrillAction = !isStudent && safeArray(item.concept_focus).length > 0;
+    const userActions = toUserActions(item.actions);
+    const showActionChips = !isStudent && userActions.length > 0;
+    const showFollowUpActions = !isStudent && !item.streaming && showFollowUps && safeArray(followUps).length > 0;
+    const modeLabel = item.mode ? (MODE_LABELS[item.mode] || item.mode) : null;
+    return (
+      <div className={`flex ${isStudent ? 'justify-end' : 'justify-start'}`}>
+        <div className={`max-w-[92%] rounded-3xl p-4 text-sm ${isStudent ? 'bg-indigo-600 text-white' : 'border border-slate-200 bg-white text-slate-700'}`}>
+          {isStudent ? (
+            <p className="whitespace-pre-wrap">{item.content}</p>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                <span>Tutor response</span>
+                {modeLabel && <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-indigo-700">{modeLabel}</span>}
               </div>
-            )}
+              <div>
+                <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Answer</p>
+                <div className="whitespace-pre-wrap text-sm leading-7">{item.content || ''}</div>
+              </div>
+              {isStreaming && (
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <LoaderCircle className="animate-spin text-indigo-500" size={14} />
+                  <span>Streaming response...</span>
+                </div>
+              )}
             {item.error && (
               <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
                 {item.error}
@@ -173,13 +200,44 @@ function MessageCard({
                 </ul>
               </div>
             )}
-            {(item.prerequisite_warning || item.next_action || item.recommended_assessment) && (
-              <div className="grid gap-2">
-                {item.prerequisite_warning && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{item.prerequisite_warning}</div>}
-                {item.next_action && <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-800">{item.next_action}</div>}
-                {item.recommended_assessment && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">{item.recommended_assessment}</div>}
-              </div>
-            )}
+              {(item.prerequisite_warning || item.next_action || item.recommended_assessment || item.recommended_topic_title || showDrillAction) && (
+                <div className="grid gap-2">
+                  {item.prerequisite_warning && (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                      <p className="mb-1 text-[10px] font-black uppercase tracking-[0.2em] text-amber-500">Prerequisite alert</p>
+                      <p>{item.prerequisite_warning}</p>
+                    </div>
+                  )}
+                  {(item.next_action || item.recommended_topic_title) && (
+                    <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-800">
+                      <p className="mb-1 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500">Next step</p>
+                      {item.next_action && <p>{item.next_action}</p>}
+                      {item.recommended_topic_title && (
+                        <p className="mt-1 text-[11px] font-semibold text-indigo-700">Next lesson: {item.recommended_topic_title}</p>
+                      )}
+                    </div>
+                  )}
+                  {item.recommended_assessment && (
+                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+                      <p className="mb-1 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500">Recommended check</p>
+                      <p>{item.recommended_assessment}</p>
+                    </div>
+                  )}
+                  {showDrillAction && (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+                      <p className="mb-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Optional drill</p>
+                      <button
+                        type="button"
+                        onClick={onStartDrill}
+                        className="mt-1 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-700 hover:bg-slate-50"
+                      >
+                        <Zap size={14} />
+                        1-minute drill
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             {safeArray(item.concept_focus).length > 0 && (
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                 <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Concept Focus</p>
@@ -205,16 +263,16 @@ function MessageCard({
                 </div>
               </div>
             )}
-            {showActionChips && (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Suggested actions</p>
-                <div className="flex flex-wrap gap-2">
-                  {item.actions.map((action, index) => (
-                    <button
-                      key={`${action}-${index}`}
-                      type="button"
-                      onClick={() => onFollowUp?.({ prompt: action, label: action })}
-                      disabled={item.streaming}
+              {showActionChips && (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Suggested actions</p>
+                  <div className="flex flex-wrap gap-2">
+                    {userActions.map((action, index) => (
+                      <button
+                        key={`${action}-${index}`}
+                        type="button"
+                        onClick={() => onFollowUp?.({ prompt: action, label: action })}
+                        disabled={item.streaming}
                       className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600 hover:border-indigo-200 hover:text-indigo-700 disabled:opacity-60"
                     >
                       {action}
@@ -246,11 +304,11 @@ function MessageCard({
                 </div>
               </div>
             )}
-            {(showCheckpointAction || showPrereqAction || showDrillAction) && (
-              <div className="flex flex-wrap gap-2">
-                {showCheckpointAction && (
-                  <button
-                    type="button"
+              {(showCheckpointAction || showPrereqAction) && (
+                <div className="flex flex-wrap gap-2">
+                  {showCheckpointAction && (
+                    <button
+                      type="button"
                     onClick={onStartCheckpoint}
                     className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-white hover:bg-emerald-700"
                   >
@@ -268,18 +326,8 @@ function MessageCard({
                     Bridge prerequisite
                   </button>
                 )}
-                {showDrillAction && (
-                  <button
-                    type="button"
-                    onClick={onStartDrill}
-                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-700 hover:bg-slate-50"
-                  >
-                    <Zap size={14} />
-                    1-minute drill
-                  </button>
-                )}
-              </div>
-            )}
+                </div>
+              )}
             {showFollowUpActions && (
               <div className="flex flex-wrap gap-2">
                 {followUps.map((action) => (
@@ -610,6 +658,7 @@ export default function LessonPage() {
     id: overrides.id || payload.id || createMessageId(),
     role: 'assistant',
     content: payload.assistant_message || payload.message || payload.content || '',
+    mode: payload.mode || null,
     key_points: payload.key_points || [],
     concept_focus: payload.concept_focus || [],
     citations: payload.citations || [],
@@ -618,6 +667,7 @@ export default function LessonPage() {
     next_action: payload.next_action || null,
     prerequisite_warning: payload.prerequisite_warning || null,
     recommended_assessment: payload.recommended_assessment || null,
+    recommended_topic_title: payload.recommended_topic_title || null,
     streaming: overrides.streaming || false,
     error: overrides.error || null,
   });
