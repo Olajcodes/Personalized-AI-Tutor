@@ -51,6 +51,7 @@ const normalizeCourseBootstrap = (data) => ({
     recent_evidence: data?.recent_evidence || null,
     intervention_timeline: Array.isArray(data?.intervention_timeline) ? data.intervention_timeline : [],
     recommendation_story: data?.recommendation_story || null,
+    evidence_summary: data?.evidence_summary || null,
 });
 
 const EMPTY_MAP_DATA = {
@@ -60,6 +61,7 @@ const EMPTY_MAP_DATA = {
     recent_evidence: null,
     intervention_timeline: [],
     recommendation_story: null,
+    evidence_summary: null,
 };
 
 export default function Dashboard() {
@@ -318,6 +320,27 @@ export default function Dashboard() {
                         recommendationStory={activeSubject ? effectiveMapData?.recommendation_story : null}
                     />
                 </div>
+
+                {activeSubject && effectiveMapData?.evidence_summary && (
+                    <div className="mb-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                            <GitBranch className="h-3.5 w-3.5 text-emerald-500" />
+                            Mastery evidence snapshot
+                        </div>
+                        <div className="mt-4 grid gap-4 md:grid-cols-3">
+                            {[
+                                { label: 'Demonstrated', value: effectiveMapData.evidence_summary.demonstrated, tone: 'text-emerald-700' },
+                                { label: 'Needs review', value: effectiveMapData.evidence_summary.needs_review, tone: 'text-amber-700' },
+                                { label: 'Unassessed', value: effectiveMapData.evidence_summary.unassessed, tone: 'text-slate-500' },
+                            ].map((item) => (
+                                <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                    <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">{item.label}</div>
+                                    <p className={`mt-2 text-2xl font-black ${item.tone}`}>{item.value}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 <div className="mb-8">
                     <PresentationCueCard

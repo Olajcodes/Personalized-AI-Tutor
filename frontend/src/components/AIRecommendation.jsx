@@ -142,6 +142,7 @@ export default function AIRecommendation({
       ? `Current concept focus: ${recommendation.recommended_concept_label}`
       : 'Graph sequencing is using your mastery evidence to choose the best next step.';
   const story = recommendationStory || null;
+  const primaryActionLabel = story?.action_label || (hasPrereqGap ? 'Repair prerequisite' : 'Open next unlock');
 
   return (
     <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 w-full lg:w-80 flex flex-col justify-between relative overflow-hidden">
@@ -258,7 +259,7 @@ export default function AIRecommendation({
         >
           {recommendedTopicId ? (
             <>
-              {story?.action_label || 'Start Recommended Lesson'} <ChevronRight className="w-4 h-4" />
+              {primaryActionLabel} <ChevronRight className="w-4 h-4" />
             </>
           ) : (
             <>

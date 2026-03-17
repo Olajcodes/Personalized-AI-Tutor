@@ -164,5 +164,6 @@ export const applyGraphInterventionOverlay = (basePayload, intervention) => {
     next_step: intervention.next_step || basePayload?.next_step || null,
     recent_evidence: intervention.recent_evidence || basePayload?.recent_evidence || null,
     recommendation_story: intervention.recommendation_story || basePayload?.recommendation_story || null,
+    evidence_summary: intervention.evidence_summary || basePayload?.evidence_summary || null,
   };
 };
