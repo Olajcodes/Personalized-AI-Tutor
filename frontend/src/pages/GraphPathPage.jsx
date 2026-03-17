@@ -26,6 +26,7 @@ const EMPTY_MAP_DATA = {
   intervention_timeline: [],
   recommendation_story: null,
   topics: [],
+  evidence_summary: null,
 };
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
@@ -38,6 +39,7 @@ const normalizeCourseBootstrap = (data) => ({
   intervention_timeline: Array.isArray(data?.intervention_timeline) ? data.intervention_timeline : [],
   recommendation_story: data?.recommendation_story || null,
   topics: Array.isArray(data?.topics) ? data.topics : [],
+  evidence_summary: data?.evidence_summary || null,
 });
 
 const prewarmTopics = async ({ apiUrl, token, studentId, subject, sssLevel, term, topicIds }) => {
@@ -180,6 +182,7 @@ export default function GraphPathPage() {
     relationCount: safeArray(mapData?.edges).length,
     evidenceCount: safeArray(mapData?.intervention_timeline).length,
   }), [mapData?.edges, mapData?.intervention_timeline, mapData?.topics]);
+  const evidenceSummary = mapData?.evidence_summary || null;
 
   const openLesson = async (topicId) => {
     if (!topicId || !activeId || !token || !activeSubject) return;
@@ -302,6 +305,22 @@ export default function GraphPathPage() {
                 tone="emerald"
               />
             </div>
+
+            {evidenceSummary && (
+              <div className="mt-6 grid gap-4 md:grid-cols-3">
+                {[
+                  { label: 'Demonstrated', value: evidenceSummary.demonstrated, tone: 'text-emerald-700' },
+                  { label: 'Needs review', value: evidenceSummary.needs_review, tone: 'text-amber-700' },
+                  { label: 'Unassessed', value: evidenceSummary.unassessed, tone: 'text-slate-500' },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{item.label}</p>
+                    <p className={`mt-2 text-2xl font-black ${item.tone}`}>{item.value}</p>
+                    <p className="mt-2 text-sm text-slate-500">Graph-wide mastery evidence in this scope.</p>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="mt-6 grid gap-6 lg:grid-cols-[1.4fr_0.8fr]">
               <div className="space-y-6">
