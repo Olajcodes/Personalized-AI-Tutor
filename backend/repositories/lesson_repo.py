@@ -100,6 +100,8 @@ def upsert_lesson_with_blocks(
 
 
 def ensure_personalized_lessons_table(db: Session) -> None:
+    if db is None:
+        return
     bind = db.get_bind()
     PersonalizedLesson.__table__.create(bind=bind, checkfirst=True)
 
@@ -110,6 +112,8 @@ def get_personalized_lesson(
     student_id: uuid.UUID,
     topic_id: uuid.UUID,
 ) -> PersonalizedLesson | None:
+    if db is None:
+        return None
     stmt = select(PersonalizedLesson).where(
         PersonalizedLesson.student_id == student_id,
         PersonalizedLesson.topic_id == topic_id,

@@ -424,6 +424,8 @@ def _get_mastery_rows(
     sss_level: str,
     term: int,
 ) -> list[StudentConceptMastery]:
+    if db is None:
+        return []
     stmt = (
         select(StudentConceptMastery)
         .where(
