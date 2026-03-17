@@ -21,20 +21,10 @@ from backend.repositories.diagnostic_repo import DiagnosticRepository
 from backend.schemas.internal_graph_schema import ConceptUpdateIn, InternalGraphUpdateIn
 from backend.schemas.tutor_schema import TutorAssessmentStartOut, TutorAssessmentSubmitOut
 from backend.services.graph_client_service import graph_client_service
+from backend.tests.integration.db_utils import resolve_test_database_url
 
 
-TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "").strip() or str(settings.database_url).strip()
-if not TEST_DATABASE_URL:
-    pytest.skip(
-        "Section 8 graph-first integration flow requires PostgreSQL DATABASE_URL or TEST_DATABASE_URL.",
-        allow_module_level=True,
-    )
-
-if not TEST_DATABASE_URL.startswith("postgresql"):
-    pytest.skip(
-        "Section 8 graph-first integration flow requires PostgreSQL TEST_DATABASE_URL.",
-        allow_module_level=True,
-    )
+TEST_DATABASE_URL = resolve_test_database_url(test_label="Section 8 graph-first integration flow")
 
 
 engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)

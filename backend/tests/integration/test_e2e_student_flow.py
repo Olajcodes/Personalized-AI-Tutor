@@ -7,7 +7,6 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.orm import sessionmaker
 
-from backend.core.config import settings
 from backend.core.database import Base, get_db
 from backend.main import app
 from backend.models.lesson import Lesson, LessonBlock
@@ -15,20 +14,10 @@ from backend.models.subject import Subject
 from backend.models.topic import Topic
 from backend.models.user import User
 from backend.models.curriculum_version import CurriculumVersion
+from backend.tests.integration.db_utils import resolve_test_database_url
 
 
-TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "").strip()
-if not TEST_DATABASE_URL:
-    pytest.skip(
-        "Section 8 E2E student flow requires TEST_DATABASE_URL (PostgreSQL).",
-        allow_module_level=True,
-    )
-
-if not TEST_DATABASE_URL.startswith("postgresql"):
-    pytest.skip(
-        "Section 8 E2E student flow requires PostgreSQL TEST_DATABASE_URL.",
-        allow_module_level=True,
-    )
+TEST_DATABASE_URL = resolve_test_database_url(test_label="Section 8 E2E student flow")
 
 
 engine = create_engine(

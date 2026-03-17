@@ -90,6 +90,20 @@ python -m alembic -c backend/alembic.ini upgrade head
 python -m alembic -c backend/alembic.ini current
 ```
 
+## Tests
+
+Integration tests require PostgreSQL. Use a dedicated test DB whenever possible.
+
+```powershell
+# Preferred: isolated test database
+$env:TEST_DATABASE_URL="postgresql://postgres:password@localhost:5432/mastery_ai_test"
+python -m pytest -q backend/tests
+
+# Optional: reuse dev DATABASE_URL (explicit opt-in, modifies data)
+$env:E2E_ALLOW_DEV_DB="1"
+python -m pytest -q backend/tests/integration
+```
+
 ## Fresh Start Data Bootstrap (Recommended)
 
 This one command:

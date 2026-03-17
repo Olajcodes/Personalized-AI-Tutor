@@ -313,15 +313,15 @@ Lane D:
 
 ---
 
-## [🟡] Section 8 (Release Gate) E2E Validation and Demo Freeze [PARTIAL PREP]
+## [✅] Section 8 (Release Gate) E2E Validation and Demo Freeze [COMPLETED]
 
 Lane A:
-- [❌] `backend/scripts/seed_demo_data.py`
-- [❌] `backend/scripts/reset_demo_state.py`
+- [✅] `backend/scripts/seed_demo_data.py`
+- [✅] `backend/scripts/reset_demo_state.py`
 
 Lane B:
 - [✅] `ai_core/scripts/smoke_test_question.py`
-- [❌] `backend/services/demo_validation_service.py`
+- [✅] `backend/services/demo_validation_service.py`
 
 Lane C:
 - [✅] `README.md`
@@ -329,9 +329,9 @@ Lane C:
 - [✅] `ai_core/README.md`
 
 Lane D:
-- [❌] `backend/tests/integration/test_e2e_student_flow.py`
-- [❌] `backend/tests/integration/test_e2e_teacher_flow.py`
-- [❌] `backend/tests/integration/test_e2e_admin_flow.py`
+- [✅] `backend/tests/integration/test_e2e_student_flow.py`
+- [✅] `backend/tests/integration/test_e2e_teacher_flow.py`
+- [✅] `backend/tests/integration/test_e2e_admin_flow.py`
 - [✅] `ai_core/tests/unit/test_scoped_retrieval.py`
 - [✅] `ai_core/tests/unit/test_prereq_query.py`
 

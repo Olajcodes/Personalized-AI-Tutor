@@ -15,20 +15,10 @@ from backend.models.student import StudentProfile
 from backend.models.tutor_session import TutorSession
 from backend.models.user import User
 from backend.repositories.tutor_session_repo import TutorSessionRepository
+from backend.tests.integration.db_utils import resolve_test_database_url
 
 
-TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "").strip()
-if not TEST_DATABASE_URL:
-    pytest.skip(
-        "Section 5 integration flow requires TEST_DATABASE_URL (PostgreSQL) to run safely.",
-        allow_module_level=True,
-    )
-
-if not TEST_DATABASE_URL.startswith("postgresql"):
-    pytest.skip(
-        "Section 5 integration flow requires a PostgreSQL-compatible TEST_DATABASE_URL.",
-        allow_module_level=True,
-    )
+TEST_DATABASE_URL = resolve_test_database_url(test_label="Section 5 integration flow")
 
 
 engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)

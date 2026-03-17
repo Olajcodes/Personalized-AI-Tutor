@@ -15,20 +15,10 @@ from backend.models.teacher_class import TeacherClass
 from backend.models.teacher_intervention import TeacherIntervention
 from backend.models.user import User
 from backend.models.class_enrollment import ClassEnrollment
+from backend.tests.integration.db_utils import resolve_test_database_url
 
 
-TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "").strip()
-if not TEST_DATABASE_URL:
-    pytest.skip(
-        "Section 6 integration flow requires TEST_DATABASE_URL (PostgreSQL) to run safely.",
-        allow_module_level=True,
-    )
-
-if not TEST_DATABASE_URL.startswith("postgresql"):
-    pytest.skip(
-        "Section 6 integration flow requires PostgreSQL TEST_DATABASE_URL.",
-        allow_module_level=True,
-    )
+TEST_DATABASE_URL = resolve_test_database_url(test_label="Section 6 integration flow")
 
 
 engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)

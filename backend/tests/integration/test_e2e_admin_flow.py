@@ -19,20 +19,10 @@ from backend.models.subject import Subject
 from backend.models.topic import Topic
 from backend.models.user import User
 from backend.services.rag_retrieve_service import QdrantVectorStore
+from backend.tests.integration.db_utils import resolve_test_database_url
 
 
-TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "").strip()
-if not TEST_DATABASE_URL:
-    pytest.skip(
-        "Section 8 E2E admin flow requires TEST_DATABASE_URL (PostgreSQL).",
-        allow_module_level=True,
-    )
-
-if not TEST_DATABASE_URL.startswith("postgresql"):
-    pytest.skip(
-        "Section 8 E2E admin flow requires PostgreSQL TEST_DATABASE_URL.",
-        allow_module_level=True,
-    )
+TEST_DATABASE_URL = resolve_test_database_url(test_label="Section 8 E2E admin flow")
 
 
 engine = create_engine(
