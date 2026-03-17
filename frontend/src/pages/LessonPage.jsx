@@ -334,6 +334,7 @@ export default function LessonPage() {
   const [chatInput, setChatInput] = useState('');
   const [assessmentAnswer, setAssessmentAnswer] = useState('');
   const [pendingAssessment, setPendingAssessment] = useState(null);
+  const [pendingAdaptiveAction, setPendingAdaptiveAction] = useState(null);
   const [lastAssessmentReview, setLastAssessmentReview] = useState(null);
   const [selectedGraphConcept, setSelectedGraphConcept] = useState(null);
   const [selectedMode, setSelectedMode] = useState(() => {
@@ -347,6 +348,7 @@ export default function LessonPage() {
   const [error, setError] = useState('');
   const scrollRef = useRef(null);
   const streamingMessageRef = useRef(null);
+  const adaptiveInterventionRef = useRef({});
   const activeCacheKey = useMemo(
     () => bootstrapCacheKey({ studentId: activeId, subject: currentSubject, level: currentLevel, term: currentTerm, topicId }),
     [activeId, currentLevel, currentSubject, currentTerm, topicId],
@@ -461,6 +463,32 @@ export default function LessonPage() {
     if (!bootstrap || !activeCacheKey) return;
     writeBootstrapCache(activeCacheKey, bootstrap);
   }, [activeCacheKey, bootstrap]);
+
+  useEffect(() => {
+    if (!pendingAdaptiveAction || isBusy) return;
+    const runAdaptive = async () => {
+      const action = pendingAdaptiveAction;
+      setPendingAdaptiveAction(null);
+      if (action.type === 'bridge_prerequisite') {
+        appendAssistant({
+          assistant_message: action.reason || 'I noticed repeated misses. Let’s bridge the prerequisite before retrying.',
+        });
+        if (action.blockingLabel) {
+          await handleBridgeLabel(action.blockingLabel);
+          return;
+        }
+        await handlePrereqBridge();
+        return;
+      }
+      if (action.type === 'harder_checkpoint') {
+        appendAssistant({
+          assistant_message: action.reason || 'Nice momentum. Let’s try a harder checkpoint.',
+        });
+        await startAssessment(action.difficulty || 'hard');
+      }
+    };
+    runAdaptive();
+  }, [pendingAdaptiveAction, isBusy]);
 
   const masteryPulse = useMemo(() => {
     const currentConcepts = safeArray(graphContext?.current_concepts);
@@ -1059,6 +1087,21 @@ export default function LessonPage() {
     }
   };
 
+  const shouldRunAdaptiveAction = (conceptId, actionType) => {
+    if (!conceptId || !actionType) return false;
+    const key = String(conceptId);
+    const entry = adaptiveInterventionRef.current[key];
+    if (!entry) return true;
+    if (entry.action !== actionType) return true;
+    const elapsed = Date.now() - entry.at;
+    return elapsed > 10 * 60 * 1000;
+  };
+
+  const markAdaptiveAction = (conceptId, actionType) => {
+    if (!conceptId || !actionType) return;
+    adaptiveInterventionRef.current[String(conceptId)] = { action: actionType, at: Date.now() };
+  };
+
   const requestMistakeExplanation = async ({
     question,
     studentAnswer,
@@ -1252,6 +1295,18 @@ export default function LessonPage() {
       });
       setPendingAssessment(null);
       setAssessmentAnswer('');
+      const adaptiveConceptId = out.concept_id || pendingAssessment.concept_id;
+      if (out.adaptive_action && shouldRunAdaptiveAction(adaptiveConceptId, out.adaptive_action)) {
+        markAdaptiveAction(adaptiveConceptId, out.adaptive_action);
+        setPendingAdaptiveAction({
+          type: out.adaptive_action,
+          conceptId: adaptiveConceptId,
+          conceptLabel: out.concept_label,
+          blockingLabel: out.graph_remediation?.blocking_prerequisite_label || null,
+          reason: out.adaptive_reason || null,
+          difficulty: out.adaptive_difficulty || null,
+        });
+      }
       appendAssistant({
         assistant_message: out.feedback,
         key_points: [

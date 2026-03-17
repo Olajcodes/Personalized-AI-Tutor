@@ -109,6 +109,38 @@ class TutorAssessmentService:
         token = re.sub(r"\s+", " ", token).strip()
         return token.title() if token else str(fallback_topic_title or "Untitled Concept").strip()
 
+    def _recent_answered_states(self, *, session_id: UUID, limit: int = 6) -> list[dict]:
+        history = self.repo.get_session_history(session_id=session_id)
+        states: list[dict] = []
+        for row in reversed(history):
+            state = self._decode_state(str(row.get("content") or ""))
+            if not state:
+                continue
+            if str(state.get("status") or "").strip().lower() != "answered":
+                continue
+            states.append(state)
+            if len(states) >= limit:
+                break
+        return states
+
+    @staticmethod
+    def _concept_streak(states: list[dict], concept_id: str) -> tuple[int, int]:
+        correct_streak = 0
+        incorrect_streak = 0
+        for state in states:
+            if str(state.get("concept_id") or "") != str(concept_id):
+                continue
+            is_correct = bool(state.get("is_correct"))
+            if is_correct:
+                if incorrect_streak:
+                    break
+                correct_streak += 1
+                continue
+            if correct_streak:
+                break
+            incorrect_streak += 1
+        return correct_streak, incorrect_streak
+
     def _graph_follow_up(
         self,
         *,
@@ -329,6 +361,27 @@ class TutorAssessmentService:
             focus_concept_id=ai_out.concept_id,
             fallback_topic_id=payload.topic_id,
         )
+
+        adaptive_action = None
+        adaptive_reason = None
+        adaptive_difficulty = None
+        recent_states = self._recent_answered_states(session_id=payload.session_id, limit=6)
+        correct_streak, incorrect_streak = self._concept_streak(recent_states, ai_out.concept_id)
+        recent_difficulty = str(state.get("difficulty") or payload.difficulty or "").strip().lower() or None
+        if incorrect_streak >= 2 and graph_remediation and graph_remediation.blocking_prerequisite_label:
+            adaptive_action = "bridge_prerequisite"
+            adaptive_reason = (
+                f"Two misses on {ai_out.concept_label}. "
+                f"Bridge {graph_remediation.blocking_prerequisite_label} before retrying."
+            )
+        elif correct_streak >= 2 and recent_difficulty != "hard":
+            adaptive_action = "harder_checkpoint"
+            adaptive_difficulty = "hard"
+            adaptive_reason = f"Strong mastery on {ai_out.concept_label}. Moving to a harder checkpoint."
+        elif ai_out.score >= 0.9 and recent_difficulty != "hard":
+            adaptive_action = "harder_checkpoint"
+            adaptive_difficulty = "hard"
+            adaptive_reason = f"Quick mastery detected on {ai_out.concept_label}. Try a harder checkpoint."
         from backend.services.lesson_cockpit_service import LessonCockpitService
         from backend.services.lesson_experience_service import LessonExperienceService
         from backend.services.course_experience_service import CourseExperienceService
@@ -367,6 +420,9 @@ class TutorAssessmentService:
                     graph_remediation.recommended_next_concept_label if graph_remediation else recommended_topic_title
                 ),
                 "graph_remediation": graph_remediation,
+                "adaptive_action": adaptive_action,
+                "adaptive_reason": adaptive_reason,
+                "adaptive_difficulty": adaptive_difficulty,
             }
         )
         log_timed_event(
@@ -381,5 +437,6 @@ class TutorAssessmentService:
             score=ai_out.score,
             mastery_updated=mastery_updated,
             recommended_topic_id=recommended_topic_id or "none",
+            adaptive_action=adaptive_action or "none",
         )
         return response

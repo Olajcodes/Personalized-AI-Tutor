@@ -192,6 +192,9 @@ class TutorAssessmentSubmitOut(BaseModel):
     recommended_topic_title: str | None = None
     recommended_next_concept_label: str | None = None
     graph_remediation: "TutorGraphRemediationOut | None" = None
+    adaptive_action: Literal["bridge_prerequisite", "harder_checkpoint"] | None = None
+    adaptive_reason: str | None = None
+    adaptive_difficulty: Literal["easy", "medium", "hard"] | None = None
 
 
 class TutorGraphRemediationOut(BaseModel):
