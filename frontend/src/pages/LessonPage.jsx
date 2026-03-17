@@ -93,6 +93,24 @@ const createMessageId = () => {
     finalizing_response: 'Finalizing actions...',
   };
 
+  const STREAM_PHASE_META = {
+    retrieving_context: {
+      label: 'Context',
+      detail: 'Fetching graph + lesson context',
+      tone: 'indigo',
+    },
+    composing_response: {
+      label: 'Compose',
+      detail: 'Drafting tutor response',
+      tone: 'emerald',
+    },
+    finalizing_response: {
+      label: 'Finalize',
+      detail: 'Binding actions & checks',
+      tone: 'amber',
+    },
+  };
+
   const MODE_LABELS = {
     teach: 'Teach',
     socratic: 'Socratic',
@@ -180,9 +198,14 @@ const prewarmTopics = async ({ token, studentId, subject, sssLevel, term, topicI
                 <div className="whitespace-pre-wrap text-sm leading-7">{item.content || ''}</div>
               </div>
               {isStreaming && (
-                <div className="flex items-center gap-2 text-xs text-slate-500">
+                <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500">
                   <LoaderCircle className="animate-spin text-indigo-500" size={14} />
                   <span>Streaming response...</span>
+                  {item.streamPhase && (
+                    <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                      {STREAM_PHASE_LABELS[item.streamPhase] || item.streamPhase}
+                    </span>
+                  )}
                 </div>
               )}
             {item.error && (
@@ -681,6 +704,7 @@ export default function LessonPage() {
     recommended_topic_title: payload.recommended_topic_title || null,
     streaming: overrides.streaming || false,
     error: overrides.error || null,
+    streamPhase: overrides.streamPhase || null,
   });
 
   const appendAssistant = (payload, overrides = {}) => {
@@ -697,17 +721,17 @@ export default function LessonPage() {
     return id;
   };
 
-  const updateStreamingMessage = (delta) => {
+  const updateStreamingMessage = (delta, phase = '') => {
     const id = streamingMessageRef.current;
     if (!id || !delta) return;
     setMessages((prev) => prev.map((item) => (
       item.id === id
-        ? { ...item, content: `${item.content || ''}${delta}` }
+        ? { ...item, content: `${item.content || ''}${delta}`, streamPhase: phase || item.streamPhase }
         : item
     )));
   };
 
-  const finalizeStreamingMessage = (payload) => {
+  const finalizeStreamingMessage = (payload, phase = '') => {
     const id = streamingMessageRef.current;
     if (!id) {
       appendAssistant(payload);
@@ -715,12 +739,12 @@ export default function LessonPage() {
     }
     const finalMessage = buildAssistantMessage(payload, { id });
     setMessages((prev) => prev.map((item) => (
-      item.id === id ? { ...finalMessage, streaming: false } : item
+      item.id === id ? { ...finalMessage, streaming: false, streamPhase: phase || null } : item
     )));
     streamingMessageRef.current = null;
   };
 
-  const failStreamingMessage = (errorMessage) => {
+  const failStreamingMessage = (errorMessage, phase = '') => {
     const id = streamingMessageRef.current;
     const message = errorMessage?.message || errorMessage || 'Tutor request failed.';
     if (!id) {
@@ -728,7 +752,7 @@ export default function LessonPage() {
       return;
     }
     setMessages((prev) => prev.map((item) => (
-      item.id === id ? { ...item, streaming: false, error: message } : item
+      item.id === id ? { ...item, streaming: false, error: message, streamPhase: phase || null } : item
     )));
     streamingMessageRef.current = null;
   };
@@ -832,6 +856,9 @@ export default function LessonPage() {
 
   const consumeStream = async (payload) => {
     try {
+      if (!streamingMessageRef.current) {
+        startStreamingMessage();
+      }
       const response = await fetch(`${API_URL}/tutor/chat/stream`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -842,10 +869,10 @@ export default function LessonPage() {
         throw new Error(err?.detail || 'Tutor stream failed.');
       }
 
-      startStreamingMessage();
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let currentPhase = '';
 
       while (true) {
         const { value, done } = await reader.read();
@@ -858,9 +885,12 @@ export default function LessonPage() {
           const event = lines.find((line) => line.startsWith('event:'))?.replace('event:', '').trim();
           const dataLine = lines.find((line) => line.startsWith('data:'))?.replace('data:', '').trim() || '{}';
           const data = JSON.parse(dataLine);
-          if (event === 'status') setStreamPhase(STREAM_PHASE_LABELS[data.phase] || data.phase || '');
-          if (event === 'delta') updateStreamingMessage(data.content || '');
-          if (event === 'message') finalizeStreamingMessage(data);
+          if (event === 'status') {
+            currentPhase = data.phase || '';
+            setStreamPhase(STREAM_PHASE_LABELS[currentPhase] || currentPhase || '');
+          }
+          if (event === 'delta') updateStreamingMessage(data.content || '', currentPhase);
+          if (event === 'message') finalizeStreamingMessage(data, currentPhase);
           if (event === 'error') throw new Error(data.detail || 'Tutor stream failed.');
           if (event === 'done') setStreamPhase('');
         }
@@ -877,6 +907,7 @@ export default function LessonPage() {
     setMessages((prev) => [...prev, { id: createMessageId(), role: 'student', content: trimmed }]);
     setChatInput('');
     setIsBusy(true);
+    const pendingId = startStreamingMessage();
     try {
       await consumeStream({
         student_id: activeId,
@@ -887,10 +918,13 @@ export default function LessonPage() {
         topic_id: topicId,
         focus_concept_id: options.focusConceptId || null,
         focus_concept_label: options.focusConceptLabel || null,
-        mode: options.mode ?? selectedMode ?? null,
-        message: trimmed,
-      });
+          mode: options.mode ?? selectedMode ?? null,
+          message: trimmed,
+        });
     } catch (err) {
+      if (pendingId) {
+        failStreamingMessage(err);
+      }
       console.warn('Tutor stream failed:', err);
     } finally {
       setIsBusy(false);
