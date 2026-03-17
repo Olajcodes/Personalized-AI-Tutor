@@ -135,6 +135,8 @@ class LessonCockpitService:
     @staticmethod
     def _why_topic_detail(*, payload: LessonCockpitBootstrapIn, tutor_bootstrap) -> WhyThisTopicOut:
         graph_context = tutor_bootstrap.graph_context
+        status = getattr(graph_context, "status", "ready")
+        unavailable_reason = graph_context.unavailable_reason if status == "unavailable" else None
         weakest_prerequisite = min(
             list(graph_context.prerequisite_concepts or []),
             key=lambda item: item.mastery_score,
@@ -147,9 +149,11 @@ class LessonCockpitService:
             term=payload.term,
             topic_id=str(graph_context.topic_id),
             topic_title=str(graph_context.topic_title),
+            status=status,
+            unavailable_reason=unavailable_reason,
             explanation=(
-                graph_context.unavailable_reason
-                if getattr(graph_context, "status", "ready") == "unavailable"
+                unavailable_reason
+                if status == "unavailable"
                 else (
                     graph_context.why_this_matters
                     or f"{graph_context.topic_title} connects your prerequisites to what unlocks next."

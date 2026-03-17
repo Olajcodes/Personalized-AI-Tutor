@@ -123,6 +123,7 @@ export default function LessonKnowledgeGraph({
   const [selectedConceptId, setSelectedConceptId] = useState(null);
   const preferredNode = nodes.find((node) => node.role === 'current') || nodes[0] || null;
   const selectedNode = nodes.find((node) => node.concept_id === selectedConceptId) || preferredNode || null;
+  const whyUnavailable = whyTopicDetail?.status === 'unavailable';
   const selectedAction = useMemo(() => {
     if (!selectedNode) return null;
     if (selectedNode.recommended_topic_id) {
@@ -361,7 +362,11 @@ export default function LessonKnowledgeGraph({
                 <Route className="h-4 w-4 text-indigo-600" />
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Why this topic now</p>
               </div>
-              <p className="mt-3 text-sm leading-7 text-slate-700">{whyTopicDetail.explanation}</p>
+              <p className="mt-3 text-sm leading-7 text-slate-700">
+                {whyUnavailable
+                  ? (whyTopicDetail.unavailable_reason || 'Graph context is unavailable for this topic right now.')
+                  : whyTopicDetail.explanation}
+              </p>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <div className="rounded-2xl border border-white bg-white px-4 py-3">
                   <div className="flex items-center gap-2 text-amber-700">
@@ -369,7 +374,9 @@ export default function LessonKnowledgeGraph({
                     <p className="text-[10px] font-black uppercase tracking-[0.18em]">Build from</p>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {safeArray(whyTopicDetail.prerequisite_labels).length > 0 ? (
+                    {whyUnavailable ? (
+                      <span className="text-xs text-slate-500">Graph context unavailable.</span>
+                    ) : safeArray(whyTopicDetail.prerequisite_labels).length > 0 ? (
                       whyTopicDetail.prerequisite_labels.map((label) => (
                         <span key={label} className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-bold text-amber-800">
                           {label}
@@ -386,7 +393,9 @@ export default function LessonKnowledgeGraph({
                     <p className="text-[10px] font-black uppercase tracking-[0.18em]">Unlock next</p>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {safeArray(whyTopicDetail.unlock_labels).length > 0 ? (
+                    {whyUnavailable ? (
+                      <span className="text-xs text-slate-500">Graph context unavailable.</span>
+                    ) : safeArray(whyTopicDetail.unlock_labels).length > 0 ? (
                       whyTopicDetail.unlock_labels.map((label) => (
                         <span key={label} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-800">
                           {label}
@@ -400,19 +409,27 @@ export default function LessonKnowledgeGraph({
               </div>
             </div>
             <div className="space-y-3">
-              {whyTopicDetail.weakest_prerequisite_label && (
+              {whyTopicDetail.weakest_prerequisite_label && !whyUnavailable && (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Weakest prerequisite</p>
                   <p className="mt-2 font-semibold">{whyTopicDetail.weakest_prerequisite_label}</p>
                 </div>
               )}
-              {whyTopicDetail.recommended_next && (
+              {whyTopicDetail.recommended_next && !whyUnavailable && (
                 <div className="rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600">Recommended next move</p>
                   <p className="mt-2 font-semibold">
                     {whyTopicDetail.recommended_next.topic_title || whyTopicDetail.recommended_next.concept_label || 'Continue the current lesson'}
                   </p>
                   <p className="mt-2 text-xs leading-6 text-indigo-800">{whyTopicDetail.recommended_next.reason}</p>
+                </div>
+              )}
+              {whyUnavailable && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Graph data missing</p>
+                  <p className="mt-2 text-xs leading-6 text-amber-800">
+                    We could not load the graph slice for this topic yet. Once curriculum mapping completes, this panel will show prerequisites and unlocks.
+                  </p>
                 </div>
               )}
             </div>

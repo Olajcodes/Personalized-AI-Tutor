@@ -11,12 +11,21 @@ from sqlalchemy.orm import Session
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
 from backend.core.telemetry import log_timed_event
+from backend.repositories.lesson_repo import get_topic_with_subject
 from backend.schemas.graph_learning_schema import LessonGraphContextOut, WhyThisTopicOut
 from backend.services.lesson_graph_service import LessonGraphValidationError, lesson_graph_service
 
 
 router = APIRouter(prefix="/learning/graph", tags=["Learning Graph"])
 logger = logging.getLogger(__name__)
+
+
+def _topic_title(db: Session, topic_id: UUID) -> str:
+    row = get_topic_with_subject(db, topic_id)
+    if not row:
+        return "Current Topic"
+    title = str(row[0].title or "").strip()
+    return title or "Current Topic"
 
 
 @router.get("/lesson-context", response_model=LessonGraphContextOut)
@@ -63,6 +72,32 @@ def get_lesson_graph_context(
         )
         return response
     except LessonGraphValidationError as exc:
+        message = str(exc)
+        if "approved graph scope" in message:
+            fallback = LessonGraphContextOut(
+                student_id=student_id,
+                subject=subject,  # type: ignore[arg-type]
+                sss_level=sss_level,  # type: ignore[arg-type]
+                term=term,
+                topic_id=str(topic_id),
+                topic_title=_topic_title(db, topic_id),
+                overall_mastery=0.0,
+                status="unavailable",
+                unavailable_reason=message,
+            )
+            log_timed_event(
+                logger,
+                "learning.graph.lesson_context",
+                started_at,
+                outcome="unavailable",
+                subject=subject,
+                sss_level=sss_level,
+                term=term,
+                topic_id=topic_id,
+                error=message,
+                log_level=logging.WARNING,
+            )
+            return fallback
         log_timed_event(
             logger,
             "learning.graph.lesson_context",
@@ -72,10 +107,10 @@ def get_lesson_graph_context(
             sss_level=sss_level,
             term=term,
             topic_id=topic_id,
-            error=str(exc),
+            error=message,
             log_level=logging.WARNING,
         )
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message) from exc
 
 
 @router.get("/why-this-topic", response_model=WhyThisTopicOut)
@@ -119,6 +154,36 @@ def explain_why_this_topic(
         )
         return response
     except LessonGraphValidationError as exc:
+        message = str(exc)
+        if "approved graph scope" in message:
+            fallback = WhyThisTopicOut(
+                student_id=student_id,
+                subject=subject,  # type: ignore[arg-type]
+                sss_level=sss_level,  # type: ignore[arg-type]
+                term=term,
+                topic_id=str(topic_id),
+                topic_title=_topic_title(db, topic_id),
+                status="unavailable",
+                unavailable_reason=message,
+                explanation=message,
+                prerequisite_labels=[],
+                unlock_labels=[],
+                weakest_prerequisite_label=None,
+                recommended_next=None,
+            )
+            log_timed_event(
+                logger,
+                "learning.graph.why_topic",
+                started_at,
+                outcome="unavailable",
+                subject=subject,
+                sss_level=sss_level,
+                term=term,
+                topic_id=topic_id,
+                error=message,
+                log_level=logging.WARNING,
+            )
+            return fallback
         log_timed_event(
             logger,
             "learning.graph.why_topic",
@@ -128,7 +193,7 @@ def explain_why_this_topic(
             sss_level=sss_level,
             term=term,
             topic_id=topic_id,
-            error=str(exc),
+            error=message,
             log_level=logging.WARNING,
         )
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message) from exc

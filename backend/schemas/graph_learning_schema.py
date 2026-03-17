@@ -68,6 +68,8 @@ class WhyThisTopicOut(BaseModel):
     term: int = Field(ge=1, le=3)
     topic_id: str
     topic_title: str
+    status: Literal["ready", "unavailable"] = "ready"
+    unavailable_reason: str | None = None
     explanation: str
     prerequisite_labels: list[str] = Field(default_factory=list)
     unlock_labels: list[str] = Field(default_factory=list)

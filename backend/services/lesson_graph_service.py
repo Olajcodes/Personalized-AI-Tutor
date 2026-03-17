@@ -489,10 +489,20 @@ class LessonGraphService:
             term=term,
             topic_id=topic_id,
         )
+        status = getattr(context, "status", "ready")
+        unavailable_reason = getattr(context, "unavailable_reason", None)
         weakest_prereq = min(
             context.prerequisite_concepts,
             key=lambda item: item.mastery_score,
             default=None,
+        )
+        explanation = (
+            unavailable_reason
+            if status == "unavailable"
+            else (
+                context.why_this_matters
+                or f"{context.topic_title} sits in the path because it bridges prerequisites into later topics."
+            )
         )
         return WhyThisTopicOut(
             student_id=student_id,
@@ -501,8 +511,9 @@ class LessonGraphService:
             term=term,
             topic_id=context.topic_id,
             topic_title=context.topic_title,
-            explanation=context.why_this_matters
-            or f"{context.topic_title} sits in the path because it bridges prerequisites into later topics.",
+            status=status,
+            unavailable_reason=unavailable_reason,
+            explanation=explanation,
             prerequisite_labels=[item.label for item in context.prerequisite_concepts],
             unlock_labels=[item.label for item in context.downstream_concepts],
             weakest_prerequisite_label=weakest_prereq.label if weakest_prereq else None,
