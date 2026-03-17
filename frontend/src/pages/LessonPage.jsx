@@ -695,6 +695,44 @@ export default function LessonPage() {
     return response.json();
   };
 
+  const refreshCockpit = async ({ silent = true } = {}) => {
+    if (!activeId || !token || !topicId) return;
+    if (!silent) setStreamPhase('Refreshing graph context...');
+    try {
+      const response = await fetch(`${API_URL}/learning/lesson/cockpit`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          student_id: activeId,
+          subject: currentSubject,
+          sss_level: currentLevel,
+          term: currentTerm,
+          topic_id: topicId,
+        }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => null);
+        throw new Error(err?.detail || 'Failed to refresh lesson cockpit.');
+      }
+      const cockpitJson = await response.json();
+      const bootstrapJson = {
+        ...cockpitJson.tutor_bootstrap,
+        recent_evidence: cockpitJson.recent_evidence || null,
+        intervention_timeline: safeArray(cockpitJson.intervention_timeline),
+        map_error: cockpitJson.map_error || null,
+        why_topic_detail: cockpitJson.why_topic_detail || null,
+      };
+      setSidebarTopics(safeArray(cockpitJson.topics));
+      setBootstrap(bootstrapJson);
+      writeBootstrapCache(activeCacheKey, bootstrapJson);
+      setPendingAssessment(bootstrapJson.pending_assessment || null);
+    } catch (err) {
+      console.warn('Lesson cockpit refresh skipped:', err);
+    } finally {
+      if (!silent) setStreamPhase('');
+    }
+  };
+
   const consumeStream = async (payload) => {
     try {
       const response = await fetch(`${API_URL}/tutor/chat/stream`, {
@@ -1267,6 +1305,7 @@ export default function LessonPage() {
           },
         }) : prev);
       }
+      await refreshCockpit({ silent: true });
     } catch (err) {
       appendAssistant({ assistant_message: err.message || 'Failed to submit checkpoint.' });
     } finally {
