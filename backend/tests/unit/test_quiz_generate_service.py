@@ -53,6 +53,7 @@ async def test_generate_quiz_success(mock_db, generate_request):
             for idx in range(5)
         ]
         service.repo.add_question_to_quiz = MagicMock(side_effect=created_rows)
+        service.repo.find_topic_title_for_concept = MagicMock(return_value=None)
 
         response = await service.generate_quiz(generate_request)
 

@@ -42,6 +42,7 @@ class QuestionSchema(BaseModel):
     options: list[str] = Field(default_factory=list)
     correct_answer: str | None = None
     concept_id: str = Field(min_length=1, max_length=255)
+    concept_label: str | None = None
     difficulty: Difficulty
 
 

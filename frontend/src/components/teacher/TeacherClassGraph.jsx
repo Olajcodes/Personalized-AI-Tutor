@@ -35,6 +35,22 @@ const STATUS_STYLES = {
   },
 };
 
+const isLikelyUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
+
+const humanizeConceptId = (conceptId, fallback = 'Concept') => {
+  const value = String(conceptId || '').trim();
+  if (!value) return fallback;
+  const cleaned = value.startsWith('topic:') ? value.replace(/^topic:/i, '') : value;
+  if (isLikelyUuid(cleaned)) return fallback;
+  const token = value.split(':').pop()?.trim() || value;
+  return token
+    .replace(/-(\d+)$/, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase()) || fallback;
+};
+
 const GRAPH_LAYOUT = {
   cardWidth: 224,
   cardHeight: 112,
@@ -61,7 +77,11 @@ const TeacherClassGraph = ({ graphSummary, selectedConceptId = '', onSelectNode 
       const bucket = map.get(status) || [];
       bucket.sort((left, right) => {
         if (status === 'mastered') return Number(right.avg_score || 0) - Number(left.avg_score || 0);
-        if (status === 'unassessed') return left.concept_label.localeCompare(right.concept_label);
+        if (status === 'unassessed') {
+          const leftLabel = left.concept_label || humanizeConceptId(left.concept_id);
+          const rightLabel = right.concept_label || humanizeConceptId(right.concept_id);
+          return leftLabel.localeCompare(rightLabel);
+        }
         return Number(left.avg_score || 0) - Number(right.avg_score || 0);
       });
     });
@@ -194,7 +214,7 @@ const TeacherClassGraph = ({ graphSummary, selectedConceptId = '', onSelectNode 
                       {node.status === 'blocked' ? <Lock className="h-3 w-3" /> : <GitBranch className="h-3 w-3" />}
                       {STATUS_LABELS[node.status]}
                     </div>
-                    <h3 className="mt-3 text-sm font-black text-slate-900">{node.concept_label}</h3>
+                    <h3 className="mt-3 text-sm font-black text-slate-900">{node.concept_label || humanizeConceptId(node.concept_id)}</h3>
                     <p className="mt-1 text-[11px] font-semibold text-slate-500">{node.topic_title || 'Mapped concept node'}</p>
                   </div>
                   <span className="rounded-full bg-slate-900 px-2 py-1 text-[11px] font-black text-white">

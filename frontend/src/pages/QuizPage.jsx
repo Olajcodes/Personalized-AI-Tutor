@@ -13,11 +13,16 @@ import PathProgress from "../components/PathProgress";
 import FooterActions from "../components/FooterActions";
 import { saveGraphIntervention } from '../services/graphIntervention';
 
+const isLikelyUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
+
 const humanizeConceptId = (conceptId, fallback = 'Concept') => {
   const value = String(conceptId || '').trim();
   if (!value) return fallback;
+  const cleaned = value.startsWith('topic:') ? value.replace(/^topic:/i, '') : value;
+  if (isLikelyUuid(cleaned)) return fallback;
   const token = value.split(':').pop()?.trim() || value;
   return token
+    .replace(/-(\d+)$/, '')
     .replace(/[_-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -185,13 +190,14 @@ const QuizPage = () => {
       const seconds = timeTakenSeconds % 60;
       // ==========================================================
       
-      const isLikelyUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
-
       const humanizeConceptId = (conceptId, fallback = 'Concept') => {
         const value = String(conceptId || '').trim();
         if (!value) return fallback;
+        const cleaned = value.startsWith('topic:') ? value.replace(/^topic:/i, '') : value;
+        if (isLikelyUuid(cleaned)) return fallback;
         const token = value.split(':').pop()?.trim() || value;
         return token
+          .replace(/-(\d+)$/, '')
           .replace(/[_-]+/g, ' ')
           .replace(/\s+/g, ' ')
           .trim()
@@ -467,7 +473,7 @@ const QuizPage = () => {
 
         <main className="flex-grow flex flex-col items-center justify-center px-4 mt-8">
           <div className="bg-indigo-50 text-[#6b46c1] px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest mb-6 border border-indigo-100/50">
-            {currentSubject} - {humanizeConceptId(currentQuestion.concept_id, 'Concept')}
+            {currentSubject} - {currentQuestion.concept_label || humanizeConceptId(currentQuestion.concept_id, 'Concept')}
           </div>
 
           <h1 className="text-2xl md:text-3xl font-black text-slate-800 mb-8 text-center max-w-2xl leading-relaxed">

@@ -26,9 +26,13 @@ const actionRefId = (action) => {
   return `graph-${String(action?.action_type || 'action').replace(/[^a-z0-9]+/gi, '-')}-${raw.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '')}`;
 };
 
+const isLikelyUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
+
 const humanizeConceptId = (conceptId, fallback = 'Concept') => {
   const value = String(conceptId || '').trim();
   if (!value) return fallback;
+  const cleaned = value.startsWith('topic:') ? value.replace(/^topic:/i, '') : value;
+  if (isLikelyUuid(cleaned)) return fallback;
   const token = value.split(':').pop()?.trim() || value;
   return token
     .replace(/-(\d+)$/, '')

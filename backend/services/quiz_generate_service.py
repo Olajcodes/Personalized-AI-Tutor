@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import re
+from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -23,6 +25,22 @@ _PLACEHOLDER_MARKERS = (
     "a partially correct but incomplete statement",
     "a clear example of",
 )
+
+def _readable_concept_label(concept_id: str, *, fallback_topic_title: str | None = None) -> str:
+    value = str(concept_id or "").strip()
+    if not value:
+        return str(fallback_topic_title or "Concept").strip()
+    try:
+        UUID(value)
+        fallback = str(fallback_topic_title or "").strip()
+        return fallback or "Concept"
+    except (TypeError, ValueError):
+        pass
+    token = value.rsplit(":", 1)[-1].strip().lower()
+    token = re.sub(r"-(\d+)$", "", token)
+    token = re.sub(r"[_-]+", " ", token)
+    token = re.sub(r"\s+", " ", token).strip()
+    return token.title() if token else str(fallback_topic_title or "Concept").strip()
 
 
 def _looks_placeholder_question(question: dict) -> bool:
@@ -131,6 +149,7 @@ class QuizGenerateService:
         )
 
         response_questions: list[QuestionSchema] = []
+        concept_label_map: dict[str, str] = {}
         try:
             for idx, question in enumerate(questions_data):
                 question_payload = {
@@ -145,6 +164,18 @@ class QuizGenerateService:
                 }
                 created_question = self.repo.add_question_to_quiz(quiz.id, question_payload)
 
+                concept_id = str(created_question.concept_id)
+                concept_label = concept_label_map.get(concept_id)
+                if concept_label is None:
+                    topic_title = self.repo.find_topic_title_for_concept(
+                        concept_id=concept_id,
+                        subject=request.subject,
+                        sss_level=request.sss_level,
+                        term=request.term,
+                    )
+                    concept_label = _readable_concept_label(concept_id, fallback_topic_title=topic_title)
+                    concept_label_map[concept_id] = concept_label
+
                 response_questions.append(
                     QuestionSchema(
                         id=created_question.id,
@@ -152,6 +183,7 @@ class QuizGenerateService:
                         options=question_payload["options"],
                         correct_answer=question_payload["correct_answer"],
                         concept_id=created_question.concept_id,
+                        concept_label=concept_label,
                         difficulty=question.get("difficulty") or request.difficulty,
                     )
                 )

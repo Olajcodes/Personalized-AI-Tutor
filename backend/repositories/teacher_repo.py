@@ -488,7 +488,30 @@ class TeacherRepository:
             .limit(limit)
             .all()
         )
+        topic_ids: set[UUID] = set()
         for row in activity_rows:
+            raw_ref = str(row.ref_id or "").strip()
+            if not raw_ref:
+                continue
+            try:
+                topic_ids.add(UUID(raw_ref))
+            except (TypeError, ValueError):
+                continue
+        topic_title_map: dict[str, str] = {}
+        if topic_ids:
+            topic_rows = (
+                self.db.query(Topic.id, Topic.title)
+                .filter(Topic.id.in_(list(topic_ids)))
+                .all()
+            )
+            topic_title_map = {
+                str(row.id): str(row.title or "").strip()
+                for row in topic_rows
+                if row and row.title is not None and str(row.title).strip()
+            }
+        for row in activity_rows:
+            ref_id = str(row.ref_id or "").strip() or None
+            ref_label = topic_title_map.get(str(ref_id)) if ref_id else None
             events.append(
                 {
                     "event_type": "activity",
@@ -496,7 +519,9 @@ class TeacherRepository:
                     "details": {
                         "activity_type": row.event_type,
                         "duration_seconds": row.duration_seconds,
-                        "ref_id": row.ref_id,
+                        "ref_id": ref_id,
+                        "ref_label": ref_label,
+                        "ref_type": "topic" if ref_label else None,
                     },
                 }
             )

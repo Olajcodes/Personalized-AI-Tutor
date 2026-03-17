@@ -17,6 +17,29 @@ const formatDuration = (seconds) => {
   return hours > 0 ? `${hours}h ${remaining}m` : `${remaining}m`;
 };
 
+const isLikelyUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
+
+const humanizeRefId = (refId, fallback = 'scope item') => {
+  const value = String(refId || '').trim();
+  if (!value) return fallback;
+  const cleaned = value.startsWith('topic:') ? value.replace(/^topic:/i, '') : value;
+  if (isLikelyUuid(cleaned)) return fallback;
+  const token = value.split(':').pop()?.trim() || value;
+  return token
+    .replace(/-(\d+)$/, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase()) || fallback;
+};
+
+const resolveRefLabel = (details) => {
+  if (!details) return 'scope item';
+  const explicit = String(details.ref_label || '').trim();
+  if (explicit) return explicit;
+  return humanizeRefId(details.ref_id, 'scope item');
+};
+
 const timelineTitle = (event) => {
   if (event.event_type === 'activity') return event.details?.activity_type?.replace(/_/g, ' ') || 'activity';
   if (event.event_type === 'mastery_update') return 'mastery update';
@@ -26,7 +49,7 @@ const timelineTitle = (event) => {
 
 const timelineSummary = (event) => {
   if (event.event_type === 'activity') {
-    return `${event.details?.ref_id || 'scope item'} • ${formatDuration(event.details?.duration_seconds)}`;
+    return `${resolveRefLabel(event.details)} • ${formatDuration(event.details?.duration_seconds)}`;
   }
   if (event.event_type === 'mastery_update') {
     return `${event.details?.source || 'unknown source'} • ${event.details?.updated_concepts || 0} concepts`;
