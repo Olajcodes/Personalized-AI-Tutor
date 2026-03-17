@@ -24,6 +24,13 @@ export default function PathProgress({
 }) {
   const navigate = useNavigate();
   const storyTone = storyStyles[story?.status] || 'border-slate-500/20 bg-slate-500/10 text-slate-100';
+  const isLikelyUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
+  const normalizedNextTopic = (() => {
+    const cleaned = String(nextTopic || '').trim();
+    if (cleaned && !isLikelyUuid(cleaned)) return cleaned;
+    if (nextTopicId) return 'Recommended lesson';
+    return 'Stay on this lesson';
+  })();
 
   return (
     <div className="bg-[#1c2438] rounded-2xl p-6 border border-slate-700 mt-6">
@@ -56,7 +63,7 @@ export default function PathProgress({
           </div>
         )}
         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Next Topic:</div>
-        <div className="text-sm font-bold text-white">{nextTopic}</div>
+        <div className="text-sm font-bold text-white">{normalizedNextTopic}</div>
         {nextConcept && (
           <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-semibold text-cyan-100">
             <Route className="h-3.5 w-3.5" />

@@ -185,6 +185,8 @@ const QuizPage = () => {
       const seconds = timeTakenSeconds % 60;
       // ==========================================================
       
+      const isLikelyUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
+
       const humanizeConceptId = (conceptId, fallback = 'Concept') => {
         const value = String(conceptId || '').trim();
         if (!value) return fallback;
@@ -196,11 +198,29 @@ const QuizPage = () => {
           .replace(/\b\w/g, (char) => char.toUpperCase()) || fallback;
       };
 
+      const normalizeConceptLabel = (label, conceptId, fallback = 'Concept') => {
+        const cleaned = String(label || '').trim();
+        if (!cleaned || cleaned.includes(':') || isLikelyUuid(cleaned)) {
+          return humanizeConceptId(conceptId, fallback);
+        }
+        return cleaned;
+      };
+
       const wrongConcepts = (resultsJson.concept_breakdown || [])
         .filter(c => !c.is_correct)
-        .map(c => c.concept_label || humanizeConceptId(c.concept_id));
+        .map(c => normalizeConceptLabel(c.concept_label, c.concept_id));
       const firstCorrectConcept = (resultsJson.concept_breakdown || []).find((concept) => concept?.is_correct);
-      const weakestConceptLabel = resultsJson.graph_remediation?.weakest_concept_label || wrongConcepts[0] || null;
+      const firstCorrectLabel = firstCorrectConcept
+        ? normalizeConceptLabel(firstCorrectConcept.concept_label, firstCorrectConcept.concept_id)
+        : null;
+      const weakestConceptLabel = (() => {
+        const rawLabel = resultsJson.graph_remediation?.weakest_concept_label || null;
+        const rawId = resultsJson.graph_remediation?.weakest_concept_id || null;
+        if (rawLabel || rawId) {
+          return normalizeConceptLabel(rawLabel, rawId);
+        }
+        return wrongConcepts[0] || null;
+      })();
       const nextConceptLabel = resultsJson.graph_remediation?.recommended_next_concept_label || null;
 
       const firstWrongQuestion = quizData.questions.find((question) => {
@@ -219,17 +239,20 @@ const QuizPage = () => {
       const recommendedTopicId = resultsJson.recommended_revision_topic_id
         || resultsJson.graph_remediation?.recommended_next_topic_id
         || null;
-      const recommendedTopicTitle = resultsJson.recommended_revision_topic_title
+      const rawRecommendedTitle = resultsJson.recommended_revision_topic_title
         || resultsJson.graph_remediation?.recommended_next_topic_title
         || null;
+      const recommendedTopicTitle = (rawRecommendedTitle && !isLikelyUuid(rawRecommendedTitle))
+        ? String(rawRecommendedTitle).trim()
+        : null;
       const recommendationReason = resultsJson.graph_remediation?.recommendation_reason
         || resultsJson.recommendation_story?.supporting_reason
         || null;
-      const recentEvidence = (resultsJson.recommendation_story?.evidence_summary || firstCorrectConcept?.concept_label || weakestConceptLabel)
+      const recentEvidence = (resultsJson.recommendation_story?.evidence_summary || firstCorrectLabel || weakestConceptLabel)
         ? {
             summary: resultsJson.recommendation_story?.evidence_summary
               || `Latest quiz attempt scored ${finalScorePercentage}% and changed your concept focus for this course.`,
-            strongest_gain_concept_label: firstCorrectConcept?.concept_label || null,
+            strongest_gain_concept_label: firstCorrectLabel,
             strongest_drop_concept_label: weakestConceptLabel,
           }
         : null;
@@ -306,7 +329,7 @@ const QuizPage = () => {
         },
         concepts: (resultsJson.concept_breakdown || []).map((c, i) => ({
             id: i + 1,
-            title: c.concept_label || humanizeConceptId(c.concept_id, `Concept ${i+1}`),
+            title: normalizeConceptLabel(c.concept_label, c.concept_id, `Concept ${i+1}`),
             mastery: c.weight_change > 0 ? 100 : Math.max(0, 50 + (c.weight_change * 10)),
             description: c.is_correct ? "Perfect! You understand this core concept." : "Needs review. Pay attention to the rules here."
         })),
@@ -319,7 +342,10 @@ const QuizPage = () => {
               || "Review the foundational rules before moving forward."
         },
         nextTopicId: recommendedTopicId,
-        nextTopic: resultsJson.recommended_revision_topic_title || "Next Module",
+        nextTopic: recommendedTopicTitle
+          || (recommendedTopicId ? "Recommended lesson" : null)
+          || recommendationStory?.headline
+          || "Stay on this lesson",
         remediation: {
           weakestConcept: weakestConceptLabel,
           blockingPrerequisite: resultsJson.graph_remediation?.blocking_prerequisite_label || null,
