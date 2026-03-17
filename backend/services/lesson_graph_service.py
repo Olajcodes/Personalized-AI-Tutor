@@ -53,6 +53,17 @@ class LessonGraphService:
         token = re.sub(r"\s+", " ", token).strip()
         return token.title() if token else str(fallback_topic_title or "Untitled Concept").strip()
 
+    @staticmethod
+    def _looks_uuid(value: str | None) -> bool:
+        text = str(value or "").strip()
+        if not text:
+            return False
+        try:
+            UUID(text)
+            return True
+        except (TypeError, ValueError):
+            return False
+
     def _scoped_graph(
         self,
         db: Session,
@@ -415,14 +426,20 @@ class LessonGraphService:
         if next_step.recommended_topic_id:
             lead_concept_id = next_step.recommended_concept_id
             lead_concept = _lookup(lead_concept_id) if lead_concept_id else None
+            normalized_next_label = next_step.recommended_concept_label
+            if not normalized_next_label or ":" in normalized_next_label or self._looks_uuid(normalized_next_label):
+                normalized_next_label = self._readable_concept_label(
+                    lead_concept_id or "",
+                    fallback_topic_title=lead_concept.topic_title if lead_concept else None,
+                )
+            normalized_topic_title = next_step.recommended_topic_title
+            if not normalized_topic_title or self._looks_uuid(normalized_topic_title):
+                normalized_topic_title = lead_concept.topic_title if lead_concept else None
             next_unlock = GraphNextStepOut(
                 concept_id=lead_concept_id,
-                concept_label=(
-                    next_step.recommended_concept_label
-                    or (lead_concept.label if lead_concept else None)
-                ),
+                concept_label=normalized_next_label or (lead_concept.label if lead_concept else None),
                 topic_id=next_step.recommended_topic_id,
-                topic_title=next_step.recommended_topic_title or (lead_concept.topic_title if lead_concept else None),
+                topic_title=normalized_topic_title,
                 reason=next_step.reason,
             )
 
@@ -443,6 +460,7 @@ class LessonGraphService:
             topic_id=topic_key,
             topic_title=topic_title,
             overall_mastery=overall_mastery,
+            status="ready",
             current_concepts=current_nodes,
             prerequisite_concepts=prerequisite_nodes,
             downstream_concepts=downstream_nodes,

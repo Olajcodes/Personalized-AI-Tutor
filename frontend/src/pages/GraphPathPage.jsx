@@ -27,6 +27,7 @@ const EMPTY_MAP_DATA = {
   recommendation_story: null,
   topics: [],
   evidence_summary: null,
+  map_error: null,
 };
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
@@ -40,6 +41,7 @@ const normalizeCourseBootstrap = (data) => ({
   recommendation_story: data?.recommendation_story || null,
   topics: Array.isArray(data?.topics) ? data.topics : [],
   evidence_summary: data?.evidence_summary || null,
+  map_error: data?.map_error || null,
 });
 
 const prewarmTopics = async ({ apiUrl, token, studentId, subject, sssLevel, term, topicIds }) => {
@@ -219,6 +221,11 @@ export default function GraphPathPage() {
             <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
               This view pulls directly from your graph-backed course bootstrap. It shows what is ready, what is blocked, what your latest evidence changed, and which lesson the system recommends next.
             </p>
+            {mapData?.map_error && (
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                Graph data is incomplete: {mapData.map_error}
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             {(availableSubjects.length ? availableSubjects : enrolledSubjects).map((subject) => (

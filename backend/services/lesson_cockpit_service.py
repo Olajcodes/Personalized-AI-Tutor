@@ -148,8 +148,12 @@ class LessonCockpitService:
             topic_id=str(graph_context.topic_id),
             topic_title=str(graph_context.topic_title),
             explanation=(
-                graph_context.why_this_matters
-                or f"{graph_context.topic_title} connects your prerequisites to what unlocks next."
+                graph_context.unavailable_reason
+                if getattr(graph_context, "status", "ready") == "unavailable"
+                else (
+                    graph_context.why_this_matters
+                    or f"{graph_context.topic_title} connects your prerequisites to what unlocks next."
+                )
             ),
             prerequisite_labels=[item.label for item in list(graph_context.prerequisite_concepts or [])],
             unlock_labels=[item.label for item in list(graph_context.downstream_concepts or [])],

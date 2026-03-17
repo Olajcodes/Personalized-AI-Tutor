@@ -43,6 +43,39 @@ class LearningPathService:
         return token.title() if token else str(fallback_topic_title or "Untitled Concept").strip()
 
     @staticmethod
+    def _looks_uuid(value: str | None) -> bool:
+        text = str(value or "").strip()
+        if not text:
+            return False
+        try:
+            UUID(text)
+            return True
+        except (TypeError, ValueError):
+            return False
+
+    @classmethod
+    def _normalize_concept_label(
+        cls,
+        label: str | None,
+        *,
+        concept_id: str | None,
+        fallback_topic_title: str | None = None,
+    ) -> str:
+        text = str(label or "").strip()
+        concept_text = str(concept_id or "").strip()
+        if not text or text == concept_text or ":" in text or cls._looks_uuid(text):
+            return cls._readable_concept_label(concept_text, fallback_topic_title=fallback_topic_title)
+        return text
+
+    @classmethod
+    def _normalize_topic_title(cls, title: str | None, *, fallback: str | None = None) -> str | None:
+        text = str(title or "").strip()
+        if not text or cls._looks_uuid(text):
+            fallback_text = str(fallback or "").strip()
+            return fallback_text or None
+        return text
+
+    @staticmethod
     def _scope_graph_rows(
         *,
         db: Session,
@@ -174,14 +207,16 @@ class LearningPathService:
                     blocking_concept,
                     (None, None),
                 )
+                normalized_blocking_topic_title = self._normalize_topic_title(blocking_topic_title)
                 blocking_candidates.append(
                     {
                         "recommended_topic_id": blocking_topic_id,
-                        "recommended_topic_title": blocking_topic_title,
+                        "recommended_topic_title": normalized_blocking_topic_title,
                         "recommended_concept_id": blocking_concept,
-                        "recommended_concept_label": self._readable_concept_label(
-                            blocking_concept,
-                            fallback_topic_title=blocking_topic_title,
+                        "recommended_concept_label": self._normalize_concept_label(
+                            None,
+                            concept_id=blocking_concept,
+                            fallback_topic_title=normalized_blocking_topic_title or blocking_topic_title,
                         ),
                         "reason": (
                             "A prerequisite concept is still weak; revisit the weakest blocking foundation before proceeding."
@@ -202,12 +237,17 @@ class LearningPathService:
             topic_mastery = mean([float(item["score"]) for item in concept_rows]) if concept_rows else 0.0
             if topic_mastery < MASTERY_THRESHOLD:
                 weakest_concept = min(concept_rows, key=lambda item: float(item["score"]))
+                normalized_topic_title = self._normalize_topic_title(str(topic.title), fallback=str(topic.title))
                 weak_topic_candidates.append(
                     {
                         "recommended_topic_id": topic_id,
-                        "recommended_topic_title": str(topic.title),
+                        "recommended_topic_title": normalized_topic_title,
                         "recommended_concept_id": str(weakest_concept["concept_id"]),
-                        "recommended_concept_label": str(weakest_concept["concept_label"]),
+                        "recommended_concept_label": self._normalize_concept_label(
+                            str(weakest_concept.get("concept_label") or ""),
+                            concept_id=str(weakest_concept.get("concept_id") or ""),
+                            fallback_topic_title=normalized_topic_title or str(topic.title),
+                        ),
                         "reason": "Recommended next topic based on the weakest ready concept cluster still below mastery threshold.",
                         "prereq_gaps": [],
                         "prereq_gap_labels": [],
@@ -266,11 +306,20 @@ class LearningPathService:
         )
         weakest_rows = topic_rows.get(str(weakest_topic.id), [])
         weakest_concept = min(weakest_rows, key=lambda item: float(item["score"])) if weakest_rows else None
+        normalized_weakest_title = self._normalize_topic_title(str(weakest_topic.title), fallback=str(weakest_topic.title))
         return PathNextOut(
             recommended_topic_id=str(weakest_topic.id),
-            recommended_topic_title=str(weakest_topic.title),
+            recommended_topic_title=normalized_weakest_title,
             recommended_concept_id=str(weakest_concept["concept_id"]) if weakest_concept else None,
-            recommended_concept_label=str(weakest_concept["concept_label"]) if weakest_concept else None,
+            recommended_concept_label=(
+                self._normalize_concept_label(
+                    str(weakest_concept.get("concept_label") or ""),
+                    concept_id=str(weakest_concept.get("concept_id") or ""),
+                    fallback_topic_title=normalized_weakest_title or str(weakest_topic.title),
+                )
+                if weakest_concept
+                else None
+            ),
             reason="All scoped topics are above threshold; recommending the weakest concept cluster for revision.",
             prereq_gaps=[],
             prereq_gap_labels=[],

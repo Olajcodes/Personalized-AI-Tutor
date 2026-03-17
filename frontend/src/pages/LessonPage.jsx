@@ -275,10 +275,16 @@ export default function LessonPage() {
   const lesson = bootstrap?.lesson || null;
   const graphContext = bootstrap?.graph_context || null;
   const whyTopicDetail = bootstrap?.why_topic_detail || null;
+  const mapError = bootstrap?.map_error || null;
   const sessionId = bootstrap?.session_id || null;
   const quickActions = safeArray(bootstrap?.suggested_actions);
   const recentEvidence = bootstrap?.recent_evidence || null;
   const interventionTimeline = safeArray(bootstrap?.intervention_timeline);
+  const graphStatus = graphContext?.status || (graphContext ? 'ready' : 'unavailable');
+  const graphUnavailableReason = graphContext?.unavailable_reason || mapError || null;
+  const graphAvailable = graphStatus === 'ready' && safeArray(graphContext?.current_concepts).length > 0;
+  const lessonBlocks = safeArray(lesson?.content_blocks);
+  const lessonAvailable = Boolean(lesson) && lessonBlocks.length > 0;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -344,6 +350,7 @@ export default function LessonPage() {
           ...cockpitJson.tutor_bootstrap,
           recent_evidence: cockpitJson.recent_evidence || null,
           intervention_timeline: safeArray(cockpitJson.intervention_timeline),
+          map_error: cockpitJson.map_error || null,
           why_topic_detail: cockpitJson.why_topic_detail || null,
         };
         setSidebarTopics(safeArray(cockpitJson.topics));
@@ -774,9 +781,16 @@ export default function LessonPage() {
     sendChat(action.prompt, { mode: action.intent });
   };
 
-  const explainLastMistake = async () => {
-    if (!lastAssessmentReview || lastAssessmentReview.is_correct || isBusy) return;
-    setIsBusy(true);
+  const requestMistakeExplanation = async ({
+    question,
+    studentAnswer,
+    idealAnswer,
+    conceptLabel,
+    recommendedTopicTitle,
+    graphRemediation,
+  }, { useBusy = true } = {}) => {
+    if (useBusy) setIsBusy(true);
+    setStreamPhase('Explaining the miss...');
     try {
       const out = await postJson('/tutor/explain-mistake', {
         student_id: activeId,
@@ -785,28 +799,41 @@ export default function LessonPage() {
         sss_level: currentLevel,
         term: currentTerm,
         topic_id: topicId,
-        question: lastAssessmentReview.question,
-        student_answer: lastAssessmentReview.studentAnswer,
-        correct_answer: lastAssessmentReview.idealAnswer,
+        question,
+        student_answer: studentAnswer,
+        correct_answer: idealAnswer,
       });
       appendAssistant({
         assistant_message: out.explanation,
         key_points: [
-          `Focus concept: ${lastAssessmentReview.conceptLabel}`,
+          conceptLabel ? `Focus concept: ${conceptLabel}` : null,
           out.improvement_tip,
         ].filter(Boolean),
-        prerequisite_warning: lastAssessmentReview.graphRemediation?.blocking_prerequisite_label
-          ? `Fix ${lastAssessmentReview.graphRemediation.blocking_prerequisite_label} before retrying this concept.`
+        prerequisite_warning: graphRemediation?.blocking_prerequisite_label
+          ? `Fix ${graphRemediation.blocking_prerequisite_label} before retrying this concept.`
           : null,
-        next_action: lastAssessmentReview.recommendedTopicTitle
-          ? `Revise ${lastAssessmentReview.recommendedTopicTitle}, then retry this checkpoint.`
+        next_action: recommendedTopicTitle
+          ? `Revise ${recommendedTopicTitle}, then retry this checkpoint.`
           : 'Retry the checkpoint after revising the core rule and one worked example.',
       });
     } catch (err) {
       setMessages((prev) => [...prev, { role: 'assistant', content: err.message || 'Mistake explanation unavailable.' }]);
     } finally {
-      setIsBusy(false);
+      setStreamPhase('');
+      if (useBusy) setIsBusy(false);
     }
+  };
+
+  const explainLastMistake = async () => {
+    if (!lastAssessmentReview || lastAssessmentReview.is_correct || isBusy) return;
+    await requestMistakeExplanation({
+      question: lastAssessmentReview.question,
+      studentAnswer: lastAssessmentReview.studentAnswer,
+      idealAnswer: lastAssessmentReview.idealAnswer,
+      conceptLabel: lastAssessmentReview.conceptLabel,
+      recommendedTopicTitle: lastAssessmentReview.recommendedTopicTitle,
+      graphRemediation: lastAssessmentReview.graphRemediation,
+    });
   };
 
   const handleDrill = async () => {
@@ -977,6 +1004,16 @@ export default function LessonPage() {
           ? `Recheck ${out.graph_remediation.focus_concept_label} with one more checkpoint after revising the prerequisite.`
           : null,
       });
+      if (!out.is_correct) {
+        await requestMistakeExplanation({
+          question: submittedQuestion,
+          studentAnswer: submittedAnswer,
+          idealAnswer: out.ideal_answer,
+          conceptLabel: out.concept_label,
+          recommendedTopicTitle,
+          graphRemediation: out.graph_remediation || null,
+        }, { useBusy: false });
+      }
       if (out.graph_remediation?.recommended_next_topic_id && out.graph_remediation?.recommended_next_topic_title) {
         setBootstrap((prev) => prev ? ({
           ...prev,
@@ -1100,30 +1137,44 @@ export default function LessonPage() {
                 <span>/</span>
                 <span className="capitalize">{currentSubject}</span>
                 <span>/</span>
-                <span className="truncate text-slate-700">{lesson?.title}</span>
+                <span className="truncate text-slate-700">{lesson?.title || 'Lesson unavailable'}</span>
               </div>
 
               <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
                 <div>
-                  <h1 className="text-3xl font-black tracking-tight text-slate-950 md:text-4xl">{lesson?.title}</h1>
-                  <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600 md:text-base">{lesson?.summary}</p>
+                  <h1 className="text-3xl font-black tracking-tight text-slate-950 md:text-4xl">{lesson?.title || 'Lesson unavailable'}</h1>
+                  <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600 md:text-base">
+                    {lesson?.summary || (lessonAvailable ? '' : 'Lesson summary is unavailable for this topic right now.')}
+                  </p>
                   <div className="mt-6 flex flex-wrap gap-3">
                     <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs shadow-sm">
                       <p className="font-black uppercase tracking-[0.2em] text-slate-400">Lesson Focus</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-800">{graphContext?.weakest_concepts?.[0]?.label || 'Current concept cluster'}</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800">
+                        {graphAvailable
+                          ? (graphContext?.weakest_concepts?.[0]?.label || 'Graph context warming up')
+                          : 'Graph context unavailable'}
+                      </p>
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs shadow-sm">
                       <p className="font-black uppercase tracking-[0.2em] text-slate-400">Mastery Pulse</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-800">{masteryPulse !== null ? `${masteryPulse}% ready` : 'Unassessed'}</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800">
+                        {graphAvailable ? (masteryPulse !== null ? `${masteryPulse}% ready` : 'Unassessed') : 'Unavailable'}
+                      </p>
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs shadow-sm">
                       <p className="font-black uppercase tracking-[0.2em] text-slate-400">Next Unlock</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-800">{bootstrap?.next_unlock?.topic_title || 'Stay on this lesson'}</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800">
+                        {graphAvailable
+                          ? (bootstrap?.next_unlock?.topic_title || 'No unlock yet')
+                          : 'Graph context unavailable'}
+                      </p>
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs shadow-sm">
                       <p className="font-black uppercase tracking-[0.2em] text-slate-400">Context warmed</p>
                       <p className="mt-1 text-sm font-semibold text-slate-800">
-                        {topicWarmSummary.currentCount} live / {topicWarmSummary.prereqCount} prereq / {topicWarmSummary.downstreamCount} unlock
+                        {graphAvailable
+                          ? `${topicWarmSummary.currentCount} live / ${topicWarmSummary.prereqCount} prereq / ${topicWarmSummary.downstreamCount} unlock`
+                          : 'Graph context unavailable'}
                       </p>
                     </div>
                   </div>
@@ -1150,7 +1201,11 @@ export default function LessonPage() {
                     </div>
                     <div className="rounded-2xl bg-white p-4">
                       <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Weak prerequisite</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-800">{graphContext?.prerequisite_concepts?.[0]?.label || 'No blocking prerequisite detected'}</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800">
+                        {graphAvailable
+                          ? (graphContext?.prerequisite_concepts?.[0]?.label || 'No blocking prerequisite detected')
+                          : 'Graph context unavailable'}
+                      </p>
                     </div>
                     {evidenceSummary && (
                       <div className="rounded-2xl bg-white p-4">
@@ -1183,12 +1238,25 @@ export default function LessonPage() {
                         )}
                       </div>
                     )}
+                    {!graphAvailable && (
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-700">Graph context unavailable</p>
+                        <p className="mt-2 text-xs leading-6 text-amber-800">
+                          {graphUnavailableReason || 'No approved concept mappings found for this topic yet.'}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
             <div className="grid gap-8 p-6 md:p-8">
-              {safeArray(lesson?.content_blocks).map((block, index) => (
+              {!lessonAvailable && (
+                <div className="rounded-3xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-800">
+                  Lesson content is unavailable for this topic right now. Please refresh after curriculum ingestion completes.
+                </div>
+              )}
+              {lessonAvailable && lessonBlocks.map((block, index) => (
                 <div key={`${block.type}-${index}`} className={`rounded-3xl ${block.type === 'example' ? 'border border-indigo-200 bg-indigo-50 p-5' : block.type === 'exercise' ? 'border border-emerald-200 bg-emerald-50 p-5' : ''}`}>
                   {block.type === 'example' && <p className="mb-2 text-[11px] font-black uppercase tracking-[0.25em] text-indigo-500">Worked Example</p>}
                   {block.type === 'exercise' && <p className="mb-2 text-[11px] font-black uppercase tracking-[0.25em] text-emerald-500">Checkpoint</p>}
@@ -1243,7 +1311,11 @@ export default function LessonPage() {
               <div className="grid gap-3">
                 {safeArray(graphContext?.current_concepts).map((concept) => <ConceptChip key={concept.concept_id} concept={concept} />)}
                 {!safeArray(graphContext?.current_concepts).length && (
-                  <p className="rounded-2xl bg-slate-50 px-3 py-3 text-xs text-slate-500">Graph context is still warming for this topic.</p>
+                  <p className={`rounded-2xl px-3 py-3 text-xs ${graphAvailable ? 'bg-slate-50 text-slate-500' : 'border border-amber-200 bg-amber-50 text-amber-700'}`}>
+                    {graphAvailable
+                      ? 'Graph context is still warming for this topic.'
+                      : (graphUnavailableReason || 'Graph context is unavailable for this topic yet.')}
+                  </p>
                 )}
               </div>
             </section>

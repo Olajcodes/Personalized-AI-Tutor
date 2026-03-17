@@ -19,7 +19,8 @@ from backend.schemas.tutor_schema import (
     TutorSessionBootstrapIn,
     TutorSessionBootstrapOut,
 )
-from backend.services.lesson_graph_service import lesson_graph_service
+from backend.schemas.graph_learning_schema import LessonGraphContextOut
+from backend.services.lesson_graph_service import LessonGraphValidationError, lesson_graph_service
 from backend.services.lesson_service import fetch_topic_lesson
 from backend.services.tutor_assessment_service import TutorAssessmentService
 
@@ -249,14 +250,28 @@ class LessonExperienceService:
             return cached, "cache"
 
         lesson = fetch_topic_lesson(db=db, topic_id=topic_id, student_id=student_id)
-        graph_context = lesson_graph_service.get_lesson_graph_context(
-            db,
-            student_id=student_id,
-            subject=subject,
-            sss_level=sss_level,
-            term=term,
-            topic_id=topic_id,
-        )
+        try:
+            graph_context = lesson_graph_service.get_lesson_graph_context(
+                db,
+                student_id=student_id,
+                subject=subject,
+                sss_level=sss_level,
+                term=term,
+                topic_id=topic_id,
+            )
+        except LessonGraphValidationError as exc:
+            topic_title = str(lesson.get("title") or "Current Topic").strip() or "Current Topic"
+            graph_context = LessonGraphContextOut(
+                student_id=student_id,
+                subject=subject,  # type: ignore[arg-type]
+                sss_level=sss_level,  # type: ignore[arg-type]
+                term=term,
+                topic_id=str(topic_id),
+                topic_title=topic_title,
+                overall_mastery=0.0,
+                status="unavailable",
+                unavailable_reason=str(exc),
+            )
         snapshot = _TopicSnapshot(
             lesson=lesson,
             graph_context=graph_context,
@@ -504,11 +519,19 @@ class LessonExperienceService:
     ) -> TutorSessionBootstrapOut:
         graph_context = snapshot.graph_context
         lesson = snapshot.lesson
-        greeting = (
-            f"You are in {lesson.get('title')}. "
-            f"Your weakest focus here is {graph_context.weakest_concepts[0].label if graph_context.weakest_concepts else 'the current lesson core idea'}, "
-            "and the graph is showing what unlocks next."
-        )
+        if graph_context.status == "unavailable":
+            reason = str(graph_context.unavailable_reason or "Graph context is warming up.").strip()
+            greeting = (
+                f"You are in {lesson.get('title')}. "
+                f"Graph context is unavailable right now: {reason} "
+                "You can still review the lesson and try a checkpoint."
+            )
+        else:
+            greeting = (
+                f"You are in {lesson.get('title')}. "
+                f"Your weakest focus here is {graph_context.weakest_concepts[0].label if graph_context.weakest_concepts else 'the current lesson core idea'}, "
+                "and the graph is showing what unlocks next."
+            )
         return TutorSessionBootstrapOut(
             session_id=session_id,
             session_started=session_started,

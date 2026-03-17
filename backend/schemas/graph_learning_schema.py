@@ -49,6 +49,8 @@ class LessonGraphContextOut(BaseModel):
     topic_id: str
     topic_title: str
     overall_mastery: float = Field(ge=0.0, le=1.0)
+    status: Literal["ready", "unavailable"] = "ready"
+    unavailable_reason: str | None = None
     current_concepts: list[GraphConceptNodeOut] = Field(default_factory=list)
     prerequisite_concepts: list[GraphConceptNodeOut] = Field(default_factory=list)
     downstream_concepts: list[GraphConceptNodeOut] = Field(default_factory=list)
