@@ -106,19 +106,7 @@ export default function LessonKnowledgeGraph({
   onDrillConcept = null,
   onSelectConcept = null,
 }) {
-  if (!graphContext || graphContext.status === 'unavailable') {
-    return (
-      <div className="rounded-[2rem] border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
-        <div className="mb-2 flex items-center gap-2 text-amber-700">
-          <ShieldAlert size={18} />
-          <p className="text-xs font-black uppercase tracking-[0.2em]">Graph context unavailable</p>
-        </div>
-        <p className="text-xs leading-6">
-          {graphContext?.unavailable_reason || 'No approved concept mappings are available for this topic yet.'}
-        </p>
-      </div>
-    );
-  }
+  const graphUnavailable = !graphContext || graphContext.status === 'unavailable';
   const { grouped, nodes, renderedEdges } = useMemo(() => buildLayout(graphContext), [graphContext]);
   const [selectedConceptId, setSelectedConceptId] = useState(null);
   const preferredNode = nodes.find((node) => node.role === 'current') || nodes[0] || null;
@@ -146,6 +134,20 @@ export default function LessonKnowledgeGraph({
       onSelectConcept(selectedNode || null);
     }
   }, [onSelectConcept, selectedNode]);
+
+  if (graphUnavailable) {
+    return (
+      <div className="rounded-[2rem] border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
+        <div className="mb-2 flex items-center gap-2 text-amber-700">
+          <ShieldAlert size={18} />
+          <p className="text-xs font-black uppercase tracking-[0.2em]">Graph context unavailable</p>
+        </div>
+        <p className="text-xs leading-6">
+          {graphContext?.unavailable_reason || 'No approved concept mappings are available for this topic yet.'}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">

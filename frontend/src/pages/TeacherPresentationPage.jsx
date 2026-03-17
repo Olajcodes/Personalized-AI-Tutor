@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Clipboard, Download, Loader2, Presentation, Printer, Sparkles } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, BrainCircuit, Clipboard, Download, Loader2, Presentation, Printer, Route, Sparkles, Target, TrendingUp, Users } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import PresentationCueCard from '../components/PresentationCueCard';
@@ -80,6 +80,64 @@ const TeacherPresentationPage = () => {
     () => (Array.isArray(presentation?.intervention_queue?.items) ? presentation.intervention_queue.items.slice(0, 4) : []),
     [presentation?.intervention_queue?.items],
   );
+
+  const presentationSignalCards = useMemo(() => {
+    if (!presentation) return [];
+    return [
+      {
+        id: 'blockers',
+        label: 'Blocked concepts',
+        value: presentation.graph_summary?.metrics?.blocked_concepts ?? 0,
+        tone: 'text-amber-600',
+        icon: AlertTriangle,
+      },
+      {
+        id: 'ready',
+        label: 'Ready to push',
+        value: Array.isArray(presentation.graph_summary?.ready_to_push) ? presentation.graph_summary.ready_to_push.length : 0,
+        tone: 'text-emerald-600',
+        icon: TrendingUp,
+      },
+      {
+        id: 'active',
+        label: 'Active students 7d',
+        value: presentation.dashboard?.active_students_7d ?? 0,
+        tone: 'text-indigo-600',
+        icon: Users,
+      },
+      {
+        id: 'targeted',
+        label: 'Student-targeted queue',
+        value: presentation.intervention_queue?.student_targeted_items ?? 0,
+        tone: 'text-slate-900',
+        icon: Target,
+      },
+    ];
+  }, [presentation]);
+
+  const presentationTalkTrack = useMemo(() => {
+    if (!presentation) return [];
+    return [
+      {
+        id: 'signal',
+        title: 'Start with the graph signal',
+        detail: presentation.graph_summary?.graph_signal?.headline || 'Graph signal unavailable.',
+        support: presentation.graph_summary?.graph_signal?.supporting_reason || 'No supporting reason available yet.',
+      },
+      {
+        id: 'repair',
+        title: 'Turn it into a repair plan',
+        detail: presentation.next_cluster_plan?.headline || 'No cluster plan headline yet.',
+        support: presentation.next_cluster_plan?.rationale || 'No cluster rationale available yet.',
+      },
+      {
+        id: 'evidence',
+        title: 'Close with outcomes',
+        detail: `${presentation.intervention_outcomes?.improving_interventions ?? 0} interventions and ${presentation.assignment_outcomes?.improving_assignments ?? 0} assignments are already showing improvement.`,
+        support: 'That gives the teacher story real evidence instead of a static dashboard.',
+      },
+    ];
+  }, [presentation]);
 
   return (
     <main className="min-h-screen bg-slate-50 p-8 print:bg-white print:p-0">
@@ -186,6 +244,78 @@ const TeacherPresentationPage = () => {
               </div>
             </section>
 
+            <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+              <div className="rounded-[28px] border border-slate-900 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.35),_transparent_38%),linear-gradient(135deg,#0f172a,#111827)] p-6 text-white shadow-sm print:border-slate-200 print:bg-white print:text-slate-900">
+                <div className="flex items-center gap-2 text-indigo-200 print:text-indigo-600">
+                  <BrainCircuit className="h-4 w-4" />
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em]">Presentation anchor</p>
+                </div>
+                <h3 className="mt-4 text-2xl font-black">{presentation.graph_summary.graph_signal.headline}</h3>
+                <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-200 print:text-slate-600">
+                  {presentation.graph_summary.graph_signal.supporting_reason}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {presentation.graph_summary.graph_signal.focus_concept_label && (
+                    <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-bold text-white print:border-indigo-200 print:bg-indigo-50 print:text-indigo-700">
+                      Focus: {presentation.graph_summary.graph_signal.focus_concept_label}
+                    </span>
+                  )}
+                  {presentation.graph_summary.graph_signal.blocking_prerequisite_label && (
+                    <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-bold text-white print:border-amber-200 print:bg-amber-50 print:text-amber-800">
+                      Blocker: {presentation.graph_summary.graph_signal.blocking_prerequisite_label}
+                    </span>
+                  )}
+                  <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-bold text-white print:border-emerald-200 print:bg-emerald-50 print:text-emerald-700">
+                    Action: {presentation.graph_summary.graph_signal.recommended_action}
+                  </span>
+                </div>
+                <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  {presentationSignalCards.map((card) => {
+                    const Icon = card.icon;
+                    return (
+                      <div key={card.id} className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur print:border-slate-200 print:bg-white">
+                        <div className="flex items-center gap-2 text-slate-200 print:text-slate-500">
+                          <Icon className="h-4 w-4" />
+                          <p className="text-[10px] font-black uppercase tracking-[0.18em]">{card.label}</p>
+                        </div>
+                        <p className={`mt-3 text-2xl font-black ${card.tone}`}>{card.value}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm print:shadow-none">
+                <div className="flex items-center gap-2 text-slate-700">
+                  <Route className="h-4 w-4 text-indigo-500" />
+                  <h3 className="text-sm font-black uppercase tracking-[0.18em] text-slate-500">Presenter talk track</h3>
+                </div>
+                <div className="mt-5 space-y-3">
+                  {presentationTalkTrack.map((item, index) => (
+                    <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-black text-slate-900">{item.title}</p>
+                        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                          Step {index + 1}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm font-semibold leading-6 text-slate-800">{item.detail}</p>
+                      <p className="mt-2 text-xs leading-6 text-slate-500">{item.support}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-900">
+                  <div className="flex items-center gap-2">
+                    <ArrowRight className="h-4 w-4" />
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600">Why this lands</p>
+                  </div>
+                  <p className="mt-2 leading-7">
+                    The same graph signal that shapes the student lesson becomes a teacher queue, a class plan, and measurable outcomes in one flow.
+                  </p>
+                </div>
+              </div>
+            </section>
+
             <section className="grid gap-6 xl:grid-cols-[1.3fr_0.9fr]">
               <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm print:shadow-none">
                 <div className="mb-5 flex items-center gap-2">
@@ -256,13 +386,34 @@ const TeacherPresentationPage = () => {
                 <h3 className="text-sm font-black uppercase tracking-[0.18em] text-slate-500">Next cluster plan</h3>
                 <p className="mt-4 text-xl font-black text-slate-900">{presentation.next_cluster_plan.headline}</p>
                 <p className="mt-2 text-sm leading-7 text-slate-600">{presentation.next_cluster_plan.rationale}</p>
-                <div className="mt-5 space-y-3">
-                  {(presentation.next_cluster_plan.repair_first || []).slice(0, 3).map((item) => (
-                    <div key={item.concept_id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-sm font-bold text-slate-900">{item.concept_label}</p>
-                      <p className="mt-1 text-xs text-slate-500">{item.recommended_action}</p>
-                    </div>
-                  ))}
+                <div className="mt-5 grid gap-4 xl:grid-cols-3">
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-600">Repair first</p>
+                    {(presentation.next_cluster_plan.repair_first || []).slice(0, 3).map((item) => (
+                      <div key={item.concept_id} className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                        <p className="text-sm font-bold text-slate-900">{item.concept_label}</p>
+                        <p className="mt-1 text-xs text-slate-600">{item.recommended_action}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">Teach next</p>
+                    {(presentation.next_cluster_plan.teach_next || []).slice(0, 3).map((item) => (
+                      <div key={item.concept_id} className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                        <p className="text-sm font-bold text-slate-900">{item.concept_label}</p>
+                        <p className="mt-1 text-xs text-slate-600">{item.recommended_action}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600">Watchlist</p>
+                    {(presentation.next_cluster_plan.watchlist || []).slice(0, 3).map((item) => (
+                      <div key={item.concept_id} className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
+                        <p className="text-sm font-bold text-slate-900">{item.concept_label}</p>
+                        <p className="mt-1 text-xs text-slate-600">{item.recommended_action}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 

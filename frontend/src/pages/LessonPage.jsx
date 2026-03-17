@@ -111,14 +111,61 @@ const createMessageId = () => {
     },
   };
 
-  const MODE_LABELS = {
-    teach: 'Teach',
-    socratic: 'Socratic',
-    diagnose: 'Diagnose',
-    drill: 'Drill',
-    recap: 'Recap',
-    'exam-practice': 'Exam Practice',
+const MODE_LABELS = {
+  teach: 'Teach',
+  socratic: 'Socratic',
+  diagnose: 'Diagnose',
+  drill: 'Drill',
+  recap: 'Recap',
+  'exam-practice': 'Exam Practice',
+};
+
+const spotlightToneStyles = {
+  indigo: 'border-indigo-200 bg-indigo-50 text-indigo-900',
+  emerald: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+  amber: 'border-amber-200 bg-amber-50 text-amber-900',
+};
+
+const lessonBlockText = (block) => {
+  if (!block) return '';
+  if (typeof block.value === 'string') return block.value;
+  if (typeof block.value === 'object' && block.value) {
+    return block.value.note || block.value.solution || block.value.question || JSON.stringify(block.value);
+  }
+  return '';
+};
+
+const lessonBlockMeta = (block, index) => {
+  const type = String(block?.type || 'lesson').toLowerCase();
+  if (type === 'example') {
+    return {
+      eyebrow: 'Worked example',
+      title: block?.title || `Example ${index + 1}`,
+      detail: 'Use this to connect the rule to a concrete case before moving on.',
+      shellClass: 'border-indigo-200 bg-[linear-gradient(135deg,#eef2ff,#ffffff)]',
+      bodyClass: 'border border-indigo-100 bg-white/80',
+      eyebrowClass: 'text-indigo-500',
+    };
+  }
+  if (type === 'exercise') {
+    return {
+      eyebrow: 'Checkpoint',
+      title: block?.title || `Practice ${index + 1}`,
+      detail: 'Pause here and test whether the idea is starting to stick.',
+      shellClass: 'border-emerald-200 bg-[linear-gradient(135deg,#ecfdf5,#ffffff)]',
+      bodyClass: 'border border-emerald-100 bg-white/80',
+      eyebrowClass: 'text-emerald-500',
+    };
+  }
+  return {
+    eyebrow: 'Lesson step',
+    title: block?.title || `Core idea ${index + 1}`,
+    detail: 'This is part of the explanation path for the current concept cluster.',
+    shellClass: 'border-slate-200 bg-[linear-gradient(135deg,#ffffff,#f8fafc)]',
+    bodyClass: 'border border-slate-100 bg-white',
+    eyebrowClass: 'text-slate-500',
   };
+};
 
 const readBootstrapCache = (key) => {
   const entry = lessonBootstrapCache.get(key);
@@ -158,7 +205,7 @@ const prewarmTopics = async ({ token, studentId, subject, sssLevel, term, topicI
     return safeArray(actions)
       .map((action) => String(action || '').trim())
       .filter((action) => action.length > 0)
-      .filter((action) => !/^[A-Z0-9_:\-]+$/.test(action))
+      .filter((action) => !/^[A-Z0-9_:-]+$/.test(action))
       .filter((action) => !action.startsWith('http'))
       .filter((action) => action.length <= 140);
   };
@@ -559,7 +606,7 @@ export default function LessonPage() {
       }
     };
     runAdaptive();
-  }, [pendingAdaptiveAction, isBusy]);
+  }, [pendingAdaptiveAction, isBusy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const masteryPulse = useMemo(() => {
     const currentConcepts = safeArray(graphContext?.current_concepts);
@@ -589,6 +636,52 @@ export default function LessonPage() {
     if (bootstrap?.why_this_topic) return bootstrap.why_this_topic;
     return null;
   }, [bootstrap?.why_this_topic, whyTopicDetail]);
+
+  const quickActionSpotlight = useMemo(() => {
+    if (!quickActions.length) return { primary: null, secondary: [], tone: 'indigo', headline: '', detail: '' };
+    let preferredId = 'why-this-topic';
+    let tone = 'indigo';
+    let headline = 'Use the graph to frame the lesson';
+    let detail = 'Start from the prerequisite story so the student sees why this topic matters now.';
+
+    if (pendingAssessment) {
+      preferredId = 'checkpoint';
+      tone = 'emerald';
+      headline = 'Finish the live checkpoint first';
+      detail = 'There is already a pending mastery check. Closing that loop gives us fresh evidence immediately.';
+    } else if (lastAssessmentReview && !lastAssessmentReview.isCorrect) {
+      preferredId = 'prereq-bridge';
+      tone = 'amber';
+      headline = 'Repair the blocker before retrying';
+      detail = lastAssessmentReview.graphRemediation?.blocking_prerequisite_label
+        ? `The graph is pointing back to ${lastAssessmentReview.graphRemediation.blocking_prerequisite_label} as the blocking prerequisite.`
+        : 'The last checkpoint missed. Bridge the prerequisite before pushing the next question.';
+    } else if (selectedGraphConcept?.role === 'downstream') {
+      preferredId = 'why-this-topic';
+      tone = 'indigo';
+      headline = 'Connect this node to what unlocks next';
+      detail = `Use ${selectedGraphConcept.label} to explain how today’s lesson opens the next concept path.`;
+    } else if (selectedGraphConcept?.role === 'prerequisite') {
+      preferredId = 'prereq-bridge';
+      tone = 'amber';
+      headline = 'Bridge the selected prerequisite';
+      detail = `Focus the tutor on ${selectedGraphConcept.label} so the student can rebuild the missing foundation.`;
+    } else if (selectedMode === 'exam-practice') {
+      preferredId = 'waec-mode';
+      tone = 'indigo';
+      headline = 'Switch the energy to exam practice';
+      detail = 'Use a WAEC-style prompt to turn this lesson into exam-ready application.';
+    } else if (selectedMode === 'recap') {
+      preferredId = 'recap';
+      tone = 'emerald';
+      headline = 'Compress the lesson into a memory hook';
+      detail = 'A short recap works well when the student is ready to consolidate before moving on.';
+    }
+
+    const primary = quickActions.find((action) => action.id === preferredId) || quickActions[0] || null;
+    const secondary = quickActions.filter((action) => action.id !== primary?.id).slice(0, 5);
+    return { primary, secondary, tone, headline, detail };
+  }, [lastAssessmentReview, pendingAssessment, quickActions, selectedGraphConcept, selectedMode]);
 
   const activeMode = useMemo(
     () => TUTOR_MODES.find((mode) => mode.id === selectedMode) || TUTOR_MODES[0],
@@ -1770,19 +1863,44 @@ export default function LessonPage() {
                     Lesson content is unavailable for this topic right now. Please refresh after curriculum ingestion completes.
                   </div>
                 )}
-              {lessonAvailable && lessonBlocks.map((block, index) => (
-                <div key={`${block.type}-${index}`} className={`rounded-3xl ${block.type === 'example' ? 'border border-indigo-200 bg-indigo-50 p-5' : block.type === 'exercise' ? 'border border-emerald-200 bg-emerald-50 p-5' : ''}`}>
-                  {block.type === 'example' && <p className="mb-2 text-[11px] font-black uppercase tracking-[0.25em] text-indigo-500">Worked Example</p>}
-                  {block.type === 'exercise' && <p className="mb-2 text-[11px] font-black uppercase tracking-[0.25em] text-emerald-500">Checkpoint</p>}
-                  <div className="whitespace-pre-wrap text-sm leading-8 text-slate-700">
-                    {typeof block.value === 'string'
-                      ? block.value
-                      : typeof block.value === 'object' && block.value
-                        ? block.value.note || block.value.solution || block.value.question || JSON.stringify(block.value)
-                        : ''}
+                {lessonAvailable && (
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.5rem] border border-slate-200 bg-slate-50 px-4 py-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Lesson sequence</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-800">
+                          {lessonBlocks.length} guided {lessonBlocks.length === 1 ? 'step' : 'steps'} in this lesson path
+                        </p>
+                      </div>
+                      <p className="text-xs leading-6 text-slate-500">
+                        Move from core idea to example to checkpoint, then use the tutor or quiz to log evidence.
+                      </p>
+                    </div>
+                    {lessonBlocks.map((block, index) => {
+                      const meta = lessonBlockMeta(block, index);
+                      const text = lessonBlockText(block);
+                      return (
+                        <div key={`${block.type}-${index}`} className={`rounded-[1.75rem] border p-5 shadow-sm ${meta.shellClass}`}>
+                          <div className="flex flex-wrap items-start justify-between gap-4">
+                            <div>
+                              <p className={`text-[10px] font-black uppercase tracking-[0.24em] ${meta.eyebrowClass}`}>{meta.eyebrow}</p>
+                              <h3 className="mt-2 text-xl font-black text-slate-900">{meta.title}</h3>
+                              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{meta.detail}</p>
+                            </div>
+                            <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                              Step {index + 1}
+                            </div>
+                          </div>
+                          <div className={`mt-4 rounded-[1.25rem] p-4 ${meta.bodyClass}`}>
+                            <div className="whitespace-pre-wrap text-sm leading-8 text-slate-700">
+                              {text}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                </div>
-              ))}
+                )}
               <div className="flex flex-wrap gap-3 border-t border-slate-100 pt-6">
                 <button type="button" onClick={() => navigate(`/quiz/${topicId}`)} className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white hover:bg-indigo-700">
                   Take mastery quiz
@@ -1934,17 +2052,69 @@ export default function LessonPage() {
                     </p>
                   </div>
                 </div>
+                {quickActionSpotlight.primary && (
+                  <div className={`mb-4 rounded-[1.5rem] border p-4 ${spotlightToneStyles[quickActionSpotlight.tone] || spotlightToneStyles.indigo}`}>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="max-w-xl">
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-70">Best next move</p>
+                        <h3 className="mt-2 text-lg font-black">{quickActionSpotlight.headline}</h3>
+                        <p className="mt-2 text-sm leading-7 opacity-90">{quickActionSpotlight.detail}</p>
+                        {selectedGraphConcept?.label && (
+                          <p className="mt-3 text-xs font-semibold opacity-80">
+                            Focus node: {selectedGraphConcept.label}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => handleQuickAction(quickActionSpotlight.primary)}
+                        className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-white disabled:opacity-60"
+                      >
+                        {quickActionSpotlight.primary.label}
+                        <ArrowRight size={14} />
+                      </button>
+                    </div>
+                    {quickActionSpotlight.secondary.length > 0 && (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {quickActionSpotlight.secondary.map((action) => (
+                          <button
+                            key={action.id}
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => handleQuickAction(action)}
+                            className="rounded-full border border-white/70 bg-white/90 px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:border-slate-300 disabled:opacity-60"
+                          >
+                            {action.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="mb-4 grid gap-2 sm:grid-cols-2">
                   {quickActions.map((action) => {
                     const Icon = iconByIntent[action.icon] || iconByIntent[action.intent] || MessageSquare;
+                    const isPrimaryAction = quickActionSpotlight.primary?.id === action.id;
                     return (
-                      <button key={action.id} type="button" disabled={isBusy} onClick={() => handleQuickAction(action)} className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-left transition hover:border-indigo-300 hover:bg-indigo-50 disabled:opacity-60">
+                      <button key={action.id} type="button" disabled={isBusy} onClick={() => handleQuickAction(action)} className={`rounded-2xl border p-3 text-left transition disabled:opacity-60 ${
+                        isPrimaryAction
+                          ? 'border-indigo-300 bg-indigo-50 shadow-sm'
+                          : 'border-slate-200 bg-slate-50 hover:border-indigo-300 hover:bg-indigo-50'
+                      }`}>
                         <div className="flex items-start gap-3">
                           <div className="mt-0.5 rounded-xl bg-white p-2 text-indigo-600 shadow-sm">
                             <Icon size={16} />
                           </div>
                           <div>
-                            <p className="text-sm font-bold text-slate-800">{action.label}</p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-bold text-slate-800">{action.label}</p>
+                              {isPrimaryAction && (
+                                <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.16em] text-indigo-700">
+                                  Best now
+                                </span>
+                              )}
+                            </div>
                             <p className="mt-1 text-xs leading-5 text-slate-500">{action.prompt}</p>
                           </div>
                         </div>
