@@ -1,5 +1,6 @@
 *venv
 *.env
+practice/
 
 __pycache__/
 *.log
