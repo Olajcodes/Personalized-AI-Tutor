@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import logging
 import re
+import time
 from dataclasses import dataclass
 from statistics import mean
 from uuid import UUID
@@ -21,6 +25,10 @@ from backend.services.learning_path_service import learning_path_service
 
 
 MASTERY_THRESHOLD = 0.7
+WHY_TOPIC_CACHE_TTL_SECONDS = 300.0
+_WHY_TOPIC_CACHE: dict[str, tuple[float, WhyThisTopicOut]] = {}
+
+logger = logging.getLogger(__name__)
 
 
 class LessonGraphValidationError(ValueError):
@@ -36,6 +44,62 @@ class _TopicConcept:
 
 
 class LessonGraphService:
+    @staticmethod
+    def _scope_mastery_signature(
+        *,
+        db: Session,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+    ) -> str:
+        mastery_map = GraphRepository(db).get_mastery_map(
+            student_id=student_id,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+        )
+        if not mastery_map:
+            return "no_mastery"
+        payload = json.dumps(sorted(mastery_map.items()), separators=(",", ":"), ensure_ascii=True)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+    @staticmethod
+    def _why_topic_cache_key(
+        *,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+        topic_id: UUID,
+        mastery_signature: str,
+    ) -> str:
+        return ":".join(
+            [
+                str(student_id),
+                subject,
+                sss_level,
+                str(term),
+                str(topic_id),
+                mastery_signature,
+            ]
+        )
+
+    @staticmethod
+    def _read_cached_why_topic(*, cache_key: str) -> WhyThisTopicOut | None:
+        entry = _WHY_TOPIC_CACHE.get(cache_key)
+        if entry is None:
+            return None
+        created_at, payload = entry
+        if (time.time() - created_at) > WHY_TOPIC_CACHE_TTL_SECONDS:
+            _WHY_TOPIC_CACHE.pop(cache_key, None)
+            return None
+        return payload
+
+    @staticmethod
+    def _write_cached_why_topic(*, cache_key: str, payload: WhyThisTopicOut) -> WhyThisTopicOut:
+        _WHY_TOPIC_CACHE[cache_key] = (time.time(), payload)
+        return payload
     @staticmethod
     def _readable_concept_label(concept_id: str, *, fallback_topic_title: str | None = None) -> str:
         value = str(concept_id or "").strip()
@@ -481,6 +545,32 @@ class LessonGraphService:
         term: int,
         topic_id: UUID,
     ) -> WhyThisTopicOut:
+        mastery_signature = self._scope_mastery_signature(
+            db=db,
+            student_id=student_id,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+        )
+        cache_key = self._why_topic_cache_key(
+            student_id=student_id,
+            subject=subject,
+            sss_level=sss_level,
+            term=term,
+            topic_id=topic_id,
+            mastery_signature=mastery_signature,
+        )
+        cached = self._read_cached_why_topic(cache_key=cache_key)
+        if cached is not None:
+            logger.info(
+                "lesson.graph.why_topic.cache_hit student_id=%s topic_id=%s subject=%s sss_level=%s term=%s",
+                student_id,
+                topic_id,
+                subject,
+                sss_level,
+                term,
+            )
+            return cached
         context = self.get_lesson_graph_context(
             db,
             student_id=student_id,
@@ -504,7 +594,7 @@ class LessonGraphService:
                 or f"{context.topic_title} sits in the path because it bridges prerequisites into later topics."
             )
         )
-        return WhyThisTopicOut(
+        response = WhyThisTopicOut(
             student_id=student_id,
             subject=subject,  # type: ignore[arg-type]
             sss_level=sss_level,  # type: ignore[arg-type]
@@ -519,6 +609,7 @@ class LessonGraphService:
             weakest_prerequisite_label=weakest_prereq.label if weakest_prereq else None,
             recommended_next=context.next_unlock,
         )
+        return self._write_cached_why_topic(cache_key=cache_key, payload=response)
 
 
 lesson_graph_service = LessonGraphService()

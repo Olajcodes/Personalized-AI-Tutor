@@ -42,6 +42,8 @@ from backend.schemas.tutor_schema import (
 from backend.services.lesson_experience_service import LessonExperienceService
 from backend.services.lesson_cockpit_service import LessonCockpitService
 from backend.services.prewarm_job_service import PrewarmJobService
+from backend.services.tutor_action_cache import TutorActionCacheKey, get_cached_action, set_cached_action
+from backend.services.tutor_action_prewarm_service import TutorActionPrewarmService
 from backend.services.tutor_assessment_service import TutorAssessmentService
 from backend.services.tutor_orchestration_service import (
     TutorOrchestrationService,
@@ -107,6 +109,15 @@ def tutor_session_bootstrap(
                 term=int(payload.term),
                 topic_ids=warm_topic_ids,
             )
+        background_tasks.add_task(
+            TutorActionPrewarmService.prewarm,
+            student_id=payload.student_id,
+            session_id=response.session_id,
+            subject=payload.subject,
+            sss_level=payload.sss_level,
+            term=int(payload.term),
+            topic_id=payload.topic_id,
+        )
         log_timed_event(
             logger,
             "tutor.session.bootstrap",
@@ -303,8 +314,25 @@ async def tutor_recap(
     repo = _session_repo(db)
     if not repo.session_exists_for_student(session_id=payload.session_id, student_id=payload.student_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found for this student.")
+    cache_key = TutorActionCacheKey(action_id="recap", session_id=payload.session_id, topic_id=payload.topic_id)
+    cached = get_cached_action(cache_key)
+    if cached is not None:
+        log_timed_event(
+            logger,
+            "tutor.recap",
+            started_at,
+            outcome="success",
+            student_id=payload.student_id,
+            session_id=payload.session_id,
+            topic_id=payload.topic_id,
+            citations=len(list(cached.citations or [])),
+            actions=len(list(cached.actions or [])),
+            cache_hit=True,
+        )
+        return cached
     try:
         response = await _service().recap(payload)
+        set_cached_action(cache_key, response)
         log_timed_event(
             logger,
             "tutor.recap",
@@ -315,6 +343,7 @@ async def tutor_recap(
             topic_id=payload.topic_id,
             citations=len(list(response.citations or [])),
             actions=len(list(response.actions or [])),
+            cache_hit=False,
         )
         return response
     except TutorProviderUnavailableError as exc:
@@ -344,8 +373,31 @@ async def tutor_drill(
     repo = _session_repo(db)
     if not repo.session_exists_for_student(session_id=payload.session_id, student_id=payload.student_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found for this student.")
+    cache_key = TutorActionCacheKey(
+        action_id="drill",
+        session_id=payload.session_id,
+        topic_id=payload.topic_id,
+        difficulty=payload.difficulty,
+    )
+    cached = get_cached_action(cache_key)
+    if cached is not None:
+        log_timed_event(
+            logger,
+            "tutor.drill",
+            started_at,
+            outcome="success",
+            student_id=payload.student_id,
+            session_id=payload.session_id,
+            topic_id=payload.topic_id,
+            difficulty=payload.difficulty,
+            citations=len(list(cached.citations or [])),
+            actions=len(list(cached.actions or [])),
+            cache_hit=True,
+        )
+        return cached
     try:
         response = await _service().drill(payload)
+        set_cached_action(cache_key, response)
         log_timed_event(
             logger,
             "tutor.drill",
@@ -357,6 +409,7 @@ async def tutor_drill(
             difficulty=payload.difficulty,
             citations=len(list(response.citations or [])),
             actions=len(list(response.actions or [])),
+            cache_hit=False,
         )
         return response
     except TutorProviderUnavailableError as exc:
@@ -386,8 +439,29 @@ async def tutor_prereq_bridge(
     repo = _session_repo(db)
     if not repo.session_exists_for_student(session_id=payload.session_id, student_id=payload.student_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found for this student.")
+    cache_key = TutorActionCacheKey(
+        action_id="prereq-bridge",
+        session_id=payload.session_id,
+        topic_id=payload.topic_id,
+    )
+    cached = get_cached_action(cache_key)
+    if cached is not None:
+        log_timed_event(
+            logger,
+            "tutor.prereq_bridge",
+            started_at,
+            outcome="success",
+            student_id=payload.student_id,
+            session_id=payload.session_id,
+            topic_id=payload.topic_id,
+            citations=len(list(cached.citations or [])),
+            actions=len(list(cached.actions or [])),
+            cache_hit=True,
+        )
+        return cached
     try:
         response = await _service().prereq_bridge(payload)
+        set_cached_action(cache_key, response)
         log_timed_event(
             logger,
             "tutor.prereq_bridge",
@@ -398,6 +472,7 @@ async def tutor_prereq_bridge(
             topic_id=payload.topic_id,
             citations=len(list(response.citations or [])),
             actions=len(list(response.actions or [])),
+            cache_hit=False,
         )
         return response
     except TutorProviderUnavailableError as exc:

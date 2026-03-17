@@ -80,6 +80,7 @@ class Settings(BaseModel):
     prewarm_worker_enabled: bool = _parse_bool(os.getenv("PREWARM_WORKER_ENABLED"), default=True)
     prewarm_worker_poll_seconds: float = float(os.getenv("PREWARM_WORKER_POLL_SECONDS", "5"))
     prewarm_worker_batch_size: int = int(os.getenv("PREWARM_WORKER_BATCH_SIZE", "3"))
+    tutor_action_prewarm_enabled: bool = _parse_bool(os.getenv("TUTOR_ACTION_PREWARM_ENABLED"), default=True)
 
 
 settings = Settings()
