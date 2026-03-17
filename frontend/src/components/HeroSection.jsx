@@ -57,7 +57,7 @@ const HeroSection = ({
                     || signalPayload?.intervention_timeline?.[0]?.focus_concept_label
                     || signalNextStep?.recommended_concept_label
                     || signalNextStep?.recommended_topic_title
-                    || 'Current lesson focus'}
+                    || 'Graph focus unavailable'}
                 </p>
               </div>
               <div className="rounded-2xl bg-white p-3">

@@ -4,6 +4,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from backend.core.auth import get_current_user
+from backend.core.config import settings
 from backend.core.database import get_db
 from backend.main import app
 
@@ -34,6 +35,7 @@ def test_section7_admin_routes_require_admin_role():
 def test_section7_admin_flow_with_mocked_services(monkeypatch):
     app.dependency_overrides[get_db] = _override_db
     app.dependency_overrides[get_current_user] = _admin_user
+    monkeypatch.setattr(settings, "internal_service_key", "test-internal-key")
 
     class _CurriculumService:
         def get_pending_approvals(self):
@@ -86,6 +88,7 @@ def test_section7_admin_flow_with_mocked_services(monkeypatch):
             "top_k": 6,
             "approved_only": True,
         },
+        headers={"X-Internal-Service-Key": "test-internal-key"},
     )
 
     app.dependency_overrides.clear()

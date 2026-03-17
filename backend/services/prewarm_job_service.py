@@ -195,6 +195,10 @@ class PrewarmJobService:
     def process_once(cls, *, batch_size: int | None = None) -> int:
         processed = 0
         remaining = max(int(batch_size or settings.prewarm_worker_batch_size), 1)
+        if not (_worker_thread and _worker_thread.is_alive()):
+            recovered = cls.requeue_running_jobs()
+            if recovered:
+                logger.info("prewarm.job.recovered_stale_jobs count=%s", recovered)
         while remaining > 0:
             db = SessionLocal()
             try:
@@ -225,7 +229,11 @@ class PrewarmJobService:
     def requeue_running_jobs(cls) -> int:
         db = SessionLocal()
         try:
-            return PrewarmJobRepository(db).requeue_running_jobs()
+            repo = PrewarmJobRepository(db)
+            requeue = getattr(repo, "requeue_running_jobs", None)
+            if not callable(requeue):
+                return 0
+            return requeue()
         finally:
             db.close()
 

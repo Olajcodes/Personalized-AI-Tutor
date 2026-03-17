@@ -236,7 +236,7 @@ const CoursePage = () => {
                     Next best move
                   </div>
                   <h2 className="mt-3 text-2xl font-black text-slate-900">
-                    {effectiveRecommendationStory?.headline || effectiveNextStep.recommended_topic_title || effectiveNextStep.recommended_concept_label || 'Continue current focus'}
+                    {effectiveRecommendationStory?.headline || effectiveNextStep.recommended_topic_title || effectiveNextStep.recommended_concept_label || effectiveNextStep.reason || 'Graph recommendation unavailable'}
                   </h2>
                   <p className="mt-2 text-sm leading-7 text-slate-600">{effectiveRecommendationStory?.supporting_reason || effectiveNextStep.reason}</p>
                   {safeArray(effectiveNextStep.prereq_gap_labels).length > 0 && (

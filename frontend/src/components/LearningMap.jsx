@@ -104,7 +104,7 @@ export default function LearningMap({ classLevel = 'SSS 2', subject = 'Mathemati
         {nextStep && (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
             <div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">Next best node</div>
-            <div className="mt-1 font-bold">{nextStep.recommended_topic_title || nextStep.recommended_concept_label || 'Continue current focus'}</div>
+            <div className="mt-1 font-bold">{nextStep.recommended_topic_title || nextStep.recommended_concept_label || nextStep.reason || 'Graph recommendation unavailable'}</div>
           </div>
         )}
       </div>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, Brain, Loader2, AlertCircle, GitBranch, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -135,7 +135,10 @@ export default function AIRecommendation({
   const unmappedTopics = safeArray(recommendation.unmapped_topic_titles);
   const recommendedTopicId = recommendation.recommended_topic_id || null;
 
-  const title = recommendation.recommended_topic_title || recommendation.recommended_concept_label || 'Continue current focus';
+  const title = recommendation.recommended_topic_title
+    || recommendation.recommended_concept_label
+    || recommendation.reason
+    || 'Graph recommendation unavailable';
   const subtitle = hasPrereqGap && blockingLabels.length
     ? `Rebuild ${blockingLabels[0]} before moving deeper.`
     : recommendation.recommended_concept_label
@@ -272,3 +275,4 @@ export default function AIRecommendation({
     </div>
   );
 }
+

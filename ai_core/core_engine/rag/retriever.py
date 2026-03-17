@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from ai_core.core_engine.integrations.postgres_repo import PostgresRepo
 from ai_core.core_engine.integrations.redis_cache import RedisCache
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -128,8 +132,12 @@ class RagRetriever:
             if isinstance(cached, list):
                 return [RagChunk(**item) for item in cached]
 
-        client = self._ensure_client()
-        query_vector = self._embed_query(query)
+        try:
+            client = self._ensure_client()
+            query_vector = self._embed_query(query)
+        except Exception as exc:
+            logger.warning("rag.retrieve setup failed; returning empty result set: %s", exc)
+            return []
 
         try:
             from qdrant_client.models import FieldCondition, Filter, MatchAny, MatchValue

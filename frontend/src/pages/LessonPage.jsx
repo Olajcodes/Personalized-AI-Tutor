@@ -1447,7 +1447,7 @@ export default function LessonPage() {
             : `Your latest checkpoint shows ${out.concept_label} still needs repair.`),
         evidence_summary: assessmentSummary,
         next_concept_label: out.graph_remediation?.recommended_next_concept_label || null,
-        action_label: recommendedTopicId ? 'Open Recommended Lesson' : (out.is_correct ? 'Continue current focus' : 'Repair prerequisite'),
+        action_label: recommendedTopicId ? 'Open Recommended Lesson' : (out.is_correct ? 'Stay on current graph focus' : 'Repair prerequisite'),
       };
 
       saveGraphIntervention({
