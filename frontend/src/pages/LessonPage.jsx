@@ -521,6 +521,56 @@ export default function LessonPage() {
     };
   }, [pendingAssessment, lastAssessmentReview, lesson?.assessment_ready]);
 
+  const assessmentRecommendation = useMemo(() => {
+    if (!lastAssessmentReview) return null;
+    const remediation = lastAssessmentReview.graphRemediation || null;
+    const recommendedTopicId = lastAssessmentReview.recommendedTopicId || remediation?.recommended_next_topic_id || null;
+    const recommendedTopicTitle = lastAssessmentReview.recommendedTopicTitle || remediation?.recommended_next_topic_title || null;
+    const blockingLabel = remediation?.blocking_prerequisite_label || null;
+    const blockingTopicTitle = remediation?.blocking_prerequisite_topic_title || null;
+    if (blockingLabel) {
+      return {
+        tone: 'amber',
+        headline: `Bridge ${blockingLabel}`,
+        detail: remediation?.recommendation_reason
+          || (blockingTopicTitle
+            ? `Revisit ${blockingTopicTitle} before retrying this checkpoint.`
+            : 'Repair the blocking prerequisite before moving forward.'),
+        actionLabel: blockingTopicTitle ? `Open ${blockingTopicTitle}` : 'Bridge prerequisite',
+        actionType: blockingTopicTitle ? 'open_topic' : 'bridge_label',
+        actionValue: blockingTopicTitle ? recommendedTopicId : blockingLabel,
+      };
+    }
+    if (recommendedTopicId && recommendedTopicTitle && String(recommendedTopicId) !== String(topicId)) {
+      return {
+        tone: 'indigo',
+        headline: `Next best lesson: ${recommendedTopicTitle}`,
+        detail: remediation?.recommendation_reason || 'Your mastery evidence is ready to move forward.',
+        actionLabel: `Open ${recommendedTopicTitle}`,
+        actionType: 'open_topic',
+        actionValue: recommendedTopicId,
+      };
+    }
+    if (!lastAssessmentReview.isCorrect) {
+      return {
+        tone: 'rose',
+        headline: 'Retry this checkpoint',
+        detail: 'Review the explanation, then answer the checkpoint again to log mastery.',
+        actionLabel: 'Retry checkpoint',
+        actionType: 'retry',
+        actionValue: null,
+      };
+    }
+    return {
+      tone: 'emerald',
+      headline: 'You are ready to advance',
+      detail: 'Push into a harder checkpoint or continue the lesson flow.',
+      actionLabel: 'Try harder checkpoint',
+      actionType: 'harder',
+      actionValue: null,
+    };
+  }, [lastAssessmentReview, topicId]);
+
   const lastAssistantIndex = useMemo(() => {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
       if (messages[index]?.role !== 'student') return index;
@@ -941,6 +991,34 @@ export default function LessonPage() {
     const prompt = action.prompt || action.label;
     if (!prompt) return;
     sendChat(prompt, { mode: action.mode || selectedMode });
+  };
+
+  const handleBridgeLabel = async (label) => {
+    if (!label || isBusy) return;
+    await sendChat(
+      `Bridge ${label} into the current lesson. Start from the prerequisite, then connect it with one example.`,
+      { mode: 'socratic' },
+    );
+  };
+
+  const handleAssessmentRecommendation = async () => {
+    if (!assessmentRecommendation || isBusy) return;
+    const { actionType, actionValue } = assessmentRecommendation;
+    if (actionType === 'open_topic' && actionValue) {
+      await openRecommendedLesson(actionValue);
+      return;
+    }
+    if (actionType === 'bridge_label' && actionValue) {
+      await handleBridgeLabel(actionValue);
+      return;
+    }
+    if (actionType === 'retry') {
+      await startAssessment('medium');
+      return;
+    }
+    if (actionType === 'harder') {
+      await startAssessment('hard');
+    }
   };
 
   const requestMistakeExplanation = async ({
@@ -1623,6 +1701,30 @@ export default function LessonPage() {
                         </button>
                       )}
                     </div>
+                  </div>
+                )}
+                {assessmentRecommendation && (
+                  <div className={`mb-4 rounded-[1.5rem] border p-4 ${
+                    assessmentRecommendation.tone === 'amber'
+                      ? 'border-amber-200 bg-amber-50'
+                      : assessmentRecommendation.tone === 'rose'
+                        ? 'border-rose-200 bg-rose-50'
+                        : assessmentRecommendation.tone === 'emerald'
+                          ? 'border-emerald-200 bg-emerald-50'
+                          : 'border-indigo-200 bg-indigo-50'
+                  }`}>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Next best action</p>
+                    <p className="mt-2 text-sm font-semibold text-slate-800">{assessmentRecommendation.headline}</p>
+                    <p className="mt-2 text-xs leading-6 text-slate-600">{assessmentRecommendation.detail}</p>
+                    <button
+                      type="button"
+                      onClick={handleAssessmentRecommendation}
+                      disabled={isBusy}
+                      className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white disabled:opacity-60"
+                    >
+                      {assessmentRecommendation.actionLabel}
+                      <ArrowRight size={14} />
+                    </button>
                   </div>
                 )}
                 <div ref={scrollRef} className="max-h-[480px] space-y-4 overflow-y-auto rounded-[1.5rem] bg-slate-50 p-4">
