@@ -251,8 +251,21 @@ export default function Dashboard() {
             : Array.isArray(effectiveMapData?.intervention_timeline)
                 ? effectiveMapData.intervention_timeline
                 : [];
+        const hasPendingCheckpoint = recommendationStory?.status === 'resume_checkpoint';
 
-        if (nextStep?.recommended_topic_id) {
+        if (hasPendingCheckpoint) {
+            tasks.push({
+                id: 'resume-checkpoint',
+                badge: 'Checkpoint',
+                title: recommendationStory?.headline || nextStep?.recommended_topic_title || 'Resume your checkpoint',
+                subtext: recommendationStory?.supporting_reason || 'A tutor checkpoint is waiting inside the current lesson.',
+                actionLabel: 'Resume checkpoint',
+                onClick: resumeLatestIntervention,
+                tone: 'emerald',
+            });
+        }
+
+        if (!hasPendingCheckpoint && nextStep?.recommended_topic_id) {
             tasks.push({
                 id: 'recommended-lesson',
                 badge: recommendationStory?.status === 'bridge_prerequisite' ? 'Repair gap' : 'Next lesson',

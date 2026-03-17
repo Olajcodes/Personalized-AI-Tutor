@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, CalendarCheck2, GitBranch, Inbox, Route, ShieldAlert } from 'lucide-react';
+import { ArrowRight, CalendarCheck2, GitBranch, Inbox, Route, ShieldAlert, Target } from 'lucide-react';
 
 const TONE_STYLES = {
   indigo: {
@@ -16,6 +16,11 @@ const TONE_STYLES = {
     chip: 'border-slate-200 bg-slate-50 text-slate-700',
     button: 'bg-slate-900 text-white hover:bg-slate-800',
     icon: Route,
+  },
+  emerald: {
+    chip: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    button: 'bg-emerald-600 text-white hover:bg-emerald-700',
+    icon: Target,
   },
 };
 
