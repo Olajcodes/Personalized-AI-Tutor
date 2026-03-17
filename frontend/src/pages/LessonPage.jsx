@@ -62,7 +62,27 @@ const TUTOR_MODES = [
   { id: 'exam-practice', label: 'Exam', description: 'Exam-style prompts and timing.' },
 ];
 
+const FOLLOW_UP_ACTIONS = [
+  { id: 'simpler', label: 'Explain simpler', prompt: 'Explain this in simpler terms.', mode: 'teach' },
+  { id: 'example', label: 'Show example', prompt: 'Give one concrete example for this topic.', mode: 'teach' },
+  { id: 'check', label: 'Ask me one question', prompt: 'Ask me one short question to check understanding.', mode: 'socratic' },
+  { id: 'waec', label: 'WAEC-style', prompt: 'Give me one WAEC-style question on this topic.', mode: 'exam-practice' },
+];
+
 const bootstrapCacheKey = ({ studentId, subject, level, term, topicId }) => [studentId, subject, level, term, topicId].join(':');
+
+const createMessageId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
+const STREAM_PHASE_LABELS = {
+  retrieving_context: 'Gathering lesson context...',
+  composing_response: 'Drafting the response...',
+  finalizing_response: 'Finalizing actions...',
+};
 
 const readBootstrapCache = (key) => {
   const entry = lessonBootstrapCache.get(key);
@@ -104,11 +124,17 @@ function MessageCard({
   onStartCheckpoint,
   onOpenPrereqBridge,
   onStartDrill,
+  followUps,
+  onFollowUp,
+  showFollowUps,
 }) {
   const isStudent = item.role === 'student';
+  const isStreaming = !isStudent && Boolean(item.streaming);
   const showCheckpointAction = !isStudent && Boolean(item.recommended_assessment);
   const showPrereqAction = !isStudent && Boolean(item.prerequisite_warning);
   const showDrillAction = !isStudent && safeArray(item.concept_focus).length > 0;
+  const showActionChips = !isStudent && safeArray(item.actions).length > 0;
+  const showFollowUpActions = !isStudent && !item.streaming && showFollowUps && safeArray(followUps).length > 0;
   return (
     <div className={`flex ${isStudent ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[92%] rounded-3xl p-4 text-sm ${isStudent ? 'bg-indigo-600 text-white' : 'border border-slate-200 bg-white text-slate-700'}`}>
@@ -117,6 +143,17 @@ function MessageCard({
         ) : (
           <div className="space-y-3">
             <div className="whitespace-pre-wrap text-sm leading-7">{item.content || ''}</div>
+            {isStreaming && (
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <LoaderCircle className="animate-spin text-indigo-500" size={14} />
+                <span>Streaming response...</span>
+              </div>
+            )}
+            {item.error && (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+                {item.error}
+              </div>
+            )}
             {safeArray(item.key_points).length > 0 && (
               <div className="rounded-2xl bg-slate-50 p-3">
                 <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Key Points</p>
@@ -155,6 +192,24 @@ function MessageCard({
                       <p className="font-black uppercase tracking-[0.16em] text-slate-400">{citation.source_id || 'Curriculum source'}</p>
                       <p className="mt-1">{citation.snippet}</p>
                     </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {showActionChips && (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Suggested actions</p>
+                <div className="flex flex-wrap gap-2">
+                  {item.actions.map((action, index) => (
+                    <button
+                      key={`${action}-${index}`}
+                      type="button"
+                      onClick={() => onFollowUp?.({ prompt: action, label: action })}
+                      disabled={item.streaming}
+                      className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600 hover:border-indigo-200 hover:text-indigo-700 disabled:opacity-60"
+                    >
+                      {action}
+                    </button>
                   ))}
                 </div>
               </div>
@@ -216,6 +271,21 @@ function MessageCard({
                 )}
               </div>
             )}
+            {showFollowUpActions && (
+              <div className="flex flex-wrap gap-2">
+                {followUps.map((action) => (
+                  <button
+                    key={action.id}
+                    type="button"
+                    onClick={() => onFollowUp?.(action)}
+                    disabled={item.streaming}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -267,6 +337,7 @@ export default function LessonPage() {
   const [status, setStatus] = useState('loading');
   const [error, setError] = useState('');
   const scrollRef = useRef(null);
+  const streamingMessageRef = useRef(null);
   const activeCacheKey = useMemo(
     () => bootstrapCacheKey({ studentId: activeId, subject: currentSubject, level: currentLevel, term: currentTerm, topicId }),
     [activeId, currentLevel, currentSubject, currentTerm, topicId],
@@ -317,14 +388,13 @@ export default function LessonPage() {
         setBootstrap(cachedBootstrap);
         setPendingAssessment(cachedBootstrap.pending_assessment || null);
         setMessages([
-          {
-            role: 'assistant',
-            content: cachedBootstrap.greeting || 'Your lesson cockpit is ready.',
+          buildAssistantMessage({
+            assistant_message: cachedBootstrap.greeting || 'Your lesson cockpit is ready.',
             key_points: [
               cachedBootstrap.why_this_topic || 'Use the graph rail to see why this lesson matters.',
               cachedBootstrap.recent_evidence?.summary || null,
             ].filter(Boolean),
-          },
+          }),
         ]);
         setStatus('ready');
       }
@@ -358,14 +428,13 @@ export default function LessonPage() {
         writeBootstrapCache(activeCacheKey, bootstrapJson);
         setPendingAssessment(bootstrapJson.pending_assessment || null);
         setMessages([
-          {
-            role: 'assistant',
-            content: bootstrapJson.greeting || 'Your lesson cockpit is ready.',
+          buildAssistantMessage({
+            assistant_message: bootstrapJson.greeting || 'Your lesson cockpit is ready.',
             key_points: [
               bootstrapJson.why_this_topic || 'Use the graph rail to see why this lesson matters.',
               cockpitJson.recent_evidence?.summary || null,
             ].filter(Boolean),
-          },
+          }),
         ]);
         setStatus('ready');
       } catch (err) {
@@ -443,22 +512,77 @@ export default function LessonPage() {
     };
   }, [pendingAssessment, lastAssessmentReview, lesson?.assessment_ready]);
 
-  const appendAssistant = (payload) => {
+  const lastAssistantIndex = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index]?.role !== 'student') return index;
+    }
+    return -1;
+  }, [messages]);
+
+  const buildAssistantMessage = (payload = {}, overrides = {}) => ({
+    id: overrides.id || payload.id || createMessageId(),
+    role: 'assistant',
+    content: payload.assistant_message || payload.message || payload.content || '',
+    key_points: payload.key_points || [],
+    concept_focus: payload.concept_focus || [],
+    citations: payload.citations || [],
+    recommendations: payload.recommendations || [],
+    actions: payload.actions || [],
+    next_action: payload.next_action || null,
+    prerequisite_warning: payload.prerequisite_warning || null,
+    recommended_assessment: payload.recommended_assessment || null,
+    streaming: overrides.streaming || false,
+    error: overrides.error || null,
+  });
+
+  const appendAssistant = (payload, overrides = {}) => {
+    setMessages((prev) => [...prev, buildAssistantMessage(payload, overrides)]);
+  };
+
+  const startStreamingMessage = () => {
+    const id = createMessageId();
+    streamingMessageRef.current = id;
     setMessages((prev) => [
       ...prev,
-      {
-        role: 'assistant',
-        content: payload.assistant_message || payload.message || 'Tutor response unavailable.',
-        key_points: payload.key_points || [],
-        concept_focus: payload.concept_focus || [],
-        citations: payload.citations || [],
-        recommendations: payload.recommendations || [],
-        actions: payload.actions || [],
-        next_action: payload.next_action || null,
-        prerequisite_warning: payload.prerequisite_warning || null,
-        recommended_assessment: payload.recommended_assessment || null,
-      },
+      buildAssistantMessage({ assistant_message: '' }, { id, streaming: true }),
     ]);
+    return id;
+  };
+
+  const updateStreamingMessage = (delta) => {
+    const id = streamingMessageRef.current;
+    if (!id || !delta) return;
+    setMessages((prev) => prev.map((item) => (
+      item.id === id
+        ? { ...item, content: `${item.content || ''}${delta}` }
+        : item
+    )));
+  };
+
+  const finalizeStreamingMessage = (payload) => {
+    const id = streamingMessageRef.current;
+    if (!id) {
+      appendAssistant(payload);
+      return;
+    }
+    const finalMessage = buildAssistantMessage(payload, { id });
+    setMessages((prev) => prev.map((item) => (
+      item.id === id ? { ...finalMessage, streaming: false } : item
+    )));
+    streamingMessageRef.current = null;
+  };
+
+  const failStreamingMessage = (errorMessage) => {
+    const id = streamingMessageRef.current;
+    const message = errorMessage?.message || errorMessage || 'Tutor request failed.';
+    if (!id) {
+      appendAssistant({ assistant_message: message });
+      return;
+    }
+    setMessages((prev) => prev.map((item) => (
+      item.id === id ? { ...item, streaming: false, error: message } : item
+    )));
+    streamingMessageRef.current = null;
   };
 
   const openRecommendedLesson = async (recommendedTopicId) => {
@@ -513,42 +637,50 @@ export default function LessonPage() {
   };
 
   const consumeStream = async (payload) => {
-    const response = await fetch(`${API_URL}/tutor/chat/stream`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok || !response.body) {
-      const err = await response.json().catch(() => null);
-      throw new Error(err?.detail || 'Tutor stream failed.');
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const events = buffer.split('\n\n');
-      buffer = events.pop() || '';
-      for (const block of events) {
-        const lines = block.split('\n');
-        const event = lines.find((line) => line.startsWith('event:'))?.replace('event:', '').trim();
-        const dataLine = lines.find((line) => line.startsWith('data:'))?.replace('data:', '').trim() || '{}';
-        const data = JSON.parse(dataLine);
-        if (event === 'status') setStreamPhase(data.phase || '');
-        if (event === 'message') appendAssistant(data);
-        if (event === 'error') throw new Error(data.detail || 'Tutor stream failed.');
+    try {
+      const response = await fetch(`${API_URL}/tutor/chat/stream`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok || !response.body) {
+        const err = await response.json().catch(() => null);
+        throw new Error(err?.detail || 'Tutor stream failed.');
       }
+
+      startStreamingMessage();
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
+        for (const block of events) {
+          const lines = block.split('\n');
+          const event = lines.find((line) => line.startsWith('event:'))?.replace('event:', '').trim();
+          const dataLine = lines.find((line) => line.startsWith('data:'))?.replace('data:', '').trim() || '{}';
+          const data = JSON.parse(dataLine);
+          if (event === 'status') setStreamPhase(STREAM_PHASE_LABELS[data.phase] || data.phase || '');
+          if (event === 'delta') updateStreamingMessage(data.content || '');
+          if (event === 'message') finalizeStreamingMessage(data);
+          if (event === 'error') throw new Error(data.detail || 'Tutor stream failed.');
+          if (event === 'done') setStreamPhase('');
+        }
+      }
+    } catch (err) {
+      failStreamingMessage(err);
+      throw err;
     }
   };
 
   const sendChat = async (message, options = {}) => {
     const trimmed = (message ?? chatInput).trim();
     if (!trimmed || !sessionId || isBusy) return;
-    setMessages((prev) => [...prev, { role: 'student', content: trimmed }]);
+    setMessages((prev) => [...prev, { id: createMessageId(), role: 'student', content: trimmed }]);
     setChatInput('');
     setIsBusy(true);
     try {
@@ -565,7 +697,7 @@ export default function LessonPage() {
         message: trimmed,
       });
     } catch (err) {
-      setMessages((prev) => [...prev, { role: 'assistant', content: err.message || 'Tutor request failed.' }]);
+      console.warn('Tutor stream failed:', err);
     } finally {
       setIsBusy(false);
       setStreamPhase('');
@@ -644,7 +776,7 @@ export default function LessonPage() {
           : 'Answer the checkpoint below to update your mastery.',
       });
     } catch (err) {
-      setMessages((prev) => [...prev, { role: 'assistant', content: err.message || 'Checkpoint unavailable.' }]);
+      appendAssistant({ assistant_message: err.message || 'Checkpoint unavailable.' });
     } finally {
       setIsBusy(false);
     }
@@ -662,7 +794,7 @@ export default function LessonPage() {
         topic_id: topicId,
       }));
     } catch (err) {
-      setMessages((prev) => [...prev, { role: 'assistant', content: err.message || 'Recap unavailable.' }]);
+      appendAssistant({ assistant_message: err.message || 'Recap unavailable.' });
     } finally {
       setIsBusy(false);
     }
@@ -680,7 +812,7 @@ export default function LessonPage() {
         topic_id: topicId,
       }));
     } catch (err) {
-      setMessages((prev) => [...prev, { role: 'assistant', content: err.message || 'Prerequisite bridge unavailable.' }]);
+      appendAssistant({ assistant_message: err.message || 'Prerequisite bridge unavailable.' });
     } finally {
       setIsBusy(false);
     }
@@ -752,7 +884,7 @@ export default function LessonPage() {
           : 'Stay with the current lesson until evidence is stronger.',
       });
     } catch (err) {
-      setMessages((prev) => [...prev, { role: 'assistant', content: err.message || 'Why this topic is unavailable.' }]);
+      appendAssistant({ assistant_message: err.message || 'Why this topic is unavailable.' });
     } finally {
       setIsBusy(false);
     }
@@ -779,6 +911,13 @@ export default function LessonPage() {
       return;
     }
     sendChat(action.prompt, { mode: action.intent });
+  };
+
+  const handleFollowUp = (action) => {
+    if (!action) return;
+    const prompt = action.prompt || action.label;
+    if (!prompt) return;
+    sendChat(prompt, { mode: action.mode || selectedMode });
   };
 
   const requestMistakeExplanation = async ({
@@ -817,7 +956,7 @@ export default function LessonPage() {
           : 'Retry the checkpoint after revising the core rule and one worked example.',
       });
     } catch (err) {
-      setMessages((prev) => [...prev, { role: 'assistant', content: err.message || 'Mistake explanation unavailable.' }]);
+      appendAssistant({ assistant_message: err.message || 'Mistake explanation unavailable.' });
     } finally {
       setStreamPhase('');
       if (useBusy) setIsBusy(false);
@@ -850,7 +989,7 @@ export default function LessonPage() {
         difficulty: 'medium',
       }));
     } catch (err) {
-      setMessages((prev) => [...prev, { role: 'assistant', content: err.message || 'Drill unavailable.' }]);
+      appendAssistant({ assistant_message: err.message || 'Drill unavailable.' });
     } finally {
       setIsBusy(false);
     }
@@ -870,7 +1009,7 @@ export default function LessonPage() {
         horizon_days: 7,
       }));
     } catch (err) {
-      setMessages((prev) => [...prev, { role: 'assistant', content: err.message || 'Study plan unavailable.' }]);
+      appendAssistant({ assistant_message: err.message || 'Study plan unavailable.' });
     } finally {
       setIsBusy(false);
     }
@@ -1028,7 +1167,7 @@ export default function LessonPage() {
         }) : prev);
       }
     } catch (err) {
-      setMessages((prev) => [...prev, { role: 'assistant', content: err.message || 'Failed to submit checkpoint.' }]);
+      appendAssistant({ assistant_message: err.message || 'Failed to submit checkpoint.' });
     } finally {
       setIsBusy(false);
     }
@@ -1452,12 +1591,15 @@ export default function LessonPage() {
                 <div ref={scrollRef} className="max-h-[480px] space-y-4 overflow-y-auto rounded-[1.5rem] bg-slate-50 p-4">
                   {messages.map((item, index) => (
                     <MessageCard
-                      key={`${item.role}-${index}`}
+                      key={item.id || `${item.role}-${index}`}
                       item={item}
                       onOpenRecommendation={openRecommendedLesson}
                       onStartCheckpoint={() => startAssessment()}
                       onOpenPrereqBridge={handlePrereqBridge}
                       onStartDrill={handleDrill}
+                      followUps={FOLLOW_UP_ACTIONS}
+                      onFollowUp={handleFollowUp}
+                      showFollowUps={index === lastAssistantIndex}
                     />
                   ))}
                   {isBusy && (

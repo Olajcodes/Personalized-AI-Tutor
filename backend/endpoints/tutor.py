@@ -7,6 +7,7 @@ Public endpoints for tutor chat and guided assistance modes:
 - explain mistake
 """
 
+import asyncio
 import json
 import logging
 import time
@@ -228,6 +229,12 @@ async def tutor_chat_stream(
             actions=len(actions),
         )
         yield "event: status\ndata: " + json.dumps({"phase": "composing_response"}) + "\n\n"
+        for offset in range(0, len(assistant_message or ""), 120):
+            chunk = (assistant_message or "")[offset : offset + 120]
+            if chunk:
+                yield "event: delta\ndata: " + json.dumps({"content": chunk}) + "\n\n"
+                await asyncio.sleep(0)
+        yield "event: status\ndata: " + json.dumps({"phase": "finalizing_response"}) + "\n\n"
         yield "event: message\ndata: " + json.dumps(response.model_dump()) + "\n\n"
         yield "event: done\ndata: {}\n\n"
 
