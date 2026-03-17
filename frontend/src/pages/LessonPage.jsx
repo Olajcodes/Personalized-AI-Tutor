@@ -69,6 +69,15 @@ const FOLLOW_UP_ACTIONS = [
   { id: 'waec', label: 'WAEC-style', prompt: 'Give me one WAEC-style question on this topic.', mode: 'exam-practice' },
 ];
 
+const MODE_DEFAULT_PROMPTS = {
+  teach: 'Teach this lesson step-by-step with one quick example.',
+  socratic: 'Ask me 3 short questions that guide me to the rule.',
+  diagnose: 'Diagnose where I might be confused and fix the gap.',
+  drill: 'Give me one focused drill question on this lesson.',
+  recap: 'Recap this lesson in three sharp points and a memory hook.',
+  'exam-practice': 'Give me one WAEC-style question and show how to answer it.',
+};
+
 const bootstrapCacheKey = ({ studentId, subject, level, term, topicId }) => [studentId, subject, level, term, topicId].join(':');
 
 const createMessageId = () => {
@@ -913,6 +922,20 @@ export default function LessonPage() {
     sendChat(action.prompt, { mode: action.intent });
   };
 
+  const runModeAction = async () => {
+    if (isBusy) return;
+    if (selectedMode === 'recap') {
+      await handleRecap();
+      return;
+    }
+    if (selectedMode === 'drill') {
+      await handleDrill();
+      return;
+    }
+    const prompt = MODE_DEFAULT_PROMPTS[selectedMode] || MODE_DEFAULT_PROMPTS.teach;
+    await sendChat(prompt, { mode: selectedMode });
+  };
+
   const handleFollowUp = (action) => {
     if (!action) return;
     const prompt = action.prompt || action.label;
@@ -1511,6 +1534,20 @@ export default function LessonPage() {
                         {mode.label}
                       </button>
                     ))}
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={runModeAction}
+                      disabled={isBusy}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white hover:bg-indigo-700 disabled:opacity-60"
+                    >
+                      Run {activeMode.label} flow
+                      <ArrowRight size={14} />
+                    </button>
+                    <p className="text-xs leading-5 text-slate-500">
+                      {MODE_DEFAULT_PROMPTS[activeMode.id]}
+                    </p>
                   </div>
                 </div>
                 <div className="mb-4 grid gap-2 sm:grid-cols-2">
