@@ -742,6 +742,14 @@ export default function LessonPage() {
     return { currentCount, prereqCount, downstreamCount };
   }, [graphContext]);
 
+  const graphPulse = useMemo(() => {
+    const currentLabel = graphContext?.current_concepts?.[0]?.label || null;
+    const weakPrereqLabel = graphContext?.prerequisite_concepts?.[0]?.label || null;
+    const nextUnlockLabel = bootstrap?.next_unlock?.topic_title || bootstrap?.next_unlock?.concept_label || null;
+    const readiness = graphAvailable ? 'Graph ready' : 'Graph warming';
+    return { currentLabel, weakPrereqLabel, nextUnlockLabel, readiness };
+  }, [bootstrap?.next_unlock, graphAvailable, graphContext]);
+
   const fetchWhyThisTopic = async () => {
     const params = new URLSearchParams({
       student_id: activeId,
@@ -1494,7 +1502,7 @@ export default function LessonPage() {
           </div>
         </div>
 
-        <div className="grid gap-6 p-4 md:p-8 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.9fr)]">
+          <div className="grid gap-8 p-4 md:p-8 xl:grid-cols-[minmax(0,1.35fr)_minmax(380px,1fr)]">
           <div className="xl:col-span-2">
             <PresentationCueCard
               stepId="lesson"
@@ -1670,22 +1678,54 @@ export default function LessonPage() {
             </div>
           </motion.section>
 
-          <motion.aside
-            initial={{ opacity: 0, x: 18 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.35, delay: 0.05 }}
-            className="space-y-6"
-          >
-                <LessonKnowledgeGraph
-                  graphContext={graphContext}
-                  nextUnlock={bootstrap?.next_unlock}
-                  whyTopicDetail={whyTopicDetail}
-                  onOpenTopic={openRecommendedLesson}
-                  onExplainConcept={handleGraphExplain}
-                  onBridgeConcept={handleGraphBridge}
-                  onDrillConcept={handleGraphDrill}
-                  onSelectConcept={setSelectedGraphConcept}
-                />
+            <motion.aside
+              initial={{ opacity: 0, x: 18 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.35, delay: 0.05 }}
+              className="space-y-6 xl:sticky xl:top-6 self-start"
+            >
+              <section className="rounded-[2rem] border border-indigo-200 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.18),_transparent_45%),linear-gradient(135deg,#ffffff,_#eef2ff)] p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500">Graph Rail Pulse</p>
+                    <p className="mt-2 text-sm font-semibold text-slate-800">
+                      {graphPulse.currentLabel || (graphAvailable ? 'Current concept focus' : 'Graph context unavailable')}
+                    </p>
+                  </div>
+                  <div className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-700">
+                    {graphPulse.readiness}
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3">
+                  <div className="rounded-2xl border border-white bg-white/80 px-4 py-3 text-xs text-slate-700">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Weak prerequisite</p>
+                    <p className="mt-1 font-semibold">{graphPulse.weakPrereqLabel || 'No blocking prerequisite detected'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white bg-white/80 px-4 py-3 text-xs text-slate-700">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Next unlock</p>
+                    <p className="mt-1 font-semibold">{graphPulse.nextUnlockLabel || 'Stay on this concept cluster'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white bg-white/80 px-4 py-3 text-xs text-slate-600">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Graph coverage</p>
+                    <p className="mt-1 font-semibold">
+                      {graphAvailable
+                        ? `${topicWarmSummary.currentCount} current · ${topicWarmSummary.prereqCount} prereq · ${topicWarmSummary.downstreamCount} unlock`
+                        : (graphUnavailableReason || 'Awaiting graph mapping')}
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+              <LessonKnowledgeGraph
+                graphContext={graphContext}
+                nextUnlock={bootstrap?.next_unlock}
+                whyTopicDetail={whyTopicDetail}
+                onOpenTopic={openRecommendedLesson}
+                onExplainConcept={handleGraphExplain}
+                onBridgeConcept={handleGraphBridge}
+                onDrillConcept={handleGraphDrill}
+                onSelectConcept={setSelectedGraphConcept}
+              />
 
             <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center gap-2">
