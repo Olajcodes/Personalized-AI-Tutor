@@ -68,6 +68,7 @@ const CoursePage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [nextStep, setNextStep] = useState(null);
   const [recentEvidence, setRecentEvidence] = useState(null);
+  const [evidenceSummary, setEvidenceSummary] = useState(null);
   const [interventionTimeline, setInterventionTimeline] = useState([]);
   const [recommendationStory, setRecommendationStory] = useState(null);
   const [mapError, setMapError] = useState('');
@@ -127,6 +128,7 @@ const CoursePage = () => {
         setTopics(safeArray(data?.topics));
         setNextStep(data?.next_step || null);
         setRecentEvidence(data?.recent_evidence || null);
+        setEvidenceSummary(data?.evidence_summary || null);
         setInterventionTimeline(safeArray(data?.intervention_timeline));
         setRecommendationStory(data?.recommendation_story || null);
         setMapError(data?.map_error || '');
@@ -136,6 +138,7 @@ const CoursePage = () => {
         setTopics([]);
         setNextStep(null);
         setRecentEvidence(null);
+        setEvidenceSummary(null);
         setInterventionTimeline([]);
         setRecommendationStory(null);
       } finally {
@@ -199,6 +202,27 @@ const CoursePage = () => {
                   <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Best action</div>
                   <p className="mt-1 text-sm font-bold text-slate-800">{effectiveAnalytics.outcome || effectiveRecommendationStory?.action_label || 'Keep learning'}</p>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {evidenceSummary && (
+            <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                <GitBranch className="h-3.5 w-3.5 text-emerald-500" />
+                Mastery evidence snapshot
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                {[
+                  { label: 'Demonstrated', value: evidenceSummary.demonstrated, tone: 'text-emerald-700' },
+                  { label: 'Needs review', value: evidenceSummary.needs_review, tone: 'text-amber-700' },
+                  { label: 'Unassessed', value: evidenceSummary.unassessed, tone: 'text-slate-500' },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">{item.label}</div>
+                    <p className={`mt-1 text-sm font-bold ${item.tone}`}>{item.value}</p>
+                  </div>
+                ))}
               </div>
             </div>
           )}

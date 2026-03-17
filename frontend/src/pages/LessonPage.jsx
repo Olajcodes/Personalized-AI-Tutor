@@ -474,6 +474,24 @@ export default function LessonPage() {
     return { currentCount, prereqCount, downstreamCount };
   }, [graphContext]);
 
+  const fetchWhyThisTopic = async () => {
+    const params = new URLSearchParams({
+      student_id: activeId,
+      subject: currentSubject,
+      sss_level: currentLevel,
+      term: String(currentTerm),
+      topic_id: topicId,
+    });
+    const response = await fetch(`${API_URL}/learning/graph/why-this-topic?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => null);
+      throw new Error(err?.detail || 'Why this topic is unavailable.');
+    }
+    return response.json();
+  };
+
   const postJson = async (path, body) => {
     const response = await fetch(`${API_URL}${path}`, {
       method: 'POST',
@@ -706,7 +724,38 @@ export default function LessonPage() {
     });
   };
 
+  const handleWhyThisTopic = async () => {
+    if (isBusy) return;
+    setIsBusy(true);
+    try {
+      const detail = bootstrap?.why_topic_detail || await fetchWhyThisTopic();
+      const prereqs = safeArray(detail?.prerequisite_labels);
+      const unlocks = safeArray(detail?.unlock_labels);
+      appendAssistant({
+        assistant_message: detail?.explanation || 'This topic is placed to bridge prerequisites into the next unlock.',
+        key_points: [
+          prereqs.length ? `Prerequisites: ${prereqs.join(', ')}` : null,
+          unlocks.length ? `Unlocks: ${unlocks.join(', ')}` : null,
+        ].filter(Boolean),
+        prerequisite_warning: detail?.weakest_prerequisite_label
+          ? `Weakest prerequisite: ${detail.weakest_prerequisite_label}`
+          : null,
+        next_action: detail?.recommended_next?.topic_title
+          ? `Next unlock: ${detail.recommended_next.topic_title}`
+          : 'Stay with the current lesson until evidence is stronger.',
+      });
+    } catch (err) {
+      setMessages((prev) => [...prev, { role: 'assistant', content: err.message || 'Why this topic is unavailable.' }]);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   const handleQuickAction = async (action) => {
+    if (action.id === 'why-this-topic') {
+      await handleWhyThisTopic();
+      return;
+    }
     if (action.intent === 'assessment_start') {
       await startAssessment('medium', {
         focusConceptId: action.focus_concept_id || null,

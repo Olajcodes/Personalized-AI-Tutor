@@ -25,8 +25,9 @@ from backend.schemas.course_schema import (
     CourseBootstrapTopicOut,
     CourseRecentEvidenceOut,
     CourseRecommendationStoryOut,
+    CourseEvidenceSummaryOut,
 )
-from backend.schemas.learning_path_schema import PathNextIn
+from backend.schemas.learning_path_schema import LearningMapNodeOut, PathNextIn
 from backend.services.learning_path_service import LearningPathValidationError, learning_path_service
 from backend.services.lesson_experience_service import LessonExperienceService
 from backend.services.prewarm_job_service import PrewarmJobService
@@ -41,6 +42,7 @@ _NOISY_DESCRIPTION_MARKERS = (
     "SCHEME OF WORK WEEK TOPIC",
     "WEEKEND ASSIGNMENT SECTION",
 )
+MASTERY_THRESHOLD = 0.7
 
 
 def _clean_topic_description(raw: str | None) -> str | None:
@@ -81,6 +83,19 @@ class CourseExperienceService:
         token = re.sub(r"[_-]+", " ", token)
         token = re.sub(r"\s+", " ", token).strip()
         return token.title() if token else None
+
+    @staticmethod
+    def _evidence_summary(nodes: list[LearningMapNodeOut]) -> CourseEvidenceSummaryOut:
+        summary = CourseEvidenceSummaryOut()
+        for node in nodes:
+            score = float(getattr(node, "mastery_score", 0.0) or 0.0)
+            if score >= MASTERY_THRESHOLD:
+                summary.demonstrated += 1
+            elif score > 0:
+                summary.needs_review += 1
+            else:
+                summary.unassessed += 1
+        return summary
 
     def _latest_scope_evidence(
         self,
@@ -510,6 +525,7 @@ class CourseExperienceService:
             str(node.topic_id): node
             for node in (map_visual.nodes if map_visual is not None else [])
         }
+        evidence_summary = self._evidence_summary(list(map_visual.nodes) if map_visual is not None else [])
         next_step = map_visual.next_step if map_visual is not None else None
         recommended_topic_id = str(next_step.recommended_topic_id) if next_step and next_step.recommended_topic_id else None
 
@@ -631,6 +647,7 @@ class CourseExperienceService:
                 next_step=next_step,
                 recent_evidence=recent_evidence,
             ),
+            evidence_summary=evidence_summary,
             map_error=map_error,
             warmed_topic_ids=warmed_topic_ids,
             cache_hit_topic_ids=cache_hit_topic_ids,

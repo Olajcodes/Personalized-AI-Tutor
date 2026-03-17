@@ -54,6 +54,12 @@ class CourseRecommendationStoryOut(BaseModel):
     action_label: str
 
 
+class CourseEvidenceSummaryOut(BaseModel):
+    demonstrated: int = 0
+    needs_review: int = 0
+    unassessed: int = 0
+
+
 class CourseBootstrapOut(BaseModel):
     student_id: UUID
     subject: Literal["math", "english", "civic"]
@@ -66,6 +72,7 @@ class CourseBootstrapOut(BaseModel):
     recent_evidence: CourseRecentEvidenceOut | None = None
     intervention_timeline: list[CourseInterventionEventOut] = Field(default_factory=list)
     recommendation_story: CourseRecommendationStoryOut | None = None
+    evidence_summary: CourseEvidenceSummaryOut | None = None
     map_error: str | None = None
     warmed_topic_ids: list[str] = Field(default_factory=list)
     cache_hit_topic_ids: list[str] = Field(default_factory=list)
