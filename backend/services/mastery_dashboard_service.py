@@ -4,7 +4,7 @@ from statistics import mean
 from uuid import UUID
 
 from backend.repositories.mastery_repo import MasteryRepository
-from backend.schemas.mastery_schema import MasteryDashboardOut, MasteryView, StreakOut
+from backend.schemas.mastery_schema import MasteryDashboardOut, MasteryEvidenceSummary, MasteryView, StreakOut
 
 
 MASTERY_THRESHOLD = 0.7
@@ -65,6 +65,18 @@ class MasteryDashboardService:
             if view == "concept"
             else self.repo.get_topic_mastery(student_id=student_id, subject=subject, term=term)
         )
+        evidence_summary = MasteryEvidenceSummary()
+        for item in mastery:
+            score = float(item.get("score", 0.0) or 0.0)
+            if score >= MASTERY_THRESHOLD:
+                item["mastery_state"] = "demonstrated"
+                evidence_summary.demonstrated += 1
+            elif score > 0:
+                item["mastery_state"] = "needs_review"
+                evidence_summary.needs_review += 1
+            else:
+                item["mastery_state"] = "unassessed"
+                evidence_summary.unassessed += 1
 
         stats = self.repo.get_student_stats(student_id)
         streak_current = int(stats.current_streak) if stats else 0
@@ -92,4 +104,5 @@ class MasteryDashboardService:
             mastery=mastery,
             streak=StreakOut(current=streak_current, best=streak_best),
             badges=badges,
+            evidence_summary=evidence_summary,
         )

@@ -383,6 +383,17 @@ export default function LessonPage() {
     const average = currentConcepts.reduce((sum, item) => sum + (item.mastery_score || 0), 0) / currentConcepts.length;
     return Math.round(average * 100);
   }, [graphContext]);
+  const evidenceSummary = useMemo(() => {
+    const currentConcepts = safeArray(graphContext?.current_concepts);
+    if (!currentConcepts.length) return null;
+    return currentConcepts.reduce((acc, concept) => {
+      const state = concept.mastery_state || 'unassessed';
+      if (state === 'demonstrated') acc.demonstrated += 1;
+      else if (state === 'needs_review') acc.needs_review += 1;
+      else acc.unassessed += 1;
+      return acc;
+    }, { demonstrated: 0, needs_review: 0, unassessed: 0 });
+  }, [graphContext]);
 
   const activeMode = useMemo(
     () => TUTOR_MODES.find((mode) => mode.id === selectedMode) || TUTOR_MODES[0],
@@ -1092,6 +1103,25 @@ export default function LessonPage() {
                       <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Weak prerequisite</p>
                       <p className="mt-1 text-sm font-semibold text-slate-800">{graphContext?.prerequisite_concepts?.[0]?.label || 'No blocking prerequisite detected'}</p>
                     </div>
+                    {evidenceSummary && (
+                      <div className="rounded-2xl bg-white p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Evidence breakdown</p>
+                        <div className="mt-2 grid gap-2 text-xs font-semibold text-slate-600">
+                          <div className="flex items-center justify-between">
+                            <span>Demonstrated</span>
+                            <span className="text-emerald-700">{evidenceSummary.demonstrated}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>Needs review</span>
+                            <span className="text-amber-700">{evidenceSummary.needs_review}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>Unassessed</span>
+                            <span className="text-slate-500">{evidenceSummary.unassessed}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     {recentEvidence && (
                       <div className="rounded-2xl bg-white p-4">
                         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Latest evidence</p>

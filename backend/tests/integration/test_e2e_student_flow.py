@@ -7,6 +7,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.orm import sessionmaker
 
+from backend.core.config import settings
 from backend.core.database import Base, get_db
 from backend.main import app
 from backend.models.lesson import Lesson, LessonBlock

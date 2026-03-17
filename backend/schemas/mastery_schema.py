@@ -25,12 +25,19 @@ class StreakOut(BaseModel):
     best: int
 
 
+class MasteryEvidenceSummary(BaseModel):
+    demonstrated: int = 0
+    needs_review: int = 0
+    unassessed: int = 0
+
+
 class MasteryDashboardOut(BaseModel):
     subject: Literal["math", "english", "civic"]
     view: MasteryView
     mastery: list[dict]
     streak: StreakOut
     badges: list[str]
+    evidence_summary: MasteryEvidenceSummary = Field(default_factory=MasteryEvidenceSummary)
 
 
 class MasterySnapshotCreate(BaseModel):
