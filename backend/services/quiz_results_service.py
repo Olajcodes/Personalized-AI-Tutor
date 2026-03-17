@@ -51,6 +51,32 @@ class QuizResultsService:
         token = re.sub(r"\s+", " ", token).strip()
         return token.title() if token else str(fallback_topic_title or "Untitled Concept").strip()
 
+    @staticmethod
+    def _looks_uuid(value: str | None) -> bool:
+        text = str(value or "").strip()
+        if not text:
+            return False
+        try:
+            UUID(text)
+            return True
+        except (TypeError, ValueError):
+            return False
+
+    def _normalize_concept_label(
+        self,
+        label: str | None,
+        *,
+        concept_id: str | None,
+        fallback_topic_title: str | None = None,
+    ) -> str | None:
+        text = str(label or "").strip()
+        concept_text = str(concept_id or "").strip()
+        if not text or text == concept_text or ":" in text or self._looks_uuid(text):
+            if not concept_text:
+                return self._readable_concept_label("", fallback_topic_title=fallback_topic_title)
+            return self._readable_concept_label(concept_text, fallback_topic_title=fallback_topic_title)
+        return text
+
     async def get_results(self, quiz_id: UUID, student_id: UUID, attempt_id: UUID) -> QuizResultsResponse:
         started_at = now_ms()
         attempt = self.repo.get_attempt_with_answers(attempt_id)
@@ -251,6 +277,26 @@ class QuizResultsService:
             else None
         )
 
+        recommended_next_concept_id = next_step.recommended_concept_id if next_step else None
+        recommended_next_concept_topic_title = (
+            self.repo.find_topic_title_for_concept(
+                concept_id=str(recommended_next_concept_id),
+                subject=subject,
+                sss_level=sss_level,
+                term=term,
+            )
+            if recommended_next_concept_id
+            else None
+        )
+        recommended_next_topic_id = _parse_uuid(next_step.recommended_topic_id) if next_step else None
+        recommended_next_topic_title = None
+        if next_step and next_step.recommended_topic_title and not self._looks_uuid(next_step.recommended_topic_title):
+            recommended_next_topic_title = str(next_step.recommended_topic_title).strip() or None
+        if recommended_next_topic_title is None and recommended_next_topic_id:
+            recommended_next_topic_title = self.repo.get_topic_title(recommended_next_topic_id)
+        if recommended_next_topic_title is None:
+            recommended_next_topic_title = self.repo.get_topic_title(fallback_topic_id)
+
         return QuizGraphRemediationOut(
             weakest_concept_id=weakest_concept,
             weakest_concept_label=self._readable_concept_label(
@@ -264,22 +310,27 @@ class QuizResultsService:
             ),
             blocking_prerequisite_id=blocking_prerequisite_id,
             blocking_prerequisite_label=(
-                self._readable_concept_label(
-                    blocking_prerequisite_id,
+                self._normalize_concept_label(
+                    None,
+                    concept_id=blocking_prerequisite_id,
                     fallback_topic_title=blocking_prerequisite_topic_title,
                 )
                 if blocking_prerequisite_id
                 else None
             ),
             blocking_prerequisite_topic_title=blocking_prerequisite_topic_title,
-            recommended_next_concept_id=(next_step.recommended_concept_id if next_step else None),
-            recommended_next_concept_label=(next_step.recommended_concept_label if next_step else None),
-            recommended_next_topic_id=_parse_uuid(next_step.recommended_topic_id) if next_step else fallback_topic_id,
-            recommended_next_topic_title=(
-                next_step.recommended_topic_title
-                if next_step and next_step.recommended_topic_title
-                else self.repo.get_topic_title(fallback_topic_id)
+            recommended_next_concept_id=recommended_next_concept_id,
+            recommended_next_concept_label=(
+                self._normalize_concept_label(
+                    next_step.recommended_concept_label if next_step else None,
+                    concept_id=str(recommended_next_concept_id or ""),
+                    fallback_topic_title=recommended_next_concept_topic_title,
+                )
+                if next_step
+                else None
             ),
+            recommended_next_topic_id=recommended_next_topic_id or fallback_topic_id,
+            recommended_next_topic_title=recommended_next_topic_title,
             recommendation_reason=(next_step.reason if next_step else None),
         )
 
