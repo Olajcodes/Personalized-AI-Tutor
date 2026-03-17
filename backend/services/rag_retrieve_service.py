@@ -7,12 +7,19 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
+import logging
+
+from backend.core.telemetry import log_timed_event, now_ms
+
 from backend.core.config import settings
 from backend.schemas.internal_rag_schema import (
     InternalRagChunkOut,
     InternalRagRetrieveRequest,
     InternalRagRetrieveResponse,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class RagRetrieveServiceError(RuntimeError):
@@ -342,7 +349,59 @@ class RagRetrieveService:
         )
 
     def retrieve(self, payload: InternalRagRetrieveRequest) -> InternalRagRetrieveResponse:
-        return self.store.retrieve(payload)
+        started_at = now_ms()
+        topic_count = len(list(payload.topic_ids or []))
+        try:
+            response = self.store.retrieve(payload)
+            log_timed_event(
+                logger,
+                "rag.retrieve",
+                started_at,
+                outcome="success",
+                subject=payload.subject,
+                sss_level=payload.sss_level,
+                term=payload.term,
+                top_k=payload.top_k,
+                approved_only=payload.approved_only,
+                topic_count=topic_count,
+                curriculum_version_id=str(payload.curriculum_version_id) if payload.curriculum_version_id else None,
+                chunk_count=len(response.chunks),
+            )
+            return response
+        except RagRetrieveServiceError as exc:
+            log_timed_event(
+                logger,
+                "rag.retrieve",
+                started_at,
+                log_level=logging.WARNING,
+                outcome="error",
+                subject=payload.subject,
+                sss_level=payload.sss_level,
+                term=payload.term,
+                top_k=payload.top_k,
+                approved_only=payload.approved_only,
+                topic_count=topic_count,
+                curriculum_version_id=str(payload.curriculum_version_id) if payload.curriculum_version_id else None,
+                detail=str(exc),
+            )
+            raise
+        except Exception as exc:
+            log_timed_event(
+                logger,
+                "rag.retrieve",
+                started_at,
+                log_level=logging.WARNING,
+                outcome="error",
+                subject=payload.subject,
+                sss_level=payload.sss_level,
+                term=payload.term,
+                top_k=payload.top_k,
+                approved_only=payload.approved_only,
+                topic_count=topic_count,
+                curriculum_version_id=str(payload.curriculum_version_id) if payload.curriculum_version_id else None,
+                detail=str(exc),
+            )
+            raise
 
     def topic_has_chunks(
         self,

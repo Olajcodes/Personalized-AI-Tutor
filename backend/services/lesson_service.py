@@ -14,6 +14,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.core.telemetry import log_timed_event, now_ms
 from backend.models.student_concept_mastery import StudentConceptMastery
 from backend.repositories.lesson_repo import (
     ensure_personalized_lessons_table,
@@ -676,6 +677,7 @@ def _generate_personalized_lesson(
 
 
 def fetch_topic_lesson(db: Session, topic_id: uuid.UUID, student_id: uuid.UUID) -> dict:
+    started_at = now_ms()
     # 1) Student context (required for curriculum-bounded access)
     student_profile = get_student_profile(db, student_id)
     if not student_profile:
@@ -737,6 +739,7 @@ def fetch_topic_lesson(db: Session, topic_id: uuid.UUID, student_id: uuid.UUID) 
         )
     except Exception as exc:  # pragma: no cover - lesson should still load if graph view is unavailable
         logger.warning("lesson.fetch.graph_context_unavailable topic_id=%s student_id=%s detail=%s", topic.id, student_id, exc)
+    graph_status = getattr(graph_context, "status", None) if graph_context is not None else None
 
     if cached is not None:
         cached_meta = dict(cached.generation_metadata or {})
@@ -771,6 +774,23 @@ def fetch_topic_lesson(db: Session, topic_id: uuid.UUID, student_id: uuid.UUID) 
                             "mastery_state": node.mastery_state if node else None,
                         }
                     )
+            log_timed_event(
+                logger,
+                "lesson.fetch",
+                started_at,
+                outcome="cache_hit",
+                source="personalized_cache",
+                student_id=student_id,
+                topic_id=topic.id,
+                subject=subject_slug,
+                sss_level=student_profile.sss_level,
+                term=int(student_profile.active_term),
+                graph_status=graph_status,
+                provider=cached_meta.get("provider"),
+                model=cached_meta.get("model"),
+                source_count=cached_meta.get("source_count"),
+                covered_concepts=len(list(cached_meta.get("covered_concept_ids") or [])),
+            )
             return _lesson_response_from_blocks(
                 topic=topic,
                 title=cached.title,
@@ -787,6 +807,19 @@ def fetch_topic_lesson(db: Session, topic_id: uuid.UUID, student_id: uuid.UUID) 
             topic.id,
             student_id,
             curriculum_version_id,
+        )
+        log_timed_event(
+            logger,
+            "lesson.fetch",
+            started_at,
+            outcome="structured",
+            source="curriculum",
+            student_id=student_id,
+            topic_id=topic.id,
+            subject=subject_slug,
+            sss_level=student_profile.sss_level,
+            term=int(student_profile.active_term),
+            graph_status=graph_status,
         )
         return _lesson_response_from_blocks(
             topic=topic,
@@ -815,6 +848,23 @@ def fetch_topic_lesson(db: Session, topic_id: uuid.UUID, student_id: uuid.UUID) 
         curriculum_version_id,
         mastery_sig,
         len(list(metadata.get("covered_concept_ids") or [])),
+    )
+    log_timed_event(
+        logger,
+        "lesson.fetch",
+        started_at,
+        outcome="generated",
+        source="llm",
+        student_id=student_id,
+        topic_id=topic.id,
+        subject=subject_slug,
+        sss_level=student_profile.sss_level,
+        term=int(student_profile.active_term),
+        graph_status=graph_status,
+        provider=metadata.get("provider"),
+        model=metadata.get("model"),
+        source_count=metadata.get("source_count"),
+        covered_concepts=len(list(metadata.get("covered_concept_ids") or [])),
     )
 
     upsert_personalized_lesson(
