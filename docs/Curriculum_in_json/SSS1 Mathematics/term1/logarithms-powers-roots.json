@@ -26,5 +26,16 @@
       "content": "For complex expressions, use logarithm laws: log(A × B) = log A + log B; log(A/B) = log A − log B; log(Aⁿ) = n × log A; log(ⁿ√A) = log A ÷ n. Apply these in sequence using a log table. Example: to evaluate √94100 × 38.2 / (5.68³ × 8.14), find log numerator and log denominator separately, subtract, then find the antilog. Always record working in a table of Number and Log columns."
     }
   ],
-  "keywords": ["logarithm", "indices", "powers", "roots", "antilogarithm", "log tables", "log of powers", "log of roots", "combined calculations", "log base 10"]
+  "keywords": [
+    "logarithm",
+    "indices",
+    "powers",
+    "roots",
+    "antilogarithm",
+    "log tables",
+    "log of powers",
+    "log of roots",
+    "combined calculations",
+    "log base 10"
+  ]
 }

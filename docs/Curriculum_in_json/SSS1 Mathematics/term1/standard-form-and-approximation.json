@@ -32,5 +32,15 @@
       "content": "Decimal places are counted from the decimal point. Zeros after the decimal point are significant. Examples: 0.0089 to 2 d.p. = 0.01; 0.9002 to 2 d.p. = 0.90; 1.9875 to 2 d.p. = 1.99; 1.9875 to 3 d.p. = 1.988."
     }
   ],
-  "keywords": ["standard form", "scientific notation", "approximation", "rounding off", "significant figures", "decimal places", "indices", "ordinary form", "standard index form"]
+  "keywords": [
+    "standard form",
+    "scientific notation",
+    "approximation",
+    "rounding off",
+    "significant figures",
+    "decimal places",
+    "indices",
+    "ordinary form",
+    "standard index form"
+  ]
 }

@@ -27,5 +27,16 @@
       "content": "To multiply using logarithms: log(A × B) = log A + log B. To divide: log(A ÷ B) = log A − log B. Then find the antilog of the result. For example, to evaluate 4627 × 29.3: log 4627 = 3.6653; log 29.3 = 1.4669; sum = 5.1322; antilog = 135600. To evaluate 819.8 ÷ 3.905: log 819.8 = 2.9137; log 3.905 = 0.5916; difference = 2.3221; antilog = 209.9."
     }
   ],
-  "keywords": ["logarithm", "antilogarithm", "log tables", "base 10", "mantissa", "characteristic", "index form", "log form", "multiplication using logs", "division using logs"]
+  "keywords": [
+    "logarithm",
+    "antilogarithm",
+    "log tables",
+    "base 10",
+    "mantissa",
+    "characteristic",
+    "index form",
+    "log form",
+    "multiplication using logs",
+    "division using logs"
+  ]
 }

@@ -2,81 +2,67 @@ import React, { useState } from 'react';
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { API_URL, GOOGLE_AUTH_ENABLED, GOOGLE_CLIENT_ID } from '../config/runtime';
 import loginImg from "/src/assets/login_img.png";
 
 const LoginPage = () => {
   const navigate = useNavigate();
-  const [error, setError] = useState(""); 
-  const [formErrors, setFormErrors] = useState({}); 
-  const [isLoading, setIsLoading] = useState(false); 
+  const [error, setError] = useState('');
+  const [formErrors, setFormErrors] = useState({});
+  const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  
+
   const { login } = useAuth();
   const [formData, setFormData] = useState({ email: '', password: '' });
+  const apiUrl = API_URL;
 
-  const rawClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
-  const GOOGLE_CLIENT_ID = rawClientId.replace(/['"]/g, '').trim();
-  const apiUrl = import.meta.env.VITE_API_URL || 'https://mastery-backend-7xe8.onrender.com/api/v1';
-
-  // --- MODIFIED: Connects to your FastAPI /google endpoint ---
   const handleGoogleSuccess = async (credentialResponse) => {
     setIsLoading(true);
-    setError("");
+    setError('');
 
     try {
-      // Send the Google JWT token to your backend
       const response = await fetch(`${apiUrl}/auth/google`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          token: credentialResponse.credential // This matches your GoogleLoginIn schema
-        }),
+        body: JSON.stringify({ token: credentialResponse.credential }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.detail || "Google login failed on the server.");
+        throw new Error(errorData?.detail || 'Google login failed on the server.');
       }
 
-      // Backend AuthOut returns access_token and user details
       const data = await response.json();
-      
-      // Store the user ID so the dashboard can access it
       if (data.user_id) {
-        localStorage.setItem("mastery_student_id", data.user_id);
+        localStorage.setItem('mastery_student_id', data.user_id);
       }
 
-      // Log the user into the app using your AuthContext
       login(data.access_token);
-      
-      // Route to dashboard since they are an existing user
-      navigate('/dashboard'); 
-
+      navigate('/dashboard');
     } catch (err) {
-      console.error("Google Auth API Error:", err);
+      console.error('Google Auth API Error:', err);
       setError(err.message);
     } finally {
       setIsLoading(false);
     }
   };
-  // ---------------------------------------------------------
 
   const validateForm = () => {
     const newErrors = {};
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    
+
     if (!formData.email.trim()) {
-      newErrors.email = "Email address is required.";
+      newErrors.email = 'Email address is required.';
     } else if (!emailRegex.test(formData.email)) {
-      newErrors.email = "Please enter a valid email address.";
+      newErrors.email = 'Please enter a valid email address.';
     }
 
     if (!formData.password) {
-      newErrors.password = "Password is required.";
-    } else if (formData.password.length < 8) { 
-      newErrors.password = "Password must be at least 8 characters long."; 
+      newErrors.password = 'Password is required.';
+    } else if (formData.password.length < 8) {
+      newErrors.password = 'Password must be at least 8 characters long.';
     }
 
     setFormErrors(newErrors);
@@ -92,62 +78,54 @@ const LoginPage = () => {
 
   const handleManualSubmit = async (e) => {
     e.preventDefault();
-    setError("");
+    setError('');
 
-    if (!validateForm()) return; 
+    if (!validateForm()) return;
 
     setIsLoading(true);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); 
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     try {
-      // 1. Send LoginIn schema {email, password}
       const response = await fetch(`${apiUrl}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: formData.email, 
-          password: formData.password
+          email: formData.email,
+          password: formData.password,
         }),
-        signal: controller.signal
+        signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errData = await response.json().catch(() => null);
-        throw new Error(errData?.detail || "Login failed. Please check your credentials.");
+        throw new Error(errData?.detail || 'Login failed. Please check your credentials.');
       }
 
-      // 2. Receive AuthOut schema
       const data = await response.json();
-      
-      // The backend explicitly returns 'user_id' based on AuthOut schema
-      const studentId = data.user_id;
-
-      if (studentId) {
-        localStorage.setItem("mastery_student_id", studentId);
+      if (data.user_id) {
+        localStorage.setItem('mastery_student_id', data.user_id);
       }
 
       login(data.access_token);
-      navigate('/dashboard'); 
-
+      navigate('/dashboard');
     } catch (err) {
-      console.error("Login Error:", err);
+      console.error('Login Error:', err);
       if (err.name === 'AbortError') {
-        setError("The server is taking too long to respond. Please check your connection and try again.");
+        setError('The server is taking too long to respond. Please check your connection and try again.');
       } else {
-        setError(err.message); 
+        setError(err.message);
       }
     } finally {
       setIsLoading(false);
     }
   };
-  
+
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      {/* LEFT COLUMN: Visual Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-[#6b46c1] relative flex-col items-center justify-center p-12 overflow-hidden">
         <div className="absolute top-10 left-10 text-white/10">
           <svg className="w-24 h-24" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
@@ -173,7 +151,6 @@ const LoginPage = () => {
         </div>
       </div>
 
-      {/* RIGHT COLUMN: Form Area */}
       <div className="w-full lg:w-1/2 flex flex-col justify-center items-center p-8 sm:p-12 bg-white relative">
         <div className="w-full max-w-md space-y-8">
           <div>
@@ -189,18 +166,17 @@ const LoginPage = () => {
           )}
 
           <form onSubmit={handleManualSubmit} className="space-y-5" noValidate>
-            
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Email Address</label>
               <div className="relative">
                 <span className={`absolute left-4 top-1/2 -translate-y-1/2 ${formErrors.email ? 'text-rose-500' : 'text-slate-400'}`}>
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
                 </span>
-                <input 
-                  type="email" 
-                  placeholder="student@masteryai.edu" 
-                  value={formData.email} 
-                  onChange={(e) => handleInputChange('email', e.target.value)} 
+                <input
+                  type="email"
+                  placeholder="student@masteryai.edu"
+                  value={formData.email}
+                  onChange={(e) => handleInputChange('email', e.target.value)}
                   className={`w-full pl-12 pr-4 py-3.5 bg-white border rounded-xl text-sm focus:outline-none focus:ring-2 transition-all ${formErrors.email ? 'border-rose-500 focus:ring-rose-500/20 text-rose-900 placeholder:text-rose-300' : 'border-slate-200 focus:ring-[#6b46c1]'}`}
                 />
               </div>
@@ -216,11 +192,11 @@ const LoginPage = () => {
                 <span className={`absolute left-4 top-1/2 -translate-y-1/2 ${formErrors.password ? 'text-rose-500' : 'text-slate-400'}`}>
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
                 </span>
-                <input 
-                  type={showPassword ? "text" : "password"} 
-                  placeholder="••••••••" 
-                  value={formData.password} 
-                  onChange={(e) => handleInputChange('password', e.target.value)} 
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="********"
+                  value={formData.password}
+                  onChange={(e) => handleInputChange('password', e.target.value)}
                   className={`w-full pl-12 pr-12 py-3.5 bg-white border rounded-xl text-sm focus:outline-none focus:ring-2 transition-all tracking-widest ${formErrors.password ? 'border-rose-500 focus:ring-rose-500/20 text-rose-900 placeholder:text-rose-300' : 'border-slate-200 focus:ring-[#6b46c1] placeholder:tracking-normal'}`}
                 />
                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none">
@@ -231,7 +207,7 @@ const LoginPage = () => {
             </div>
 
             <button type="submit" disabled={isLoading} className={`w-full text-white font-bold py-3.5 rounded-xl transition-all shadow-lg flex justify-center items-center gap-2 mt-2 ${isLoading ? 'bg-slate-400 cursor-not-allowed shadow-none' : 'bg-[#6b46c1] hover:bg-[#5b3da6] shadow-indigo-500/30'}`}>
-              {isLoading ? "Signing In..." : "Sign In"}
+              {isLoading ? 'Signing In...' : 'Sign In'}
               {!isLoading && <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>}
             </button>
           </form>
@@ -242,11 +218,24 @@ const LoginPage = () => {
             <div className="flex-grow border-t border-slate-200"></div>
           </div>
 
-          <div className="flex justify-center w-full">
-            <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-              <GoogleLogin onSuccess={handleGoogleSuccess} onError={() => setError("Google Login Failed.")} useOneTap theme="outline" size="large" text="continue_with" width="100%" shape="rectangular" />
-            </GoogleOAuthProvider>
-          </div>
+          {GOOGLE_AUTH_ENABLED ? (
+            <div className="flex justify-center w-full">
+              <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={() => setError('Google Login Failed.')}
+                  theme="outline"
+                  size="large"
+                  text="continue_with"
+                  shape="rectangular"
+                />
+              </GoogleOAuthProvider>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-sm text-slate-500">
+              Google sign-in is disabled locally until <code>VITE_GOOGLE_CLIENT_ID</code> is set.
+            </div>
+          )}
 
           <p className="text-center text-sm text-slate-500 font-medium">New to MasteryAI? <Link to="/register" className="text-[#6b46c1] font-bold hover:underline">Create an account</Link></p>
         </div>

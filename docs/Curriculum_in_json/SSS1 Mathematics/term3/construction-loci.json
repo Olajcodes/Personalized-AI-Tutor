@@ -39,5 +39,15 @@
       "content": "The locus of points equidistant from two intersecting lines AB and CD is the pair of angle bisectors of the angles formed at their intersection point. The two bisectors are perpendicular to each other."
     }
   ],
-  "keywords": ["locus", "quadrilateral construction", "parallelogram", "equilateral triangle", "perpendicular bisector", "angle bisector", "equidistant", "circle locus", "parallel lines locus"]
+  "keywords": [
+    "locus",
+    "quadrilateral construction",
+    "parallelogram",
+    "equilateral triangle",
+    "perpendicular bisector",
+    "angle bisector",
+    "equidistant",
+    "circle locus",
+    "parallel lines locus"
+  ]
 }

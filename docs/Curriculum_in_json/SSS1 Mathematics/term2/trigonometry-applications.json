@@ -25,5 +25,16 @@
       "content": "Bearings are measured clockwise from North, given as three-digit numbers (e.g., 046°). If the bearing of X from Y is 046°, then the bearing of Y from X = 180° + 46° = 226°. Use trigonometric ratios to calculate north/south and east/west components of distances. Example: town Y is 200km from X at bearing 040°, so Y is 200 × sin 40° = 128.6km east of X."
     }
   ],
-  "keywords": ["angle of elevation", "angle of depression", "bearing", "trigonometry applications", "right-angled triangle", "sine", "cosine", "tangent", "north", "distance"]
+  "keywords": [
+    "angle of elevation",
+    "angle of depression",
+    "bearing",
+    "trigonometry applications",
+    "right-angled triangle",
+    "sine",
+    "cosine",
+    "tangent",
+    "north",
+    "distance"
+  ]
 }

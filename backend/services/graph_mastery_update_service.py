@@ -9,6 +9,7 @@ from uuid import UUID
 import httpx
 
 from backend.core.config import settings
+from backend.core.internal_service_auth import INTERNAL_SERVICE_HEADER
 from backend.schemas.quiz_schema import ConceptBreakdownItem, GraphMasteryUpdatePayload
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ class GraphMasteryUpdateService:
                     response = await client.post(
                         f"{base_url}/update-mastery",
                         json=payload.model_dump(mode="json"),
+                        headers={INTERNAL_SERVICE_HEADER: settings.internal_service_key},
                     )
                     response.raise_for_status()
                 return True

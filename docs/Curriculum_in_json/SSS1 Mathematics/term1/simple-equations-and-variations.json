@@ -40,5 +40,16 @@
       "content": "Partial variation means a quantity is partly constant and partly varies with another quantity. The general form is C = a + kt where a and k are constants. Example: if R = 350 when E = 1600 and R = 730 when E = 3600, then forming two simultaneous equations gives k = 1/10 and a = 370, so R = 370 + E/10."
     }
   ],
-  "keywords": ["linear equations", "balance method", "change of subject", "formula", "direct variation", "inverse variation", "joint variation", "partial variation", "proportionality", "constant of variation"]
+  "keywords": [
+    "linear equations",
+    "balance method",
+    "change of subject",
+    "formula",
+    "direct variation",
+    "inverse variation",
+    "joint variation",
+    "partial variation",
+    "proportionality",
+    "constant of variation"
+  ]
 }

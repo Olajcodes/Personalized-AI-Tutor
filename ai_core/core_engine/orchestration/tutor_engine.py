@@ -141,7 +141,7 @@ def _internal_graph_context_url() -> str:
 
 
 def _internal_context_timeout() -> float:
-    return float(os.getenv("INTERNAL_CONTEXT_TIMEOUT_SECONDS", "5"))
+    return float(os.getenv("INTERNAL_CONTEXT_TIMEOUT_SECONDS", "12"))
 
 
 def _internal_profile_context(request: TutorChatRequest) -> dict:
@@ -192,7 +192,7 @@ def _internal_graph_context(request: TutorChatRequest) -> dict:
 
 def _internal_rag_retrieve(request: TutorChatRequest) -> list[Citation]:
     base_url = os.getenv("BACKEND_INTERNAL_RAG_URL", "http://127.0.0.1:8000/api/v1/internal/rag/retrieve").strip()
-    timeout = float(os.getenv("INTERNAL_RAG_TIMEOUT_SECONDS", "6"))
+    timeout = float(os.getenv("INTERNAL_RAG_TIMEOUT_SECONDS", "12"))
     top_k = int(os.getenv("INTERNAL_RAG_TOP_K", "6"))
     query = _normalize_rag_query(request.message)
     if query is None:
@@ -781,7 +781,11 @@ def _chat_prompt(
 
 def _infer_tutor_mode_from_message(message: str) -> str:
     text = (message or "").strip().lower()
-    if any(phrase in text for phrase in ("waec", "exam", "past question")):
+    if (
+        re.search(r"\bwaec\b", text)
+        or re.search(r"\bexam(?:s|ination)?\b", text)
+        or "past question" in text
+    ):
         return "exam-practice"
     if any(phrase in text for phrase in ("recap", "summary", "summarize", "revise")):
         return "recap"
@@ -834,6 +838,42 @@ def _recommendations_from_graph(
     return recommendations
 
 
+def _message_anchor_label(
+    request: TutorChatRequest,
+    lesson_context: dict | None,
+    graph_context: dict | None,
+) -> str | None:
+    focus_label = " ".join(str(request.focus_concept_label or "").split()).strip()
+    if focus_label:
+        return focus_label
+    weak_labels = _weak_concept_labels(graph_context, lesson_context, limit=1)
+    if weak_labels:
+        return weak_labels[0]
+    covered_labels = _lesson_covered_concept_lines(lesson_context, max_items=1)
+    if covered_labels:
+        return covered_labels[0].removeprefix("- ").strip()
+    lesson_title = str((lesson_context or {}).get("title") or "").strip()
+    if lesson_title and lesson_title != "No persisted lesson title":
+        return lesson_title
+    return None
+
+
+def _tighten_tutor_message(
+    message: str,
+    *,
+    request: TutorChatRequest,
+    lesson_context: dict | None,
+    graph_context: dict | None,
+) -> str:
+    anchored = " ".join(str(message or "").split()).strip()
+    if not anchored:
+        return anchored
+    anchor = _message_anchor_label(request, lesson_context, graph_context)
+    if anchor and anchor.casefold() not in anchored.casefold():
+        anchored = f"{anchor}: {anchored}"
+    return anchored
+
+
 def _structured_tutor_prompt(
     *,
     mode: str,
@@ -858,13 +898,17 @@ def _structured_tutor_prompt(
         if request.focus_concept_label or request.focus_concept_id
         else "- No explicit graph-selected concept focus."
     )
+    next_unlock = dict((graph_context or {}).get("next_unlock") or {})
+    next_unlock_title = str(next_unlock.get("topic_title") or "").strip() or "No downstream unlock identified."
+    next_unlock_reason = str(next_unlock.get("reason") or "").strip() or "No explicit next-unlock reason available."
+    anchor_label = _message_anchor_label(request, lesson_context, graph_context) or lesson_title
     mode_guidance = {
-        "teach": "Explain clearly, stepwise, and with one concrete example.",
+        "teach": "Explain clearly, stepwise, with one concrete lesson-grounded example and one likely mistake to avoid.",
         "socratic": "Ask one guiding question first, then give a short nudge instead of a full lecture.",
-        "diagnose": "Explain why this topic matters now, point out weak prerequisite links, and name the next best action.",
-        "drill": "Generate one short drill prompt and a compact coaching answer around it.",
-        "recap": "Compress the topic into three sharp points and one memory hook.",
-        "exam-practice": "Coach the learner in WAEC style: exam-focused, precise, and time-aware.",
+        "diagnose": "Explain why this topic matters now, point out the weakest prerequisite link, and name the next best action.",
+        "drill": "Generate one short drill prompt, then coach the learner with a compact lesson-grounded answer.",
+        "recap": "Compress the topic into three sharp points, one memory hook, and one exam-useful reminder.",
+        "exam-practice": "Coach the learner in WAEC style: exam-focused, precise, time-aware, and grounded in this lesson.",
     }.get(mode, "Explain clearly and stay grounded.")
     return (
         "You are Mastery AI, a graph-aware tutor for Nigerian SSS learners.\n"
@@ -877,11 +921,13 @@ def _structured_tutor_prompt(
         f"Mode guidance: {mode_guidance}\n"
         f"Student goal: {user_goal}\n"
         f"Scope: subject={request.subject}, level={request.sss_level}, term={request.term}\n"
-          f"Current lesson title: {lesson_title}\n"
-          f"Current lesson summary: {lesson_summary}\n\n"
-          f"Graph-selected focus:\n{focused_node_block}\n\n"
-          f"Lesson covered concepts:\n{covered_concepts_block}\n\n"
-        f"Lesson body:\n{lesson_block}\n\n"
+        f"Current lesson title: {lesson_title}\n"
+        f"Current lesson summary: {lesson_summary}\n\n"
+        f"Preferred visible anchor label: {anchor_label}\n"
+        f"Graph-selected focus:\n{focused_node_block}\n\n"
+        f"Lesson covered concepts:\n{covered_concepts_block}\n\n"
+        f"Next unlock:\n- topic_title: {next_unlock_title}\n- reason: {next_unlock_reason}\n\n"
+          f"Lesson body:\n{lesson_block}\n\n"
         f"Student profile:\n{profile_block}\n\n"
         f"Recent tutor history:\n{history_block}\n\n"
         f"Graph / mastery context:\n{graph_block}\n\n"
@@ -895,10 +941,14 @@ def _structured_tutor_prompt(
         '  "next_action": "string",\n'
         '  "recommended_assessment": "string or empty"\n'
         "}\n"
-          "Rules:\n"
-          "- assistant_message must be engaging and concise, not generic.\n"
-          "- If graph-selected focus exists, center the explanation on that concept first.\n"
-          "- key_points should contain 2 to 4 short bullets.\n"
+        "Rules:\n"
+        "- assistant_message must be engaging, concise, and lesson-specific, not generic.\n"
+        "- The first sentence must name the visible anchor label or current lesson in plain language.\n"
+        "- Use at least one concrete example, rule, or detail from the lesson body or retrieved citations.\n"
+        "- If graph-selected focus exists, center the explanation on that concept first.\n"
+        "- If a weak prerequisite or next unlock is available, mention one of them naturally when useful.\n"
+        "- Avoid filler openers like 'This topic is important', 'Let us break it down', or 'right now' unless necessary.\n"
+        "- key_points should contain 2 to 4 short bullets.\n"
         "- concept_focus should name the most relevant concepts in readable language.\n"
         "- prerequisite_warning should be empty if not needed.\n"
         "- next_action must tell the student exactly what to do next.\n"
@@ -918,7 +968,12 @@ def _validate_structured_tutor_payload(
 ) -> TutorChatResponse:
     if not parsed:
         raise RuntimeError("tutor generation returned invalid JSON")
-    assistant_message = " ".join(str(parsed.get("assistant_message") or "").split()).strip()
+    assistant_message = _tighten_tutor_message(
+        str(parsed.get("assistant_message") or ""),
+        request=request,
+        lesson_context=lesson_context,
+        graph_context=graph_context,
+    )
     if not assistant_message:
         raise RuntimeError("tutor generation returned empty assistant message")
     key_points = [
@@ -965,7 +1020,12 @@ def _plain_text_tutor_payload(
     graph_context: dict | None,
     lesson_context: dict | None,
 ) -> TutorChatResponse:
-    assistant_message = " ".join(str(raw or "").split()).strip()
+    assistant_message = _tighten_tutor_message(
+        str(raw or ""),
+        request=request,
+        lesson_context=lesson_context,
+        graph_context=graph_context,
+    )
     if not assistant_message:
         raise RuntimeError("tutor generation returned empty text")
     return TutorChatResponse(

@@ -31,5 +31,16 @@
       "content": "Modular arithmetic applies to cyclical events such as: clock arithmetic (hours on a 12- or 24-hour clock), market days held in rotation over a set number of days, days of the week repeating every 7 days, and computer programming where values cycle within fixed bounds."
     }
   ],
-  "keywords": ["modular arithmetic", "modulus", "mod", "congruence", "clock arithmetic", "number cycle", "remainder", "addition table", "modular addition", "modular multiplication"]
+  "keywords": [
+    "modular arithmetic",
+    "modulus",
+    "mod",
+    "congruence",
+    "clock arithmetic",
+    "number cycle",
+    "remainder",
+    "addition table",
+    "modular addition",
+    "modular multiplication"
+  ]
 }

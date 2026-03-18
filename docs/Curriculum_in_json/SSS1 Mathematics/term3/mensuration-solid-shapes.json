@@ -31,5 +31,19 @@
       "content": "Volume = (1/3) × base area × height. Specific formulas: square-based pyramid: V = (1/3)b²h; rectangular-based pyramid: V = (1/3)lbh; cone: V = (1/3)πr²h. Examples: pyramid 8cm high on a 6cm × 4cm base → V = (1/3) × 6 × 4 × 8 = 64cm³. Cone with diameter 14cm (r=7cm) and height 24cm → V = (1/3) × (22/7) × 49 × 24 = 1232cm³."
     }
   ],
-  "keywords": ["mensuration", "solid shapes", "cube", "cuboid", "cylinder", "cone", "triangular prism", "pyramid", "volume", "surface area", "curved surface area", "slant height", "prism"]
+  "keywords": [
+    "mensuration",
+    "solid shapes",
+    "cube",
+    "cuboid",
+    "cylinder",
+    "cone",
+    "triangular prism",
+    "pyramid",
+    "volume",
+    "surface area",
+    "curved surface area",
+    "slant height",
+    "prism"
+  ]
 }

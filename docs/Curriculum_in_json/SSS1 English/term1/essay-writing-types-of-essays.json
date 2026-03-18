@@ -2,10 +2,10 @@
   "subject": "english",
   "sss_level": "SSS1",
   "term": 1,
-  "source_title": "First Term SS1 English Language",
   "week": 3,
   "topic_title": "Essay Writing: Types of Essays and Report Writing",
   "topic_slug": "essay-writing-types-of-essays",
+  "source_title": "First Term SS1 English Language",
   "learning_objectives": [
     "Identify and describe the main types of essays",
     "Explain the structure of a formal report",
@@ -18,7 +18,7 @@
     },
     {
       "heading": "Formal Report Writing",
-      "content": "A formal report may cover a robbery, accident, meeting proceedings, work-camp, or petition. It requires good knowledge of direct and indirect speech.\n\nFormat when reporting to a school principal:\n  [Class/Address]\n  [Date]\n  The Principal,\n  [Name of School],\n  [Location].\n  Sir/Ma,\n  [Subject Heading]\n  (Body of the report)\n  Signature\n  [Name and Role/Title]"
+      "content": "A formal report may cover a robbery, accident, meeting proceedings, work-camp, or petition. It requires good knowledge of direct and indirect speech.\n\nFormat when reporting to a school principal:\n[Class/Address]\n[Date]\nThe Principal,\n[Name of School],\n[Location].\nSir/Ma,\n[Subject Heading]\n(Body of the report)\nSignature\n[Name and Role/Title]"
     },
     {
       "heading": "Minutes of a Meeting",

@@ -26,5 +26,16 @@
       "content": "A histogram is similar to a bar chart but has no gaps between bars, and is used for grouped (continuous) data. The class boundaries are used on the horizontal axis. Bar height is proportional to frequency. Example: for class intervals 1–10, 11–20, ..., 51–60 with boundaries 0.5, 10.5, ..., 60.5 and corresponding frequencies, draw adjacent bars with no spaces between them."
     }
   ],
-  "keywords": ["bar chart", "pie chart", "histogram", "sectoral angle", "compound bar chart", "composite bar chart", "class boundaries", "frequency", "graphical representation", "statistical graph"]
+  "keywords": [
+    "bar chart",
+    "pie chart",
+    "histogram",
+    "sectoral angle",
+    "compound bar chart",
+    "composite bar chart",
+    "class boundaries",
+    "frequency",
+    "graphical representation",
+    "statistical graph"
+  ]
 }

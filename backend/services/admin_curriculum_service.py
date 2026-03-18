@@ -687,8 +687,8 @@ Important rules:
     def _normalize_json_topic_payload(cls, path: Path) -> dict:
         payload = cls._load_json_topic_payload(path)
 
-        subject = str(payload.get("subject") or "").strip().lower()
-        sss_level = str(payload.get("sss_level") or "").strip().upper()
+        subject = cls._canonical_subject(payload.get("subject"))
+        sss_level = cls._canonical_sss_level(payload.get("sss_level"))
         topic_title = str(payload.get("topic_title") or "").strip()
         source_title = str(payload.get("source_title") or "").strip() or None
         topic_slug = str(payload.get("topic_slug") or "").strip().lower() or None
@@ -928,33 +928,68 @@ Important rules:
         return f"{subject}-{sss_level}-term{term}-{timestamp}"
 
     @staticmethod
-    def _infer_subject(scope_text: str) -> str | None:
-        value = scope_text.upper()
-        matches: list[str] = []
-        for match in re.finditer(r"\b(MATHEMATICS|MATHS|MATH|ENGLISH|CIVIC)\b", value):
-            token = match.group(1)
-            if token in {"MATHEMATICS", "MATHS", "MATH"}:
-                matches.append("math")
-            elif token == "ENGLISH":
-                matches.append("english")
-            elif token == "CIVIC":
-                matches.append("civic")
-        if matches:
-            return matches[-1]
+    def _canonical_subject(value: object) -> str | None:
+        normalized = re.sub(r"[^a-z]+", " ", str(value or "").strip().lower()).strip()
+        if not normalized or normalized == "unknown":
+            return None
+        alias_map = {
+            "math": "math",
+            "maths": "math",
+            "mathematics": "math",
+            "general mathematics": "math",
+            "english": "english",
+            "english language": "english",
+            "english studies": "english",
+            "civic": "civic",
+            "civic education": "civic",
+        }
+        if normalized in alias_map:
+            return alias_map[normalized]
+        if "math" in normalized:
+            return "math"
+        if normalized.startswith("english"):
+            return "english"
+        if normalized.startswith("civic"):
+            return "civic"
         return None
 
     @staticmethod
-    def _infer_sss_level(scope_text: str) -> str | None:
+    def _canonical_sss_level(value: object) -> str | None:
+        normalized = re.sub(r"[^A-Z0-9]+", "", str(value or "").strip().upper())
+        if not normalized:
+            return None
+        direct_match = re.fullmatch(r"S{1,3}([123])", normalized)
+        if direct_match:
+            return f"SSS{direct_match.group(1)}"
+        named_match = re.fullmatch(r"SENIORSECONDARY([123])", normalized)
+        if named_match:
+            return f"SSS{named_match.group(1)}"
+        return None
+
+    @classmethod
+    def _infer_subject(cls, scope_text: str) -> str | None:
         value = scope_text.upper()
         matches: list[str] = []
-        pattern = re.compile(r"\bSSS?\s*([123])\b|\bS([123])\b")
+        for match in re.finditer(
+            r"\b(MATHEMATICS|GENERAL\s+MATHEMATICS|MATHS|MATH|ENGLISH(?:\s+LANGUAGE|\s+STUDIES)?|CIVIC(?:\s+EDUCATION)?)\b",
+            value,
+        ):
+            canonical = cls._canonical_subject(match.group(1))
+            if canonical:
+                matches.append(canonical)
+        return matches[-1] if matches else None
+
+    @classmethod
+    def _infer_sss_level(cls, scope_text: str) -> str | None:
+        value = scope_text.upper()
+        matches: list[str] = []
+        pattern = re.compile(r"\bSSS?\s*([123])\b|\bS([123])\b|\bSENIOR\s+SECONDARY\s+([123])\b")
         for match in pattern.finditer(value):
-            digit = match.group(1) or match.group(2)
-            if digit:
-                matches.append(str(digit))
-        if matches:
-            return f"SSS{matches[-1]}"
-        return None
+            digit = match.group(1) or match.group(2) or match.group(3)
+            canonical = cls._canonical_sss_level(f"SSS{digit}" if digit else "")
+            if canonical:
+                matches.append(canonical)
+        return matches[-1] if matches else None
 
     @staticmethod
     def _infer_term(scope_text: str) -> int | None:
@@ -976,8 +1011,8 @@ Important rules:
         if file_path.suffix.lower() == ".json":
             try:
                 payload = cls._normalize_json_topic_payload(file_path)
-                subject = str(payload["subject"]).strip().lower()
-                sss_level = str(payload["sss_level"]).strip().upper()
+                subject = cls._canonical_subject(payload.get("subject"))
+                sss_level = cls._canonical_sss_level(payload.get("sss_level"))
                 term = int(payload["term"])
                 if subject and sss_level and term:
                     return (subject, sss_level, term)

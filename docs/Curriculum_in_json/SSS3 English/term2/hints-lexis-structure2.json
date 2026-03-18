@@ -6,6 +6,11 @@
   "topic_title": "Hints on Lexis and Structure II",
   "topic_slug": "hints-lexis-structure-ii",
   "source_title": "Second Term SS3 English Language",
+  "learning_objectives": [
+    "Explain Lexis in Hints on Lexis and Structure II",
+    "Identify key ideas in Hints on Lexis and Structure II",
+    "Apply Hints on Lexis and Structure II concepts in examples"
+  ],
   "sections": [
     {
       "heading": "Lexis",
@@ -22,10 +27,5 @@
     "grammar",
     "register",
     "vocabulary"
-  ],
-  "learning_objectives": [
-    "Explain Lexis in Hints on Lexis and Structure II",
-    "Identify key ideas in Hints on Lexis and Structure II",
-    "Apply Hints on Lexis and Structure II concepts in examples"
   ]
 }

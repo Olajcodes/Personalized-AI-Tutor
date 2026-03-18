@@ -32,5 +32,20 @@
       "content": "The biconditional p ⟺ q means 'p if and only if q' — both p ⇒ q and q ⇒ p are true. p ⟺ q is true only when p and q have the same truth value (both T or both F). The chain rule states: if p ⇒ q and q ⇒ r, then p ⇒ r. This makes an argument valid. An argument is invalid if it does not follow this chain format."
     }
   ],
-  "keywords": ["logic", "logical statement", "negation", "implication", "conditional statement", "antecedent", "consequent", "converse", "inverse", "contrapositive", "biconditional", "chain rule", "truth table", "truth value"]
+  "keywords": [
+    "logic",
+    "logical statement",
+    "negation",
+    "implication",
+    "conditional statement",
+    "antecedent",
+    "consequent",
+    "converse",
+    "inverse",
+    "contrapositive",
+    "biconditional",
+    "chain rule",
+    "truth table",
+    "truth value"
+  ]
 }

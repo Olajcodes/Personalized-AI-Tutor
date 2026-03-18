@@ -30,5 +30,15 @@
       "content": "The exterior angle of a triangle equals the sum of the two non-adjacent interior angles (remote interior angles). This follows from the proof: exterior angle = sum of the two alternate and corresponding pairs that equal the two interior angles. Example: for triangle with angles 3x and 2x + 20, and exterior angle 200° − 4x: 3x + 2x + 20 = 200 − 4x → 9x = 180 → x = 20°."
     }
   ],
-  "keywords": ["frustum", "composite solid", "pyramid volume", "cone volume", "angle sum of triangle", "exterior angle theorem", "supplementary angles", "similar triangles", "parallel lines"]
+  "keywords": [
+    "frustum",
+    "composite solid",
+    "pyramid volume",
+    "cone volume",
+    "angle sum of triangle",
+    "exterior angle theorem",
+    "supplementary angles",
+    "similar triangles",
+    "parallel lines"
+  ]
 }

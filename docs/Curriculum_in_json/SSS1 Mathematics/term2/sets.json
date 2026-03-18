@@ -26,5 +26,18 @@
       "content": "Intersection (∩): A ∩ B contains elements common to both A and B. Union (∪): A ∪ B contains all elements from A and B combined. Complement (A'): elements in the universal set not in A. Examples: given U = {a,b,c,d,e,f}, P = {b,d,e}, Q = {b,c,e,f}: P ∩ Q = {b,e}; P ∪ Q = {b,c,d,e,f}; (P ∩ Q)' = {a,c,d,f}; (P ∪ Q)' = {a}; P' ∪ Q = {a,b,c,e,f}; Q' ∩ P' = {d}."
     }
   ],
-  "keywords": ["sets", "universal set", "subset", "empty set", "null set", "union", "intersection", "complement", "disjoint sets", "set notation", "finite set", "infinite set"]
+  "keywords": [
+    "sets",
+    "universal set",
+    "subset",
+    "empty set",
+    "null set",
+    "union",
+    "intersection",
+    "complement",
+    "disjoint sets",
+    "set notation",
+    "finite set",
+    "infinite set"
+  ]
 }

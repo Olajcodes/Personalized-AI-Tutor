@@ -30,5 +30,18 @@
       "content": "To find the median from a frequency table: (1) find the median position = (Σf + 1)/2; (2) count down the frequency column to find which class contains that position. Example: with Σf = 25, median position = (25+1)/2 = 13. Counting down frequencies 5, 3, 2, 6... the 13th value falls in the class with mark 7 (since 5 + 3 + 2 = 10, the 13th is in the next group with frequency 6). So median = 7."
     }
   ],
-  "keywords": ["grouped data", "mean of grouped data", "class mark", "mode", "modal class", "median", "range", "frequency table", "Σfx", "mid-value", "unimodal", "bimodal"]
+  "keywords": [
+    "grouped data",
+    "mean of grouped data",
+    "class mark",
+    "mode",
+    "modal class",
+    "median",
+    "range",
+    "frequency table",
+    "Σfx",
+    "mid-value",
+    "unimodal",
+    "bimodal"
+  ]
 }

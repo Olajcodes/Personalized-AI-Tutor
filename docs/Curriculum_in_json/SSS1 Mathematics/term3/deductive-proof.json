@@ -35,5 +35,20 @@
       "content": "Two triangles are congruent if they have exactly the same shape and size. The four conditions for congruency are: SAS (two sides and included angle equal); ASA or AAS (two angles and corresponding side equal); SSS (three sides equal); RHS (right angle, hypotenuse, and one other side equal). Congruent triangles are used to prove properties of geometric figures."
     }
   ],
-  "keywords": ["deductive proof", "angle sum of triangle", "parallel lines", "transversal", "corresponding angles", "alternate angles", "parallelogram", "rhombus", "intercept theorem", "congruent triangles", "SAS", "ASA", "SSS", "RHS"]
+  "keywords": [
+    "deductive proof",
+    "angle sum of triangle",
+    "parallel lines",
+    "transversal",
+    "corresponding angles",
+    "alternate angles",
+    "parallelogram",
+    "rhombus",
+    "intercept theorem",
+    "congruent triangles",
+    "SAS",
+    "ASA",
+    "SSS",
+    "RHS"
+  ]
 }

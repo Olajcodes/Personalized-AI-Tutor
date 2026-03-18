@@ -40,5 +40,20 @@
       "content": "The mode is the value with the highest frequency (appears most often). A data set can be unimodal (one mode), bimodal (two modes) or multimodal (more than two modes). Example: in temperatures 78(×1), 79(×2), 80(×7), 81(×5)..., the mode = 80°C (highest frequency of 7)."
     }
   ],
-  "keywords": ["statistics", "data", "discrete data", "continuous data", "qualitative data", "quantitative data", "frequency table", "tally", "range", "mean", "median", "mode", "raw data", "arithmetic mean"]
+  "keywords": [
+    "statistics",
+    "data",
+    "discrete data",
+    "continuous data",
+    "qualitative data",
+    "quantitative data",
+    "frequency table",
+    "tally",
+    "range",
+    "mean",
+    "median",
+    "mode",
+    "raw data",
+    "arithmetic mean"
+  ]
 }

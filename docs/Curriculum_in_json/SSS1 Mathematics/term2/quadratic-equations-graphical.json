@@ -31,5 +31,15 @@
       "content": "If a curve crosses the x-axis at points a and b, the equation is obtained from (x − a)(x − b) = 0. The y-intercept (when x = 0) is used to scale the equation if needed. Example: if roots are x = −2 and x = 1/2, the expression (x + 2)(x − 1/2) = 0 gives x² + (3/2)x − 1 = 0. Multiplying by 2 to match the y-intercept: 2x² + 3x − 2 = 0."
     }
   ],
-  "keywords": ["quadratic graph", "parabola", "roots from graph", "maximum value", "minimum value", "line of symmetry", "table of values", "n-shaped", "V-shaped"]
+  "keywords": [
+    "quadratic graph",
+    "parabola",
+    "roots from graph",
+    "maximum value",
+    "minimum value",
+    "line of symmetry",
+    "table of values",
+    "n-shaped",
+    "V-shaped"
+  ]
 }

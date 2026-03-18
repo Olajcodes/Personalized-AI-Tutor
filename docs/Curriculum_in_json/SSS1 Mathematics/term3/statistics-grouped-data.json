@@ -25,5 +25,17 @@
       "content": "Steps: (1) find the range of the data; (2) choose suitable class intervals (equal width is standard); (3) tally each data value into its class; (4) count frequencies. Include columns for: class interval, class boundaries, class mark (x), tally, and frequency (f). For continuous data, class boundaries are used on the horizontal axis in histograms."
     }
   ],
-  "keywords": ["grouped data", "class interval", "class limits", "class boundaries", "class width", "class mark", "mid-value", "frequency distribution", "continuous data", "discrete data", "tally"]
+  "keywords": [
+    "grouped data",
+    "class interval",
+    "class limits",
+    "class boundaries",
+    "class width",
+    "class mark",
+    "mid-value",
+    "frequency distribution",
+    "continuous data",
+    "discrete data",
+    "tally"
+  ]
 }

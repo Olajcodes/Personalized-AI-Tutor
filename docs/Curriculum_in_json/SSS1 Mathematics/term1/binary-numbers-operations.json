@@ -30,5 +30,16 @@
       "content": "Binary division uses the principle of repeated subtraction. Example: 110 ÷ 10 = 11 (since 10 goes into 110 three times). For 101010 ÷ 111 = 110, set up long division in base 2, subtracting 111 from partial dividends as in decimal long division."
     }
   ],
-  "keywords": ["binary numbers", "base 2", "binary addition", "binary subtraction", "binary multiplication", "binary division", "long multiplication", "long division", "carry", "borrow"]
+  "keywords": [
+    "binary numbers",
+    "base 2",
+    "binary addition",
+    "binary subtraction",
+    "binary multiplication",
+    "binary division",
+    "long multiplication",
+    "long division",
+    "carry",
+    "borrow"
+  ]
 }

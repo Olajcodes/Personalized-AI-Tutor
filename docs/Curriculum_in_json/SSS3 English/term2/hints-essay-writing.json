@@ -6,6 +6,11 @@
   "topic_title": "Hints on Essay Writing",
   "topic_slug": "hints-essay-writing",
   "source_title": "Second Term SS3 English Language",
+  "learning_objectives": [
+    "Explain Definition in Hints on Essay Writing",
+    "Plan and organize Hints on Essay Writing",
+    "Write a clear Hints on Essay Writing"
+  ],
   "sections": [
     {
       "heading": "Definition",
@@ -23,10 +28,5 @@
     "descriptive",
     "expository",
     "argumentative"
-  ],
-  "learning_objectives": [
-    "Explain Definition in Hints on Essay Writing",
-    "Plan and organize Hints on Essay Writing",
-    "Write a clear Hints on Essay Writing"
   ]
 }

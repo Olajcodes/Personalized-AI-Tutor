@@ -36,5 +36,19 @@
       "content": "Area of minor segment = area of sector − area of triangle = (θ/360°) × πr² − ½r² sin θ. Example: angle = 56°, r = 15cm → area = (56/360) × π × 225 − ½ × 225 × sin 56° = 110 − 93.26 = 16.74cm² ≈ 16.7cm²."
     }
   ],
-  "keywords": ["circle", "arc", "sector", "segment", "chord", "radius", "diameter", "circumference", "arc length", "perimeter of sector", "area of sector", "area of segment", "semi-circle"]
+  "keywords": [
+    "circle",
+    "arc",
+    "sector",
+    "segment",
+    "chord",
+    "radius",
+    "diameter",
+    "circumference",
+    "arc length",
+    "perimeter of sector",
+    "area of sector",
+    "area of segment",
+    "semi-circle"
+  ]
 }

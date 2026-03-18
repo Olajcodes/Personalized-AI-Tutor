@@ -31,5 +31,18 @@
       "content": "Using a unit circle (radius = 1), sin θ = y-coordinate and cos θ = x-coordinate of a point on the circle. Both sine and cosine values lie between −1 and +1. Key values: sin 0° = 0, sin 90° = 1, sin 180° = 0, sin 270° = −1, sin 360° = 0; cos 0° = 1, cos 90° = 0, cos 180° = −1, cos 270° = 0, cos 360° = 1. The curves repeat every 360° (they are periodic). The sine and cosine curves have the same shape but different starting points."
     }
   ],
-  "keywords": ["trigonometry", "sine", "cosine", "tangent", "SOH CAH TOA", "right-angled triangle", "chord length", "Pythagoras theorem", "graph of sine", "graph of cosine", "unit circle", "complementary angles"]
+  "keywords": [
+    "trigonometry",
+    "sine",
+    "cosine",
+    "tangent",
+    "SOH CAH TOA",
+    "right-angled triangle",
+    "chord length",
+    "Pythagoras theorem",
+    "graph of sine",
+    "graph of cosine",
+    "unit circle",
+    "complementary angles"
+  ]
 }

@@ -26,5 +26,16 @@
       "content": "For three-set problems, let x = number in all three sets. Work outward from the centre: find expressions for each region in terms of x, then sum all regions = total. Example: 290 readers; 181 read Daily Times (D), 142 read Guardian (G), 117 read Punch (P); n(D∩G)=75, n(D∩P)=60, n(G∩P)=54. Summing all regions: 251 + x = 290 → x = 39. Then: reading exactly two papers = 189 − 3(39) = 72; exactly one = 62 + 3(39) = 179."
     }
   ],
-  "keywords": ["Venn diagram", "two sets", "three sets", "union", "intersection", "complement", "universal set", "problem solving", "shaded region", "disjoint sets"]
+  "keywords": [
+    "Venn diagram",
+    "two sets",
+    "three sets",
+    "union",
+    "intersection",
+    "complement",
+    "universal set",
+    "problem solving",
+    "shaded region",
+    "disjoint sets"
+  ]
 }

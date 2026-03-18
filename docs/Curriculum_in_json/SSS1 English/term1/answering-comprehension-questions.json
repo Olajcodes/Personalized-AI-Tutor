@@ -2,10 +2,10 @@
   "subject": "english",
   "sss_level": "SSS1",
   "term": 1,
-  "source_title": "First Term SS1 English Language",
   "week": 9,
   "topic_title": "Comprehension Skills: How to Answer Comprehension Questions",
   "topic_slug": "answering-comprehension-questions",
+  "source_title": "First Term SS1 English Language",
   "learning_objectives": [
     "Define comprehension and explain its importance",
     "Apply a step-by-step strategy for answering comprehension questions",
@@ -18,7 +18,7 @@
     },
     {
       "heading": "Answering Synonym / Equivalent Meaning Questions",
-      "content": "The substitute word must:\n• Fit perfectly into the passage if the original word is removed.\n• Be of the same grammatical category (noun for noun, verb for verb, etc.).\n• Match in number and tense.\n\nExamples:\n  Synonyms for 'costly': expensive, extravagant, precious\n\n  'The car gets here at 3.00 p.m.'\n  → Correct substitute: 'arrives' (singular present tense), NOT 'arrived'\n\n  'Put down a number with five digits.'\n  → Correct substitute: 'figures' (plural), NOT 'figure'"
+      "content": "The substitute word must:\n• Fit perfectly into the passage if the original word is removed.\n• Be of the same grammatical category (noun for noun, verb for verb, etc.).\n• Match in number and tense.\n\nExamples:\nSynonyms for 'costly': expensive, extravagant, precious\n\n'The car gets here at 3.00 p.m.'\n→ Correct substitute: 'arrives' (singular present tense), NOT 'arrived'\n\n'Put down a number with five digits.'\n→ Correct substitute: 'figures' (plural), NOT 'figure'"
     }
   ],
   "keywords": [
@@ -30,4 +30,3 @@
     "extraneous material"
   ]
 }
-

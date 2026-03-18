@@ -40,5 +40,17 @@
       "content": "When base values are unknown, convert expressions to base 10 to form simultaneous equations and solve. Example: given 32ₓ – 12ᵧ = 9 and 23ₓ – 21ᵧ = 4, converting gives 3x – y = 9 and x – y = 1. Subtracting: 2x = 8, so x = 4 and y = 3."
     }
   ],
-  "keywords": ["number bases", "base ten", "denary", "binary", "bicimal", "base conversion", "octal", "hexadecimal", "powers of base", "simultaneous equations", "number systems"]
+  "keywords": [
+    "number bases",
+    "base ten",
+    "denary",
+    "binary",
+    "bicimal",
+    "base conversion",
+    "octal",
+    "hexadecimal",
+    "powers of base",
+    "simultaneous equations",
+    "number systems"
+  ]
 }

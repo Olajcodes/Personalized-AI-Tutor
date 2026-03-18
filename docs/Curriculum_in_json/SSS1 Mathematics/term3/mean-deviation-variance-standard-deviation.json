@@ -26,5 +26,16 @@
       "content": "The standard deviation S = √variance = √(Σf(xₘ − x̄)² / Σf). It is in the same units as the original data, making it more interpretable than variance. For the TV watching example: S = √64.76 ≈ 8.05h. Standard deviation gives a measure of how spread out the data values are around the mean."
     }
   ],
-  "keywords": ["mean deviation", "variance", "standard deviation", "measures of spread", "grouped data", "class mark", "deviation from mean", "Σf", "spread", "dispersion"]
+  "keywords": [
+    "mean deviation",
+    "variance",
+    "standard deviation",
+    "measures of spread",
+    "grouped data",
+    "class mark",
+    "deviation from mean",
+    "Σf",
+    "spread",
+    "dispersion"
+  ]
 }

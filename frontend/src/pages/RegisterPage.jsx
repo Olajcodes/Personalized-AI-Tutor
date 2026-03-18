@@ -1,96 +1,83 @@
 import React, { useState } from 'react';
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext'; 
+import { useAuth } from '../context/AuthContext';
+import { API_URL, GOOGLE_AUTH_ENABLED, GOOGLE_CLIENT_ID } from '../config/runtime';
 import loginImg from "/src/assets/login_img.png";
 
 const RegisterPage = () => {
   const navigate = useNavigate();
-  const { login } = useAuth(); 
-  
-  const [error, setError] = useState(""); // Backend API Errors
-  const [formErrors, setFormErrors] = useState({}); // Frontend Validation Errors
-  const [isLoading, setIsLoading] = useState(false); 
+  const { login } = useAuth();
+
+  const [error, setError] = useState('');
+  const [formErrors, setFormErrors] = useState({});
+  const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  
-  const [formData, setFormData] = useState({ 
-    fullName: '', 
-    email: '', 
-    password: '' 
+
+  const [formData, setFormData] = useState({
+    fullName: '',
+    email: '',
+    password: '',
   });
 
-  const rawClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
-  const GOOGLE_CLIENT_ID = rawClientId.replace(/['"]/g, '').trim();
-  const apiUrl = import.meta.env.VITE_API_URL || 'https://mastery-backend-7xe8.onrender.com/api/v1';
+  const apiUrl = API_URL;
 
-  // --- MODIFIED: Connects to your FastAPI /google endpoint ---
   const handleGoogleSuccess = async (credentialResponse) => {
     setIsLoading(true);
-    setError("");
+    setError('');
 
     try {
-      // Send the Google JWT token to your backend
       const response = await fetch(`${apiUrl}/auth/google`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          token: credentialResponse.credential // This matches your GoogleLoginIn schema
-        }),
+        body: JSON.stringify({ token: credentialResponse.credential }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.detail || "Google authentication failed on the server.");
+        throw new Error(errorData?.detail || 'Google authentication failed on the server.');
       }
 
-      // Backend AuthOut returns access_token and user details
       const data = await response.json();
-      
-      // Store the user ID so the onboarding flow can access it
       if (data.user_id) {
-        localStorage.setItem("mastery_student_id", data.user_id);
+        localStorage.setItem('mastery_student_id', data.user_id);
       }
 
-      // Log the user into the app using your AuthContext
       login(data.access_token);
-      
-      // Route to onboarding
       navigate('/class-selection');
-
     } catch (err) {
-      console.error("Google Auth API Error:", err);
+      console.error('Google Auth API Error:', err);
       setError(err.message);
     } finally {
       setIsLoading(false);
     }
   };
-  // ---------------------------------------------------------
 
   const validateForm = () => {
     const newErrors = {};
-    
+
     if (!formData.fullName.trim()) {
-      newErrors.fullName = "Full name is required.";
+      newErrors.fullName = 'Full name is required.';
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!formData.email.trim()) {
-      newErrors.email = "Email address is required.";
+      newErrors.email = 'Email address is required.';
     } else if (!emailRegex.test(formData.email)) {
-      newErrors.email = "Please enter a valid email address.";
+      newErrors.email = 'Please enter a valid email address.';
     }
 
     if (!formData.password) {
-      newErrors.password = "Password is required.";
-    } else if (formData.password.length < 8) { 
-      newErrors.password = "Password must be at least 8 characters long."; 
+      newErrors.password = 'Password is required.';
+    } else if (formData.password.length < 8) {
+      newErrors.password = 'Password must be at least 8 characters long.';
     }
     setFormErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
-  
+
   const handleInputChange = (field, value) => {
     setFormData({ ...formData, [field]: value });
     if (formErrors[field]) {
@@ -100,9 +87,9 @@ const RegisterPage = () => {
 
   const handleManualSubmit = async (e) => {
     e.preventDefault();
-    setError("");
-    
-    if (!validateForm()) return; 
+    setError('');
+
+    if (!validateForm()) return;
 
     setIsLoading(true);
 
@@ -110,81 +97,72 @@ const RegisterPage = () => {
     const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     try {
-      // Logic to split "Full Name" into backend-friendly schema fields
       const nameParts = formData.fullName.trim().split(' ');
       const firstName = nameParts[0];
-      // If there are multiple names, combine the rest as the last name. Otherwise, leave empty.
       const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : undefined;
 
-      // 1. Hit the Registration Endpoint
       const regResponse = await fetch(`${apiUrl}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: formData.email,
           password: formData.password,
-          first_name: firstName,         // Matches RegisterIn schema
-          last_name: lastName,           // Matches RegisterIn schema
-          display_name: formData.fullName, // Matches RegisterIn schema
-          role: "student"                // Defaulting to student as per schema
+          first_name: firstName,
+          last_name: lastName,
+          display_name: formData.fullName,
+          role: 'student',
         }),
-        signal: controller.signal
+        signal: controller.signal,
       });
 
       if (!regResponse.ok) {
         const errData = await regResponse.json().catch(() => null);
-        throw new Error(errData?.detail || "Registration failed. Email might already be in use.");
+        throw new Error(errData?.detail || 'Registration failed. Email might already be in use.');
       }
 
-      // Backend RegisterOut returns the created ID as `user_id`
       const regData = await regResponse.json().catch(() => null);
       let studentId = regData?.user_id;
 
-      // 2. Auto-Login to get the Authorization Token (LoginIn schema)
       const loginResponse = await fetch(`${apiUrl}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: formData.email, 
-          password: formData.password
+          email: formData.email,
+          password: formData.password,
         }),
-        signal: controller.signal
+        signal: controller.signal,
       });
 
       if (!loginResponse.ok) {
-        throw new Error("Account created, but auto-login failed. Please go to the Login page.");
+        throw new Error('Account created, but auto-login failed. Please go to the Login page.');
       }
 
       const loginData = await loginResponse.json();
-
-      // Ensure we have the ID to set in local storage
       if (!studentId) {
         studentId = loginData.user_id;
       }
 
       if (studentId) {
-        localStorage.setItem("mastery_student_id", studentId);
+        localStorage.setItem('mastery_student_id', studentId);
       }
-      
+
       login(loginData.access_token);
       navigate('/class-selection');
-
     } catch (err) {
-      console.error("Signup Error:", err);
+      console.error('Signup Error:', err);
       if (err.name === 'AbortError') {
-        setError("The server is taking too long to respond. Please check your connection and try again.");
+        setError('The server is taking too long to respond. Please check your connection and try again.');
       } else {
-        setError(err.message); 
+        setError(err.message);
       }
     } finally {
-      clearTimeout(timeoutId); 
+      clearTimeout(timeoutId);
       setIsLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      {/* LEFT COLUMN: Visual Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-[#6b46c1] relative flex-col items-center justify-center p-12 overflow-hidden">
         <div className="absolute top-10 left-10 text-white/10">
           <svg className="w-24 h-24" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
@@ -220,14 +198,13 @@ const RegisterPage = () => {
         </div>
       </div>
 
-      {/* RIGHT COLUMN: Form Area */}
       <div className="w-full lg:w-1/2 flex flex-col items-center p-8 sm:p-12 bg-white relative overflow-y-auto">
         <div className="w-full max-w-md flex justify-end mb-8">
           <p className="text-sm text-slate-500 font-medium">
             Already have an account? <Link to="/login" className="text-[#6b46c1] font-bold hover:underline">Log in</Link>
           </p>
         </div>
-        
+
         <div className="w-full max-w-md space-y-6">
           <div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight">Join your AI Tutor</h1>
@@ -243,11 +220,24 @@ const RegisterPage = () => {
             </div>
           )}
 
-          <div className="flex justify-center w-full">
-            <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-              <GoogleLogin onSuccess={handleGoogleSuccess} onError={() => setError("Google Signup Failed.")} useOneTap theme="outline" size="large" text="signup_with" width="100%" shape="rectangular" />
-            </GoogleOAuthProvider>
-          </div>
+          {GOOGLE_AUTH_ENABLED ? (
+            <div className="flex justify-center w-full">
+              <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={() => setError('Google Signup Failed.')}
+                  theme="outline"
+                  size="large"
+                  text="signup_with"
+                  shape="rectangular"
+                />
+              </GoogleOAuthProvider>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-sm text-slate-500">
+              Google sign-up is disabled locally until <code>VITE_GOOGLE_CLIENT_ID</code> is set.
+            </div>
+          )}
 
           <div className="relative flex items-center py-2">
             <div className="flex-grow border-t border-slate-200"></div>
@@ -256,55 +246,51 @@ const RegisterPage = () => {
           </div>
 
           <form onSubmit={handleManualSubmit} className="space-y-4" noValidate>
-            
-            {/* FULL NAME */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Full Name</label>
               <div className="relative">
                 <span className={`absolute left-4 top-1/2 -translate-y-1/2 ${formErrors.fullName ? 'text-rose-500' : 'text-slate-400'}`}>
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
                 </span>
-                <input 
-                  type="text" 
-                  placeholder="e.g. Jane Doe" 
-                  value={formData.fullName} 
-                  onChange={(e) => handleInputChange('fullName', e.target.value)} 
+                <input
+                  type="text"
+                  placeholder="e.g. Jane Doe"
+                  value={formData.fullName}
+                  onChange={(e) => handleInputChange('fullName', e.target.value)}
                   className={`w-full pl-12 pr-4 py-3 bg-white border rounded-xl text-sm focus:outline-none focus:ring-2 transition-all ${formErrors.fullName ? 'border-rose-500 focus:ring-rose-500/20 text-rose-900 placeholder:text-rose-300' : 'border-slate-200 focus:ring-[#6b46c1]'}`}
                 />
               </div>
               {formErrors.fullName && <p className="text-[11px] text-rose-500 font-medium pl-1">{formErrors.fullName}</p>}
             </div>
 
-            {/* EMAIL */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">School or Personal Email</label>
               <div className="relative">
                 <span className={`absolute left-4 top-1/2 -translate-y-1/2 ${formErrors.email ? 'text-rose-500' : 'text-slate-400'}`}>
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
                 </span>
-                <input 
-                  type="email" 
-                  placeholder="jane@school.edu.ng" 
-                  value={formData.email} 
-                  onChange={(e) => handleInputChange('email', e.target.value)} 
+                <input
+                  type="email"
+                  placeholder="jane@school.edu.ng"
+                  value={formData.email}
+                  onChange={(e) => handleInputChange('email', e.target.value)}
                   className={`w-full pl-12 pr-4 py-3 bg-white border rounded-xl text-sm focus:outline-none focus:ring-2 transition-all ${formErrors.email ? 'border-rose-500 focus:ring-rose-500/20 text-rose-900 placeholder:text-rose-300' : 'border-slate-200 focus:ring-[#6b46c1]'}`}
                 />
               </div>
               {formErrors.email && <p className="text-[11px] text-rose-500 font-medium pl-1">{formErrors.email}</p>}
             </div>
 
-            {/* PASSWORD */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Create Password</label>
               <div className="relative">
                 <span className={`absolute left-4 top-1/2 -translate-y-1/2 ${formErrors.password ? 'text-rose-500' : 'text-slate-400'}`}>
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
                 </span>
-                <input 
-                  type={showPassword ? "text" : "password"} 
+                <input
+                  type={showPassword ? 'text' : 'password'}
                   placeholder="Min. 8 characters"
-                  value={formData.password} 
-                  onChange={(e) => handleInputChange('password', e.target.value)} 
+                  value={formData.password}
+                  onChange={(e) => handleInputChange('password', e.target.value)}
                   className={`w-full pl-12 pr-12 py-3 bg-white border rounded-xl text-sm focus:outline-none focus:ring-2 transition-all ${formErrors.password ? 'border-rose-500 focus:ring-rose-500/20 text-rose-900 placeholder:text-rose-300' : 'border-slate-200 focus:ring-[#6b46c1]'}`}
                 />
                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none">
@@ -315,13 +301,13 @@ const RegisterPage = () => {
             </div>
 
             <button type="submit" disabled={isLoading} className={`w-full text-white font-bold py-3.5 rounded-xl transition-all shadow-lg mt-2 ${isLoading ? 'bg-slate-400 cursor-not-allowed shadow-none' : 'bg-[#6b46c1] hover:bg-[#5b3da6] shadow-indigo-500/30'}`}>
-              {isLoading ? "Creating Account..." : "Create Account"}
+              {isLoading ? 'Creating Account...' : 'Create Account'}
             </button>
           </form>
 
           <div className="text-center pt-6 pb-2">
             <p className="text-[10px] text-slate-500 font-medium mb-4">By signing up, you agree to our <a href="#" className="font-bold hover:underline">Terms of Service</a> & <a href="#" className="font-bold hover:underline">Privacy Policy</a></p>
-            <p className="text-[9px] text-slate-400 mt-6 uppercase tracking-widest">Â© 2024 MASTERY AI TUTOR â€¢ PERSONALIZED EDUCATION</p>
+            <p className="text-[9px] text-slate-400 mt-6 uppercase tracking-widest">© 2024 MASTERY AI TUTOR • PERSONALIZED EDUCATION</p>
           </div>
         </div>
       </div>

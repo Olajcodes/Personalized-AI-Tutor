@@ -66,7 +66,7 @@ class Settings(BaseModel):
     llm_api_base: str = os.getenv("LLM_API_BASE", "")
 
     ai_core_base_url: str = os.getenv("AI_CORE_BASE_URL", "")
-    ai_core_timeout_seconds: float = float(os.getenv("AI_CORE_TIMEOUT_SECONDS", "8"))
+    ai_core_timeout_seconds: float = float(os.getenv("AI_CORE_TIMEOUT_SECONDS", "40"))
     ai_core_allow_fallback: bool = _parse_bool(os.getenv("AI_CORE_ALLOW_FALLBACK"), default=False)
     cors_origins: list[str] = _parse_cors_origins(os.getenv("CORS_ORIGINS", ""))
     internal_service_key: str = os.getenv("INTERNAL_SERVICE_KEY", "")

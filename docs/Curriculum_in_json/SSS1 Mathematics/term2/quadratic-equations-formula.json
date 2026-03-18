@@ -26,5 +26,14 @@
       "content": "For ax² + bx + c = 0 with roots α and β: the sum α + β = −b/a, and the product αβ = c/a. These follow from comparing ax² + bx + c = 0 with (x − α)(x − β) = 0, which expands to x² − (α + β)x + αβ = 0. Example: for 3x² − 4x − 1 = 0, α + β = 4/3 and αβ = −1/3. Use these to evaluate expressions like α/β + β/α = (α² + β²)/αβ = [(α+β)² − 2αβ]/αβ."
     }
   ],
-  "keywords": ["quadratic formula", "completing the square", "roots", "discriminant", "sum of roots", "product of roots", "alpha beta", "quadratic equation"]
+  "keywords": [
+    "quadratic formula",
+    "completing the square",
+    "roots",
+    "discriminant",
+    "sum of roots",
+    "product of roots",
+    "alpha beta",
+    "quadratic equation"
+  ]
 }

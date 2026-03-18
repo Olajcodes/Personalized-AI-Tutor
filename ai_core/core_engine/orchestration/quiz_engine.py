@@ -103,7 +103,7 @@ def _internal_rag_url() -> str:
 
 
 def _internal_timeout() -> float:
-    return float(os.getenv("INTERNAL_CONTEXT_TIMEOUT_SECONDS", "5"))
+    return float(os.getenv("INTERNAL_CONTEXT_TIMEOUT_SECONDS", "12"))
 
 
 def _internal_lesson_context(*, student_id: uuid.UUID | None, topic_id: uuid.UUID) -> dict | None:
@@ -156,7 +156,7 @@ def _internal_rag_context(
             "top_k": max(4, min(int(os.getenv("QUIZ_RAG_TOP_K", "8")), 12)),
             "approved_only": True,
         },
-        timeout=float(os.getenv("INTERNAL_RAG_TIMEOUT_SECONDS", "6")),
+        timeout=float(os.getenv("INTERNAL_RAG_TIMEOUT_SECONDS", "12")),
     )
     chunks = data.get("chunks")
     if not isinstance(chunks, list):
