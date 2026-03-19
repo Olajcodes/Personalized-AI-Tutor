@@ -5,12 +5,15 @@ import {
   ArrowLeft,
   ArrowRight,
   BrainCircuit,
+  CheckCheck,
   CheckCircle2,
   ClipboardList,
   Loader2,
   PlayCircle,
+  Route,
   Sparkles,
   Target,
+  TimerReset,
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
@@ -68,6 +71,19 @@ const clearPersistedSession = (diagnosticId) => {
 };
 
 const subjectLabel = (subject) => SUBJECT_LABELS[subject] || String(subject || '').toUpperCase();
+
+const subjectAccent = (subject) => {
+  switch (subject) {
+    case 'english':
+      return 'from-sky-500/15 via-cyan-500/10 to-white text-sky-700 border-sky-200';
+    case 'math':
+      return 'from-indigo-500/15 via-violet-500/10 to-white text-indigo-700 border-indigo-200';
+    case 'civic':
+      return 'from-emerald-500/15 via-teal-500/10 to-white text-emerald-700 border-emerald-200';
+    default:
+      return 'from-slate-500/10 via-slate-500/5 to-white text-slate-700 border-slate-200';
+  }
+};
 
 const completionCount = (status, activeSession, answersById) => {
   const completedSubjects = Array.isArray(status?.completed_subjects) ? status.completed_subjects.length : 0;
@@ -282,6 +298,15 @@ export default function AssessmentSplash() {
     [status],
   );
 
+  const answeredCurrentSubjectCount = activeSession
+    ? activeSession.questions.filter((question) => {
+        const answer = answersById[question.question_id];
+        return typeof answer === 'string' && answer.length > 0;
+      }).length
+    : 0;
+
+  const overallAnsweredCount = completionCount(status, activeSession, answersById);
+
   if (isLoadingStatus) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6">
@@ -294,36 +319,86 @@ export default function AssessmentSplash() {
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.12),_transparent_35%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)] px-6 py-8">
-      <main className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-700">
-              <BrainCircuit className="h-3.5 w-3.5" />
-              Mandatory onboarding diagnostic
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.12),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(79,70,229,0.12),_transparent_24%),linear-gradient(180deg,#f8fbff_0%,#eef2ff_48%,#f8fafc_100%)] px-4 py-6 sm:px-6 sm:py-8">
+      <main className="mx-auto max-w-[90rem]">
+        <div className="mb-8 grid gap-5 xl:grid-cols-[1.4fr_0.8fr]">
+          <section className="relative overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white/90 p-6 shadow-[0_20px_60px_-35px_rgba(15,23,42,0.25)] backdrop-blur">
+            <div className="absolute inset-x-0 top-0 h-24 bg-[linear-gradient(90deg,rgba(37,99,235,0.10),rgba(14,165,233,0.06),transparent)]" />
+            <div className="relative">
+              <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-700 shadow-sm">
+                <BrainCircuit className="h-3.5 w-3.5" />
+                Graph-grounded onboarding
+              </div>
+              <h1 className="mt-5 max-w-4xl text-3xl font-black tracking-tight text-slate-950 sm:text-4xl lg:text-[3.2rem]">
+                Build a real mastery baseline before your first lesson.
+              </h1>
+              <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600 sm:text-[15px]">
+                We run one focused diagnostic per subject, map your weak prerequisites into the knowledge graph, and
+                use that evidence to shape your first lesson sequence, tutor interventions, and revision path.
+              </p>
+
+              <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Subjects selected</p>
+                  <p className="mt-2 text-2xl font-black text-slate-900">{selectedSubjects.length || 0}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">One diagnostic run per enrolled subject</p>
+                </div>
+                <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Questions answered</p>
+                  <p className="mt-2 text-2xl font-black text-slate-900">{overallAnsweredCount}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">Baseline evidence already captured</p>
+                </div>
+                <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Graph target</p>
+                  <p className="mt-2 text-2xl font-black text-slate-900">{status?.completed_subjects?.length || 0}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">Subjects already mapped into mastery</p>
+                </div>
+              </div>
             </div>
-            <h1 className="mt-4 text-4xl font-black tracking-tight text-slate-900">Let’s map your real starting point</h1>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-              We’ll run 10 graph-grounded questions for each subject you selected. The results become your first mastery baseline, your blocking prerequisite repair plan, and your opening lesson route.
-            </p>
-          </div>
-          <div className="rounded-[2rem] border border-slate-200 bg-white px-5 py-4 shadow-sm">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Overall progress</p>
-            <p className="mt-2 text-3xl font-black text-slate-900">{overallProgress}%</p>
-            <p className="mt-1 text-xs font-semibold text-slate-500">
-              {status?.completed_subjects?.length || 0} of {selectedSubjects.length || 0} subjects completed
-            </p>
-          </div>
+          </section>
+
+          <aside className="rounded-[2rem] border border-slate-200/80 bg-slate-950 p-6 text-white shadow-[0_20px_60px_-35px_rgba(15,23,42,0.55)]">
+            <div className="flex items-center justify-between gap-3">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-sky-200">
+                <BrainCircuit className="h-3.5 w-3.5" />
+                Progress pulse
+              </div>
+              <p className="text-4xl font-black text-white">{overallProgress}%</p>
+            </div>
+            <div className="mt-5 h-3 overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-[linear-gradient(90deg,#22d3ee_0%,#6366f1_60%,#8b5cf6_100%)] transition-all duration-300"
+                style={{ width: `${Math.max(overallProgress, 4)}%` }}
+              />
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+              <div className="rounded-[1.35rem] border border-white/10 bg-white/5 p-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-300">Completion</p>
+                <p className="mt-2 text-lg font-black text-white">
+                  {status?.completed_subjects?.length || 0} / {selectedSubjects.length || 0} subjects
+                </p>
+                <p className="mt-1 text-xs font-semibold text-slate-300">Each subject writes its own diagnostic evidence trail.</p>
+              </div>
+              <div className="rounded-[1.35rem] border border-white/10 bg-white/5 p-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-300">Current route</p>
+                <p className="mt-2 text-lg font-black text-white">{nextRun ? subjectLabel(nextRun.subject) : 'All subjects complete'}</p>
+                <p className="mt-1 text-xs font-semibold text-slate-300">
+                  {nextRun?.status === 'in_progress' ? 'Resume where you stopped.' : 'Start the next subject in sequence.'}
+                </p>
+              </div>
+            </div>
+          </aside>
         </div>
 
         {(statusError || launchError) && (
-          <div className="mb-6 rounded-3xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-700">
+          <div className="mb-6 flex items-start gap-3 rounded-[1.75rem] border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-700 shadow-sm">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             {statusError || launchError}
           </div>
         )}
 
         {latestSummary && (
-          <div className="mb-6 rounded-[2rem] border border-emerald-200 bg-emerald-50 px-6 py-5 shadow-sm">
+          <div className="mb-6 rounded-[2rem] border border-emerald-200 bg-[linear-gradient(135deg,rgba(16,185,129,0.14),rgba(255,255,255,0.95))] px-6 py-5 shadow-sm">
             <div className="flex items-center gap-3">
               <CheckCircle2 className="h-5 w-5 text-emerald-700" />
               <div>
@@ -334,119 +409,223 @@ export default function AssessmentSplash() {
                   {latestSummary.result?.learning_gap_summary?.rationale || 'Your baseline mastery profile has been updated.'}
                 </p>
               </div>
+              </div>
             </div>
-          </div>
         )}
-
-        <div className="grid gap-6 lg:grid-cols-[0.9fr_1.3fr]">
+        <div className="grid gap-6 xl:grid-cols-[0.92fr_1.28fr]">
           <section className="space-y-6">
-            <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex items-center gap-2">
-                <ClipboardList className="h-4 w-4 text-indigo-600" />
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600">Subject queue</p>
+            <div className="rounded-[2rem] border border-slate-200/80 bg-white/90 p-6 shadow-[0_16px_50px_-32px_rgba(15,23,42,0.24)]">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="h-4 w-4 text-indigo-600" />
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600">Subject queue</p>
+                </div>
+                <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                  {status?.completed_subjects?.length || 0} completed
+                </div>
               </div>
               <div className="mt-4 space-y-3">
-                {(status?.subject_runs || []).map((run) => (
-                  <div
-                    key={run.subject}
-                    className={`rounded-3xl border px-4 py-4 ${RUN_STATUS_STYLES[run.status] || RUN_STATUS_STYLES.pending}`}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-sm font-black text-slate-900">{subjectLabel(run.subject)}</p>
-                        <p className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                          {RUN_STATUS_LABELS[run.status]} · {run.question_count || 10} questions
-                        </p>
+                {(status?.subject_runs || []).map((run) => {
+                  const isActiveRun = activeSession?.subject === run.subject;
+                  return (
+                    <div
+                      key={run.subject}
+                      className={`overflow-hidden rounded-[1.8rem] border bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(248,250,252,0.95))] p-4 transition ${RUN_STATUS_STYLES[run.status] || RUN_STATUS_STYLES.pending} ${isActiveRun ? 'ring-2 ring-indigo-200 shadow-[0_12px_35px_-24px_rgba(79,70,229,0.45)]' : 'shadow-sm'}`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-3">
+                            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border bg-gradient-to-br ${subjectAccent(run.subject)}`}>
+                              {run.status === 'completed' ? (
+                                <CheckCheck className="h-5 w-5" />
+                              ) : run.status === 'in_progress' ? (
+                                <TimerReset className="h-5 w-5" />
+                              ) : (
+                                <PlayCircle className="h-5 w-5" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate text-lg font-black text-slate-900">{subjectLabel(run.subject)}</p>
+                              <p className="mt-1 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                {RUN_STATUS_LABELS[run.status]} � {run.question_count || 10} questions
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        {run.status !== 'completed' && (
+                          <button
+                            type="button"
+                            onClick={() => launchSubjectDiagnostic(run.subject)}
+                            disabled={isLaunching || isSubmitting}
+                            className="shrink-0 rounded-2xl bg-slate-950 px-4 py-2.5 text-xs font-black text-white transition hover:bg-slate-800 disabled:opacity-60"
+                          >
+                            {run.status === 'in_progress' ? 'Resume' : 'Start'}
+                          </button>
+                        )}
                       </div>
-                      {run.status !== 'completed' && (
-                        <button
-                          type="button"
-                          onClick={() => launchSubjectDiagnostic(run.subject)}
-                          disabled={isLaunching || isSubmitting}
-                          className="rounded-2xl bg-slate-900 px-3 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-60"
-                        >
-                          {run.status === 'in_progress' ? 'Resume' : 'Start'}
-                        </button>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                          {run.status === 'completed' ? 'Baseline stored' : 'Awaiting evidence'}
+                        </span>
+                        {isActiveRun && (
+                          <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-indigo-700">
+                            Active now
+                          </span>
+                        )}
+                      </div>
+
+                      {run.recommended_start_topic_title && (
+                        <p className="mt-4 text-sm leading-6 text-slate-600">
+                          Recommended start: <span className="font-bold text-slate-900">{run.recommended_start_topic_title}</span>
+                        </p>
+                      )}
+                      {run.blocking_prerequisite_label && (
+                        <p className="mt-2 text-sm leading-6 text-amber-800">
+                          Blocking prerequisite: <span className="font-bold">{run.blocking_prerequisite_label}</span>
+                        </p>
+                      )}
+                      {Array.isArray(run.weakest_concepts) && run.weakest_concepts.length > 0 && (
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {run.weakest_concepts.slice(0, 3).map((concept) => (
+                            <span
+                              key={`${run.subject}-${concept.concept_id}`}
+                              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-600"
+                            >
+                              {concept.concept_label}
+                            </span>
+                          ))}
+                        </div>
                       )}
                     </div>
-                    {run.recommended_start_topic_title && (
-                      <p className="mt-3 text-xs leading-6 text-slate-600">
-                        Recommended start: <span className="font-bold text-slate-800">{run.recommended_start_topic_title}</span>
-                      </p>
-                    )}
-                    {run.blocking_prerequisite_label && (
-                      <p className="mt-2 text-xs leading-6 text-amber-800">
-                        Blocking prerequisite: <span className="font-bold">{run.blocking_prerequisite_label}</span>
-                      </p>
-                    )}
-                    {Array.isArray(run.weakest_concepts) && run.weakest_concepts.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {run.weakest_concepts.slice(0, 3).map((concept) => (
-                          <span
-                            key={`${run.subject}-${concept.concept_id}`}
-                            className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-600"
-                          >
-                            {concept.concept_label}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
-            <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="rounded-[2rem] border border-slate-200/80 bg-white/90 p-6 shadow-[0_16px_50px_-32px_rgba(15,23,42,0.24)]">
               <div className="flex items-center gap-2">
                 <Target className="h-4 w-4 text-emerald-600" />
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">Why this matters</p>
               </div>
-              <ul className="mt-4 space-y-3 text-sm leading-7 text-slate-600">
-                <li>Every answer writes baseline mastery evidence into your graph profile.</li>
-                <li>Weak prerequisite concepts become the first repair targets in your lesson path.</li>
-                <li>The dashboard and course recommendation after onboarding are built from this result.</li>
-              </ul>
+              <div className="mt-5 space-y-4">
+                <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 rounded-2xl bg-emerald-100 p-2 text-emerald-700">
+                      <CheckCircle2 className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-slate-900">Every answer becomes mastery evidence</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-600">
+                        We write baseline confidence into your graph profile instead of treating onboarding like a throwaway quiz.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 rounded-2xl bg-amber-100 p-2 text-amber-700">
+                      <Route className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-slate-900">Weak prerequisites become your first repair route</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-600">
+                        The system uses weak concepts and blockers to decide what to reteach first.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 rounded-2xl bg-sky-100 p-2 text-sky-700">
+                      <Sparkles className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-slate-900">Your dashboard is shaped by this result</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-600">
+                        Recommended lessons, tutor actions, and starting topics after onboarding come from this baseline.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
 
-          <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+          <section className="rounded-[2rem] border border-slate-200/80 bg-white/95 p-6 shadow-[0_20px_60px_-35px_rgba(15,23,42,0.24)] backdrop-blur">
             {!activeSession ? (
               status?.onboarding_complete ? (
-                <div className="flex min-h-[28rem] flex-col items-center justify-center text-center">
-                  <CheckCircle2 className="h-12 w-12 text-emerald-600" />
-                  <h2 className="mt-4 text-3xl font-black text-slate-900">Diagnostic complete</h2>
-                  <p className="mt-3 max-w-xl text-sm leading-7 text-slate-600">
-                    Your baseline graph profile is ready. We’ve stored your weakest concepts, blocking prerequisites, and recommended lesson starts for each subject.
+                <div className="flex min-h-[34rem] flex-col items-center justify-center text-center">
+                  <div className="rounded-[2rem] bg-emerald-100 p-4 text-emerald-700">
+                    <CheckCircle2 className="h-12 w-12" />
+                  </div>
+                  <h2 className="mt-5 text-3xl font-black text-slate-900">Diagnostic complete</h2>
+                  <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
+                    Your baseline graph profile is ready. We have stored weak concepts, blocking prerequisites, and recommended lesson starts for each subject.
                   </p>
+                  <div className="mt-8 grid w-full max-w-3xl gap-3 sm:grid-cols-3">
+                    <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 text-left">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Subjects mapped</p>
+                      <p className="mt-2 text-2xl font-black text-slate-900">{status?.completed_subjects?.length || 0}</p>
+                    </div>
+                    <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 text-left">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Question total</p>
+                      <p className="mt-2 text-2xl font-black text-slate-900">{selectedSubjects.length * 10 || 0}</p>
+                    </div>
+                    <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 text-left">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Next step</p>
+                      <p className="mt-2 text-lg font-black text-slate-900">Open dashboard</p>
+                    </div>
+                  </div>
                   <button
                     type="button"
                     onClick={() => navigate('/dashboard')}
-                    className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-black text-white hover:bg-indigo-700"
+                    className="mt-8 inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-black text-white transition hover:bg-indigo-700"
                   >
                     Open dashboard
                     <ArrowRight className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
-                <div className="flex min-h-[28rem] flex-col justify-center">
+                <div className="flex min-h-[34rem] flex-col justify-center">
                   <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-700">
                     <Sparkles className="h-3.5 w-3.5" />
                     Ready to begin
                   </div>
-                  <h2 className="mt-4 text-3xl font-black text-slate-900">
+                  <h2 className="mt-5 max-w-3xl text-3xl font-black leading-tight text-slate-900 sm:text-[2.6rem]">
                     {nextRun?.status === 'in_progress'
                       ? `Resume ${subjectLabel(nextRun.subject)} diagnostic`
                       : 'Start your subject diagnostics'}
                   </h2>
-                  <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
-                    We’ll guide you through {selectedSubjects.length * 10 || 10} total questions across your selected subjects. You can refresh and resume exactly where you left off.
+                  <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600">
+                    We will guide you through {selectedSubjects.length * 10 || 10} graph-grounded questions across your selected subjects. Your progress is saved, so a refresh brings you back to the current subject run.
                   </p>
+                  <div className="mt-8 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-[1.6rem] border border-slate-200 bg-slate-50/80 p-5">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Next subject</p>
+                      <p className="mt-2 text-xl font-black text-slate-900">
+                        {nextRun?.subject ? subjectLabel(nextRun.subject) : subjectLabel(selectedSubjects[0])}
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-slate-600">
+                        {nextRun?.status === 'in_progress'
+                          ? 'Continue from the saved checkpoint.'
+                          : 'Launch the first required diagnostic run.'}
+                      </p>
+                    </div>
+                    <div className="rounded-[1.6rem] border border-slate-200 bg-slate-50/80 p-5">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Question format</p>
+                      <p className="mt-2 text-xl font-black text-slate-900">10 questions per subject</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-600">Grounded in approved mappings for {level} term {term}.</p>
+                    </div>
+                  </div>
                   <div className="mt-8 flex flex-wrap gap-3">
                     <button
                       type="button"
                       onClick={() => launchSubjectDiagnostic(nextRun?.subject || selectedSubjects[0])}
                       disabled={!nextRun?.subject || isLaunching}
-                      className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-black text-white hover:bg-indigo-700 disabled:opacity-60"
+                      className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-black text-white transition hover:bg-indigo-700 disabled:opacity-60"
                     >
                       {isLaunching ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
                       {nextRun?.status === 'in_progress' ? 'Resume diagnostic' : 'Start diagnostic'}
@@ -454,7 +633,7 @@ export default function AssessmentSplash() {
                     <button
                       type="button"
                       onClick={() => navigate('/learning-preferences')}
-                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 hover:bg-slate-50"
+                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
                     >
                       <ArrowLeft className="h-4 w-4" />
                       Back to preferences
@@ -464,64 +643,118 @@ export default function AssessmentSplash() {
               )
             ) : (
               <>
-                <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-700">
-                      <BrainCircuit className="h-3.5 w-3.5" />
-                      {subjectLabel(activeSession.subject)}
+                <div className="rounded-[1.9rem] border border-slate-200 bg-[linear-gradient(135deg,rgba(241,245,249,0.78),rgba(255,255,255,0.98))] p-5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-700 shadow-sm">
+                        <BrainCircuit className="h-3.5 w-3.5" />
+                        {subjectLabel(activeSession.subject)}
+                      </div>
+                      <h2 className="mt-4 text-2xl font-black text-slate-900 sm:text-[2rem]">
+                        Question {currentIndex + 1} of {activeSession.question_count}
+                      </h2>
+                      <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-600">
+                        Each question is grounded in approved curriculum mappings for {level} term {term}, then written back into your graph profile as baseline evidence.
+                      </p>
                     </div>
-                    <h2 className="mt-3 text-2xl font-black text-slate-900">
-                      Question {currentIndex + 1} of {activeSession.question_count}
-                    </h2>
-                    <p className="mt-2 text-sm leading-7 text-slate-600">
-                      Each question is grounded in the approved curriculum mappings for {level} term {term}.
-                    </p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-[1.35rem] border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Answered</p>
+                        <p className="mt-1 text-2xl font-black text-slate-900">
+                          {answeredCurrentSubjectCount} / {activeSession.question_count}
+                        </p>
+                      </div>
+                      <div className="rounded-[1.35rem] border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Subject progress</p>
+                        <p className="mt-1 text-2xl font-black text-slate-900">
+                          {Math.round(((currentIndex + 1) / activeSession.question_count) * 100)}%
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Subject progress</p>
-                    <p className="mt-1 text-lg font-black text-slate-900">
-                      {Math.round(((currentIndex + 1) / activeSession.question_count) * 100)}%
-                    </p>
+                  <div className="mt-5 h-2.5 overflow-hidden rounded-full bg-slate-200">
+                    <div
+                      className="h-full rounded-full bg-[linear-gradient(90deg,#22d3ee_0%,#6366f1_65%,#8b5cf6_100%)] transition-all duration-300"
+                      style={{ width: `${Math.max(Math.round(((currentIndex + 1) / activeSession.question_count) * 100), 6)}%` }}
+                    />
                   </div>
                 </div>
 
-                <div className="mt-6">
-                  <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
-                    <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                      Concept focus
+                <div className="mt-6 grid gap-5 2xl:grid-cols-[0.42fr_1fr]">
+                  <div className="space-y-4">
+                    <div className="rounded-[1.7rem] border border-slate-200 bg-slate-50/80 p-5">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Concept focus</p>
+                      <p className="mt-3 text-2xl font-black leading-tight text-slate-900">
+                        {currentQuestion?.concept_label || 'Mapped concept'}
+                      </p>
+                      {currentQuestion?.topic_title && (
+                        <p className="mt-3 text-sm leading-6 text-slate-600">
+                          Topic: <span className="font-semibold text-slate-800">{currentQuestion.topic_title}</span>
+                        </p>
+                      )}
                     </div>
-                    <p className="mt-2 text-sm font-bold text-slate-900">
-                      {currentQuestion?.concept_label || 'Mapped concept'}
-                    </p>
-                    {currentQuestion?.topic_title && (
-                      <p className="mt-1 text-xs text-slate-500">Topic: {currentQuestion.topic_title}</p>
-                    )}
+
+                    <div className="rounded-[1.7rem] border border-slate-200 bg-slate-50/80 p-5">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Question design</p>
+                      <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
+                        <div className="flex items-start gap-3">
+                          <div className="rounded-xl bg-indigo-100 p-2 text-indigo-700">
+                            <CheckCircle2 className="h-4 w-4" />
+                          </div>
+                          <p>Option order is shuffled so the correct answer is not fixed to one letter.</p>
+                        </div>
+                        <div className="flex items-start gap-3">
+                          <div className="rounded-xl bg-emerald-100 p-2 text-emerald-700">
+                            <Route className="h-4 w-4" />
+                          </div>
+                          <p>Strong answers unlock better starting lessons. Weak answers expose prerequisite gaps.</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  <h3 className="mt-6 text-2xl font-black leading-tight text-slate-900">{currentQuestion?.prompt}</h3>
+                  <div>
+                    <div className="rounded-[1.9rem] border border-slate-200 bg-white p-6 shadow-sm">
+                      <h3 className="text-2xl font-black leading-tight text-slate-950 sm:text-[2.2rem]">{currentQuestion?.prompt}</h3>
 
-                  <div className="mt-6 grid gap-4 md:grid-cols-2">
-                    {(currentQuestion?.options || []).map((option, index) => {
-                      const optionLetter = String.fromCharCode(65 + index);
-                      const isSelected = selectedAnswer === optionLetter;
-                      return (
-                        <button
-                          key={`${currentQuestion?.question_id}-${optionLetter}`}
-                          type="button"
-                          onClick={() => setSelectedAnswer(optionLetter)}
-                          className={`rounded-3xl border px-5 py-5 text-left transition ${
-                            isSelected
-                              ? 'border-indigo-300 bg-indigo-50 text-indigo-900 shadow-sm'
-                              : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                          }`}
-                        >
-                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                            Option {optionLetter}
-                          </p>
-                          <p className="mt-3 text-sm font-semibold leading-7">{option}</p>
-                        </button>
-                      );
-                    })}
+                      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                        {(currentQuestion?.options || []).map((option, index) => {
+                          const optionLetter = String.fromCharCode(65 + index);
+                          const isSelected = selectedAnswer === optionLetter;
+                          return (
+                            <button
+                              key={`${currentQuestion?.question_id}-${optionLetter}`}
+                              type="button"
+                              onClick={() => setSelectedAnswer(optionLetter)}
+                              className={`group flex min-h-[10.5rem] flex-col rounded-[1.75rem] border px-5 py-5 text-left transition-all duration-200 ${
+                                isSelected
+                                  ? 'border-indigo-300 bg-[linear-gradient(135deg,rgba(99,102,241,0.12),rgba(255,255,255,0.98))] text-indigo-950 shadow-[0_16px_38px_-28px_rgba(79,70,229,0.6)]'
+                                  : 'border-slate-200 bg-slate-50/40 text-slate-700 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-[0_16px_38px_-30px_rgba(15,23,42,0.24)]'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="inline-flex items-center gap-2 rounded-full border border-current/10 bg-white/80 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                  <span
+                                    className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black ${
+                                      isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700 group-hover:bg-slate-300'
+                                    }`}
+                                  >
+                                    {optionLetter}
+                                  </span>
+                                  Option {optionLetter}
+                                </div>
+                                {isSelected ? (
+                                  <span className="rounded-full bg-indigo-600 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-white">
+                                    Selected
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="mt-4 break-words text-[1.02rem] font-semibold leading-8 text-slate-900">{option}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -539,7 +772,7 @@ export default function AssessmentSplash() {
                         });
                       }}
                       disabled={currentIndex === 0 || isSubmitting}
-                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                     >
                       <ArrowLeft className="h-4 w-4" />
                       Back
@@ -561,7 +794,7 @@ export default function AssessmentSplash() {
                         handlePersistAndMove(skipValue, 'next');
                       }}
                       disabled={isSubmitting}
-                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                     >
                       Skip
                     </button>
@@ -578,7 +811,7 @@ export default function AssessmentSplash() {
                       handlePersistAndMove(selectedAnswer, 'next');
                     }}
                     disabled={!selectedAnswer || isSubmitting}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-black text-white hover:bg-indigo-700 disabled:opacity-60"
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(90deg,#4f46e5_0%,#7c3aed_100%)] px-5 py-3 text-sm font-black text-white transition hover:brightness-105 disabled:opacity-60"
                   >
                     {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                     {currentIndex === activeSession.question_count - 1 ? 'Submit subject diagnostic' : 'Next question'}
