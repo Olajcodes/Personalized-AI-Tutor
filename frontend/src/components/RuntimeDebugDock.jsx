@@ -13,16 +13,15 @@ import {
   Server,
   ShieldCheck,
   Workflow,
+  X,
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
+import { AI_CORE_URL, API_URL } from '../config/runtime';
 import { readLatestGraphIntervention } from '../services/graphIntervention';
+import { resolveStudentId } from '../utils/sessionIdentity';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://mastery-backend-7xe8.onrender.com/api/v1';
-const AI_CORE_URL = import.meta.env.VITE_AI_CORE_URL
-  || (typeof window !== 'undefined' ? window.localStorage.getItem('mastery_ai_core_url') : '')
-  || '';
 const REFRESH_INTERVAL_MS = 15_000;
 const STORAGE_KEY = 'mastery_runtime_dock_open';
 
@@ -160,7 +159,7 @@ export default function RuntimeDebugDock() {
   const { token } = useAuth();
   const { studentData, userData } = useUser();
   const location = useLocation();
-  const studentId = studentData?.user_id || userData?.id || null;
+  const studentId = resolveStudentId(studentData, userData);
   const [isOpen, setIsOpen] = useState(() => readOpenState());
   const [isLoading, setIsLoading] = useState(false);
   const [backendState, setBackendState] = useState({ status: 'not_configured', detail: '', payload: null });
@@ -239,8 +238,11 @@ export default function RuntimeDebugDock() {
       </button>
 
       {isOpen && (
-        <div className="pointer-events-auto w-[min(92vw,420px)] overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl shadow-slate-950/15">
-          <div className="border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.18),_transparent_42%),linear-gradient(135deg,#ffffff,_#f8fafc)] p-5">
+        <div
+          className="pointer-events-auto flex w-[min(92vw,420px)] flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl shadow-slate-950/15"
+          style={{ maxHeight: 'min(78dvh, 680px)' }}
+        >
+          <div className="sticky top-0 z-10 border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.18),_transparent_42%),linear-gradient(135deg,#ffffff,_#f8fafc)] px-5 py-4 backdrop-blur">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-700">
@@ -252,15 +254,25 @@ export default function RuntimeDebugDock() {
                   Route {location.pathname} · refreshed {refreshedAt ? formatUpdatedAt(refreshedAt) : 'not yet'}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={refresh}
-                disabled={isLoading}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-              >
-                {isLoading ? <LoaderCircle size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
-                Refresh
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={refresh}
+                  disabled={isLoading}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                >
+                  {isLoading ? <LoaderCircle size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
+                  Refresh
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleOpen}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                  aria-label="Collapse runtime dock"
+                >
+                  <X size={15} />
+                </button>
+              </div>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <StatusPill status={backendState.status} label={`Backend ${shortText(backendState.status)}`} />
@@ -269,7 +281,7 @@ export default function RuntimeDebugDock() {
             </div>
           </div>
 
-          <div className="max-h-[70vh] space-y-4 overflow-y-auto p-5">
+          <div className="space-y-4 overflow-y-auto p-5">
             <section className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-center gap-2 text-slate-700">
                 <BrainCircuit size={16} />
@@ -285,7 +297,11 @@ export default function RuntimeDebugDock() {
                   </p>
                   <div className="grid gap-2 sm:grid-cols-2">
                     <MetricCard label="Subject" value={shortText(latestIntervention.subject)} tone="indigo" />
-                    <MetricCard label="Focus concept" value={shortText(recentEvidence?.strongest_drop_concept_label || recentEvidence?.strongest_gain_concept_label)} tone="amber" />
+                    <MetricCard
+                      label="Focus concept"
+                      value={shortText(recentEvidence?.strongest_drop_concept_label || recentEvidence?.strongest_gain_concept_label)}
+                      tone="amber"
+                    />
                     <MetricCard label="Next topic" value={shortText(nextStep?.recommended_topic_title || nextStep?.recommended_concept_label)} tone="emerald" />
                     <MetricCard label="Updated" value={formatUpdatedAt(latestIntervention.updated_at)} />
                   </div>

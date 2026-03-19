@@ -5,6 +5,8 @@ import { useUser } from '../context/UserContext';
 import CourseSidebar from '../components/CourseSidebar';
 import InterventionTimeline from '../components/InterventionTimeline';
 import { PlayCircle, Clock, BookOpen, GitBranch, Lock, Sparkles } from 'lucide-react';
+import { API_URL } from '../config/runtime';
+import { resolveStudentId } from '../utils/sessionIdentity';
 import {
   buildGraphInterventionScope,
   readGraphIntervention,
@@ -60,7 +62,7 @@ const CoursePage = () => {
   
   const { token } = useAuth();
   const { studentData, userData } = useUser();
-  const activeId = studentData?.user_id || userData?.id;
+  const activeId = resolveStudentId(studentData, userData);
   const currentLevel = studentData?.sss_level || 'SSS1';
   const currentTerm = studentData?.current_term || 1;
 
@@ -71,10 +73,13 @@ const CoursePage = () => {
   const [evidenceSummary, setEvidenceSummary] = useState(null);
   const [interventionTimeline, setInterventionTimeline] = useState([]);
   const [recommendationStory, setRecommendationStory] = useState(null);
+  const [diagnosticStatus, setDiagnosticStatus] = useState(null);
+  const [learningGapSummary, setLearningGapSummary] = useState(null);
+  const [initialLessonPlan, setInitialLessonPlan] = useState(null);
   const [mapError, setMapError] = useState('');
   const [graphIntervention, setGraphIntervention] = useState(null);
 
-  const apiUrl = import.meta.env.VITE_API_URL || 'https://mastery-backend-7xe8.onrender.com/api/v1';
+  const apiUrl = API_URL;
   const interventionScope = useMemo(
     () => buildGraphInterventionScope({
       studentId: activeId,
@@ -131,6 +136,9 @@ const CoursePage = () => {
         setEvidenceSummary(data?.evidence_summary || null);
         setInterventionTimeline(safeArray(data?.intervention_timeline));
         setRecommendationStory(data?.recommendation_story || null);
+        setDiagnosticStatus(data?.diagnostic_status || null);
+        setLearningGapSummary(data?.learning_gap_summary || null);
+        setInitialLessonPlan(data?.initial_lesson_plan || null);
         setMapError(data?.map_error || '');
 
       } catch (err) {
@@ -141,6 +149,9 @@ const CoursePage = () => {
         setEvidenceSummary(null);
         setInterventionTimeline([]);
         setRecommendationStory(null);
+        setDiagnosticStatus(null);
+        setLearningGapSummary(null);
+        setInitialLessonPlan(null);
       } finally {
         setIsLoading(false);
       }
@@ -201,6 +212,48 @@ const CoursePage = () => {
                 <div className="rounded-2xl bg-slate-50 p-3">
                   <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Best action</div>
                   <p className="mt-1 text-sm font-bold text-slate-800">{effectiveAnalytics.outcome || effectiveRecommendationStory?.action_label || 'Keep learning'}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {(initialLessonPlan || learningGapSummary) && (
+            <div className="mb-6 rounded-3xl border border-indigo-200 bg-gradient-to-r from-indigo-50 via-white to-sky-50 p-6 shadow-sm">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="max-w-2xl">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-700">
+                    <GitBranch className="h-3.5 w-3.5" />
+                    Baseline lesson plan
+                  </div>
+                  <h2 className="mt-3 text-2xl font-black text-slate-900">
+                    {initialLessonPlan?.recommended_topic_title
+                      || learningGapSummary?.recommended_start_topic_title
+                      || `Start rebuilding ${subject}`}
+                  </h2>
+                  <p className="mt-2 text-sm leading-7 text-slate-600">
+                    {initialLessonPlan?.rationale
+                      || learningGapSummary?.rationale
+                      || 'Your onboarding diagnostic has already shaped this subject path.'}
+                  </p>
+                  {initialLessonPlan?.prerequisite_repair_label && (
+                    <p className="mt-3 text-sm font-semibold text-amber-700">
+                      Repair first: {initialLessonPlan.prerequisite_repair_label}
+                    </p>
+                  )}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:w-[18rem]">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Diagnostic status</div>
+                    <p className="mt-2 text-sm font-black text-slate-900">
+                      {diagnosticStatus?.status === 'completed' ? 'Completed' : diagnosticStatus?.status === 'in_progress' ? 'In progress' : 'Pending'}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Next action</div>
+                    <p className="mt-2 text-sm font-black text-slate-900">
+                      {initialLessonPlan?.next_best_action || learningGapSummary?.next_best_action || 'Open recommended lesson'}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

@@ -17,6 +17,8 @@ import InterventionTimeline from '../components/InterventionTimeline';
 import PresentationCueCard from '../components/PresentationCueCard';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
+import { API_URL } from '../config/runtime';
+import { resolveStudentId } from '../utils/sessionIdentity';
 
 const EMPTY_MAP_DATA = {
   nodes: [],
@@ -97,8 +99,8 @@ export default function GraphPathPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const apiUrl = import.meta.env.VITE_API_URL;
-  const activeId = studentData?.user_id || userData?.id;
+  const apiUrl = API_URL;
+  const activeId = resolveStudentId(studentData, userData);
   const currentLevel = studentData?.sss_level || 'SSS1';
   const currentTerm = Number(studentData?.current_term || 1);
   const enrolledSubjects = useMemo(

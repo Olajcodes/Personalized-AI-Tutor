@@ -159,6 +159,14 @@ Important rules:
             return False
         return value.strip().lower() in {"1", "true", "yes", "on"}
 
+    @staticmethod
+    def _curriculum_llm_timeout_seconds() -> float:
+        raw = os.getenv("CURRICULUM_LLM_TIMEOUT_SECONDS", "45").strip()
+        try:
+            return max(10.0, float(raw))
+        except ValueError:
+            return 45.0
+
     @classmethod
     def _is_heading(cls, line: str) -> bool:
         compact = line.strip()
@@ -320,6 +328,7 @@ Important rules:
                 model=model,
                 temperature=0,
                 messages=[{"role": "user", "content": prompt}],
+                timeout=self._curriculum_llm_timeout_seconds(),
             )
             content = ""
             if response.choices:
@@ -428,6 +437,7 @@ Important rules:
                     {"role": "system", "content": self._PREREQ_SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},
                 ],
+                timeout=self._curriculum_llm_timeout_seconds(),
             )
             content = ""
             if response.choices:
@@ -591,6 +601,7 @@ Important rules:
                 model=model,
                 temperature=0,
                 messages=[{"role": "user", "content": prompt}],
+                timeout=self._curriculum_llm_timeout_seconds(),
             )
             content = ""
             if response.choices:

@@ -42,6 +42,7 @@ def test_create_diagnostic_session_requires_mapped_curriculum_concepts(monkeypat
     repo.validate_student_scope.return_value = True
     repo.get_scope_topics.return_value = [SimpleNamespace(id=uuid4(), title="Our Values")]
     repo.get_scope_topic_concept_rows.return_value = []
+    repo.get_in_progress_diagnostic.return_value = None
 
     monkeypatch.setattr(diagnostic_service_module, "DiagnosticRepository", lambda db: repo)
 
@@ -67,8 +68,27 @@ def test_create_diagnostic_session_uses_real_concept_labels(monkeypatch):
             "topic_title": "Our Values",
             "concept_id": "civic:sss1:t1:individualistic-values",
             "prereq_concept_ids": [],
-        }
+        },
+        {
+            "topic_id": str(topic_id),
+            "topic_title": "Our Values",
+            "concept_id": "civic:sss1:t1:family-values",
+            "prereq_concept_ids": [],
+        },
+        {
+            "topic_id": str(topic_id),
+            "topic_title": "Our Values",
+            "concept_id": "civic:sss1:t1:professional-values",
+            "prereq_concept_ids": [],
+        },
+        {
+            "topic_id": str(topic_id),
+            "topic_title": "Our Values",
+            "concept_id": "civic:sss1:t1:national-values",
+            "prereq_concept_ids": [],
+        },
     ]
+    repo.get_in_progress_diagnostic.return_value = None
     repo.create_diagnostic.side_effect = lambda **kwargs: SimpleNamespace(id=uuid4(), **kwargs)
 
     monkeypatch.setattr(diagnostic_service_module, "DiagnosticRepository", lambda db: repo)
@@ -82,6 +102,63 @@ def test_create_diagnostic_session_uses_real_concept_labels(monkeypatch):
 
     result = diagnostic_service_module.diagnostic_service.create_diagnostic_session(db=MagicMock(), payload=payload)
 
-    assert result.questions[0].concept_id == "civic:sss1:t1:individualistic-values"
-    assert result.questions[0].concept_label == "Individualistic Values"
-    assert result.questions[0].topic_title == "Our Values"
+    question_by_concept = {question.concept_id: question for question in result.questions}
+    assert "civic:sss1:t1:individualistic-values" in question_by_concept
+    assert question_by_concept["civic:sss1:t1:individualistic-values"].concept_label == "Individualistic Values"
+    assert question_by_concept["civic:sss1:t1:individualistic-values"].topic_title == "Our Values"
+
+
+def test_create_diagnostic_session_respects_question_count_and_shuffles_answers(monkeypatch):
+    topic_id = uuid4()
+    student_id = uuid4()
+    repo = MagicMock()
+    repo.validate_student_scope.return_value = True
+    repo.get_in_progress_diagnostic.return_value = None
+    repo.get_scope_topic_concept_rows.return_value = [
+        {
+            "topic_id": str(topic_id),
+            "topic_title": "Our Values",
+            "concept_id": "civic:sss1:t1:individualistic-values",
+            "prereq_concept_ids": [],
+        },
+        {
+            "topic_id": str(topic_id),
+            "topic_title": "Our Values",
+            "concept_id": "civic:sss1:t1:family-values",
+            "prereq_concept_ids": [],
+        },
+        {
+            "topic_id": str(topic_id),
+            "topic_title": "Our Values",
+            "concept_id": "civic:sss1:t1:professional-values",
+            "prereq_concept_ids": [],
+        },
+        {
+            "topic_id": str(topic_id),
+            "topic_title": "Our Values",
+            "concept_id": "civic:sss1:t1:national-values",
+            "prereq_concept_ids": [],
+        },
+    ]
+    repo.create_diagnostic.side_effect = lambda **kwargs: SimpleNamespace(id=uuid4(), **kwargs)
+
+    monkeypatch.setattr(diagnostic_service_module, "DiagnosticRepository", lambda db: repo)
+
+    payload = DiagnosticStartIn(
+        student_id=student_id,
+        subject="civic",
+        sss_level="SSS1",
+        term=1,
+        num_questions=10,
+    )
+
+    result = diagnostic_service_module.diagnostic_service.create_diagnostic_session(db=MagicMock(), payload=payload)
+
+    assert result.question_count == 10
+    assert len(result.questions) == 10
+    assert len({question.concept_id for question in result.questions}) == 4
+
+    created_questions = repo.create_diagnostic.call_args.kwargs["questions"]
+    correct_answers = {question["correct_answer"] for question in created_questions}
+    assert correct_answers.issubset({"A", "B", "C", "D"})
+    assert len(correct_answers) > 1

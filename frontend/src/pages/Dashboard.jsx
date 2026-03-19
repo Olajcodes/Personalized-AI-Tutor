@@ -13,6 +13,8 @@ import PresentationCueCard from '../components/PresentationCueCard';
 import Footer from '../components/Footer';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
+import { API_URL } from '../config/runtime';
+import { resolveStudentId } from '../utils/sessionIdentity';
 import {
     applyGraphInterventionOverlay,
     buildGraphInterventionScope,
@@ -69,7 +71,7 @@ export default function Dashboard() {
     const { userData, studentData } = useUser();
     const navigate = useNavigate();
 
-    const activeId = studentData?.user_id || userData?.id;
+    const activeId = resolveStudentId(studentData, userData);
     const currentLevel = studentData?.sss_level || 'SSS1';
     const currentTerm = studentData?.current_term || 1;
     const enrolledSubjects = studentData?.subjects || [];
@@ -84,12 +86,15 @@ export default function Dashboard() {
         failed_subjects: [],
         available_subjects: [],
     });
+    const [diagnosticStatus, setDiagnosticStatus] = useState(null);
+    const [learningGapSummary, setLearningGapSummary] = useState(null);
+    const [initialLessonPlan, setInitialLessonPlan] = useState(null);
     const [mapData, setMapData] = useState(EMPTY_MAP_DATA);
     const [isLoadingMap, setIsLoadingMap] = useState(false);
     const [mapError, setMapError] = useState('');
     const [graphIntervention, setGraphIntervention] = useState(null);
 
-    const apiUrl = import.meta.env.VITE_API_URL;
+    const apiUrl = API_URL;
     const interventionScope = useMemo(
         () => buildGraphInterventionScope({
             studentId: activeId,
@@ -189,6 +194,9 @@ export default function Dashboard() {
                     failed_subjects: Array.isArray(data?.failed_subjects) ? data.failed_subjects : [],
                     available_subjects: Array.isArray(data?.available_subjects) ? data.available_subjects : [],
                 });
+                setDiagnosticStatus(data?.diagnostic_status || null);
+                setLearningGapSummary(data?.learning_gap_summary || null);
+                setInitialLessonPlan(data?.initial_lesson_plan || null);
                 setMapData(normalizeCourseBootstrap(data?.course_bootstrap || {}));
                 setMapError(data?.course_bootstrap?.map_error || '');
             } catch (err) {
@@ -198,6 +206,9 @@ export default function Dashboard() {
                     failed_subjects: [],
                     available_subjects: [],
                 });
+                setDiagnosticStatus(null);
+                setLearningGapSummary(null);
+                setInitialLessonPlan(null);
                 setMapData(EMPTY_MAP_DATA);
                 setMapError(err.message || 'Learning map unavailable.');
             } finally {
@@ -351,6 +362,60 @@ export default function Dashboard() {
                                     <p className={`mt-2 text-2xl font-black ${item.tone}`}>{item.value}</p>
                                 </div>
                             ))}
+                        </div>
+                    </div>
+                )}
+
+                {(initialLessonPlan || learningGapSummary) && (
+                    <div className="mb-8 rounded-3xl border border-indigo-200 bg-gradient-to-r from-indigo-50 via-white to-cyan-50 p-6 shadow-sm">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="max-w-3xl">
+                                <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-700">
+                                    <GitBranch className="h-3.5 w-3.5" />
+                                    Diagnostic-backed start plan
+                                </div>
+                                <h2 className="mt-3 text-2xl font-black text-slate-900">
+                                    {initialLessonPlan?.recommended_topic_title
+                                        || learningGapSummary?.recommended_start_topic_title
+                                        || 'Your first graph-backed study move is ready'}
+                                </h2>
+                                <p className="mt-2 text-sm leading-7 text-slate-600">
+                                    {initialLessonPlan?.rationale
+                                        || learningGapSummary?.rationale
+                                        || 'This path is based on the weakest concepts from your onboarding diagnostic.'}
+                                </p>
+                                {learningGapSummary?.blocking_prerequisite_label && (
+                                    <p className="mt-3 text-sm font-semibold text-amber-700">
+                                        Repair first: {learningGapSummary.blocking_prerequisite_label}
+                                    </p>
+                                )}
+                                {Array.isArray(learningGapSummary?.weakest_concepts) && learningGapSummary.weakest_concepts.length > 0 && (
+                                    <div className="mt-4 flex flex-wrap gap-2">
+                                        {learningGapSummary.weakest_concepts.slice(0, 3).map((concept) => (
+                                            <span
+                                                key={concept.concept_id}
+                                                className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-600"
+                                            >
+                                                {concept.concept_label}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-2 lg:w-[19rem]">
+                                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                    <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Subjects complete</div>
+                                    <p className="mt-2 text-xl font-black text-slate-900">
+                                        {diagnosticStatus?.completed_subjects?.length || 0}/{diagnosticStatus?.subject_runs?.length || enrolledSubjects.length || 0}
+                                    </p>
+                                </div>
+                                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                    <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Next action</div>
+                                    <p className="mt-2 text-sm font-black text-slate-900">
+                                        {initialLessonPlan?.next_best_action || learningGapSummary?.next_best_action || 'Open the recommended lesson'}
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}

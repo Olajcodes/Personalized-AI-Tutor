@@ -3,9 +3,11 @@ import ProfileBanner from '../components/ProfileBanner';
 import SettingsSidebar from '../components/SettingsSidebar';
 import AccountSettingsView from '../components/AccountSettingsView';
 import LearningPreferencesView from '../components/LearningPreferencesView';
+import { API_URL } from '../config/runtime';
 import { useUser } from '../context/UserContext';
 import { useAuth } from '../context/AuthContext';
 import { updateUserProfile } from '../services/api';
+import { resolveStudentId } from '../utils/sessionIdentity';
 
 const masteryTone = {
   demonstrated: 'border-emerald-200 bg-emerald-50 text-emerald-700',
@@ -39,7 +41,8 @@ const ProfilePage = () => {
 
   const { token } = useAuth();
   const { userData, studentData, updateLocalUser } = useUser();
-  const apiUrl = import.meta.env.VITE_API_URL || 'https://mastery-backend-7xe8.onrender.com/api/v1';
+  const apiUrl = API_URL;
+  const activeStudentId = resolveStudentId(studentData, userData);
 
   const CLOUDINARY_CLOUD_NAME = 'dzt3imk5w';
   const CLOUDINARY_UPLOAD_PRESET = 'masteryai_avatars';
@@ -90,7 +93,7 @@ const ProfilePage = () => {
 
   useEffect(() => {
     if (activeTab !== 'mastery') return;
-    if (!token || !studentData?.user_id) return;
+    if (!token || !activeStudentId) return;
 
     let isMounted = true;
     const fetchMastery = async () => {
@@ -98,7 +101,7 @@ const ProfilePage = () => {
       setMasteryError('');
       try {
         const params = new URLSearchParams({
-          student_id: studentData.user_id,
+          student_id: activeStudentId,
           subject: masteryScope.subject,
           term: String(masteryScope.term),
           view: 'concept',
@@ -126,7 +129,7 @@ const ProfilePage = () => {
     return () => {
       isMounted = false;
     };
-  }, [activeTab, apiUrl, masteryScope.subject, masteryScope.term, studentData?.user_id, token]);
+  }, [activeStudentId, activeTab, apiUrl, masteryScope.subject, masteryScope.term, token]);
 
   return (
     <div className="min-h-screen bg-slate-50 pb-12">

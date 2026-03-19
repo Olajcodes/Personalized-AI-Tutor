@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from backend.schemas.diagnostic_schema import DiagnosticLearningGapSummaryOut, DiagnosticSubjectRunOut
 from backend.schemas.learning_path_schema import LearningMapEdgeOut, LearningMapNodeOut, PathNextOut
 
 
@@ -60,6 +61,14 @@ class CourseEvidenceSummaryOut(BaseModel):
     unassessed: int = 0
 
 
+class CourseInitialLessonPlanOut(BaseModel):
+    recommended_topic_id: str | None = None
+    recommended_topic_title: str | None = None
+    prerequisite_repair_label: str | None = None
+    next_best_action: str | None = None
+    rationale: str | None = None
+
+
 class CourseBootstrapOut(BaseModel):
     student_id: UUID
     subject: Literal["math", "english", "civic"]
@@ -73,6 +82,9 @@ class CourseBootstrapOut(BaseModel):
     intervention_timeline: list[CourseInterventionEventOut] = Field(default_factory=list)
     recommendation_story: CourseRecommendationStoryOut | None = None
     evidence_summary: CourseEvidenceSummaryOut | None = None
+    diagnostic_status: DiagnosticSubjectRunOut | None = None
+    learning_gap_summary: DiagnosticLearningGapSummaryOut | None = None
+    initial_lesson_plan: CourseInitialLessonPlanOut | None = None
     map_error: str | None = None
     warmed_topic_ids: list[str] = Field(default_factory=list)
     cache_hit_topic_ids: list[str] = Field(default_factory=list)

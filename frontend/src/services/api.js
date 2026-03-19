@@ -1,6 +1,20 @@
 import { API_URL } from '../config/runtime';
 
-const parseJsonResponse = async (response, fallbackMessage) => {
+const DEFAULT_TIMEOUT_MS = 20000;
+
+const buildHeaders = (token, extraHeaders = {}) => ({
+  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  'Content-Type': 'application/json',
+  ...extraHeaders,
+});
+
+const createTimeoutSignal = (timeoutMs = DEFAULT_TIMEOUT_MS) => {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  return { controller, timeoutId };
+};
+
+export const parseJsonResponse = async (response, fallbackMessage) => {
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.includes('application/json')) {
     const preview = (await response.text().catch(() => '')).slice(0, 120).trim();
@@ -17,71 +31,111 @@ const parseJsonResponse = async (response, fallbackMessage) => {
   return payload;
 };
 
-export const fetchUserProfile = async (token) => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 20000);
+export const apiFetchJson = async (
+  path,
+  {
+    token,
+    method = 'GET',
+    body,
+    headers = {},
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    signal,
+  } = {},
+) => {
+  const url = path.startsWith('http') ? path : `${API_URL}${path}`;
+  const timeout = signal ? null : createTimeoutSignal(timeoutMs);
 
   try {
-    const response = await fetch(`${API_URL}/users/me`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      signal: controller.signal,
+    const response = await fetch(url, {
+      method,
+      headers: buildHeaders(token, headers),
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: signal || timeout?.controller.signal,
     });
 
-    clearTimeout(timeoutId);
-    return await parseJsonResponse(response, 'Failed to fetch user profile.');
+    if (timeout) {
+      window.clearTimeout(timeout.timeoutId);
+    }
+    return await parseJsonResponse(response, `Request failed for ${method} ${path}.`);
   } catch (error) {
-    clearTimeout(timeoutId);
-    throw error;
-  }
-};
-
-export const updateUserProfile = async (token, profileData) => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 20000);
-
-  try {
-    const response = await fetch(`${API_URL}/users/me`, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(profileData),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-    return await parseJsonResponse(response, 'Failed to update profile.');
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error.name === 'AbortError') {
+    if (timeout) {
+      window.clearTimeout(timeout.timeoutId);
+    }
+    if (error?.name === 'AbortError') {
       throw new Error('The server is taking too long. Please try again.');
     }
     throw error;
   }
 };
 
+export const fetchUserProfile = async (token) =>
+  apiFetchJson('/users/me', {
+    token,
+  });
+
+export const updateUserProfile = async (token, profileData) =>
+  apiFetchJson('/users/me', {
+    token,
+    method: 'PUT',
+    body: profileData,
+  });
+
 export const fetchStudentProfile = async (token) => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 20000);
-
   try {
-    const response = await fetch(`${API_URL}/students/profile`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-    return await parseJsonResponse(response, 'Failed to fetch student profile.');
+    return await apiFetchJson('/students/profile', { token });
   } catch (error) {
-    clearTimeout(timeoutId);
     console.warn('fetchStudentProfile Error:', error.message);
     throw error;
   }
 };
+
+export const fetchStudentProfileStatus = async (token) => {
+  try {
+    return await apiFetchJson('/students/profile/status', { token });
+  } catch (error) {
+    console.warn('fetchStudentProfileStatus Error:', error.message);
+    throw error;
+  }
+};
+
+export const updateStudentProfile = async (token, payload) =>
+  apiFetchJson('/students/profile', {
+    token,
+    method: 'PUT',
+    body: payload,
+  });
+
+export const setupStudentProfile = async (token, payload) =>
+  apiFetchJson('/students/profile/setup', {
+    token,
+    method: 'POST',
+    body: payload,
+  });
+
+export const updateStudentPreferences = async (token, userId, payload) =>
+  apiFetchJson(`/users/${userId}/preferences`, {
+    token,
+    method: 'PUT',
+    body: payload,
+  });
+
+export const fetchDiagnosticStatus = async (token, studentId) =>
+  apiFetchJson(`/learning/diagnostic/status?student_id=${encodeURIComponent(studentId)}`, {
+    token,
+  });
+
+export const startDiagnosticSession = async (token, payload) =>
+  apiFetchJson('/learning/diagnostic/start', {
+    token,
+    method: 'POST',
+    body: payload,
+    timeoutMs: 30000,
+  });
+
+export const submitDiagnosticSession = async (token, payload) =>
+  apiFetchJson('/learning/diagnostic/submit', {
+    token,
+    method: 'POST',
+    body: payload,
+    timeoutMs: 30000,
+  });

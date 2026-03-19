@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { AlertCircle, Bell, BrainCircuit, GitBranch } from 'lucide-react';
 import { useUser } from '../context/UserContext';
 import { readLatestGraphIntervention } from '../services/graphIntervention';
+import { resolveStudentId } from '../utils/sessionIdentity';
 
 const formatRelativeTime = (timestamp) => {
   const value = Number(timestamp || 0);
@@ -16,7 +17,7 @@ const formatRelativeTime = (timestamp) => {
 
 const NotificationModal = ({ onClose }) => {
   const { userData, studentData } = useUser();
-  const activeId = studentData?.user_id || studentData?.student_id || userData?.id;
+  const activeId = resolveStudentId(studentData, userData);
   const latestIntervention = useMemo(
     () => (activeId ? readLatestGraphIntervention(activeId) : null),
     [activeId],

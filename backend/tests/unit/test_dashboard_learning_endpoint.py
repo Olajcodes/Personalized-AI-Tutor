@@ -40,6 +40,31 @@ def test_dashboard_bootstrap_returns_active_subject_and_course(monkeypatch):
             "term": 2,
             "available_subjects": ["english", "math"],
             "active_subject": "english",
+            "diagnostic_status": {
+                "student_id": str(student_id),
+                "onboarding_complete": True,
+                "pending_subjects": [],
+                "completed_subjects": ["english", "math"],
+                "subject_runs": [],
+            },
+            "learning_gap_summary": {
+                "weakest_concepts": [],
+                "blocking_prerequisite_id": None,
+                "blocking_prerequisite_label": None,
+                "recommended_start_topic_id": str(uuid4()),
+                "recommended_start_topic_title": "Comprehension Skills",
+                "next_best_action": "Open Comprehension Skills",
+                "rationale": "Diagnostic baseline points here first.",
+                "question_count": 10,
+                "completion_timestamp": "2026-03-19T10:00:00+00:00",
+            },
+            "initial_lesson_plan": {
+                "recommended_topic_id": str(uuid4()),
+                "recommended_topic_title": "Comprehension Skills",
+                "prerequisite_repair_label": None,
+                "next_best_action": "Open the recommended lesson",
+                "rationale": "Diagnostic baseline points here first.",
+            },
             "course_bootstrap": {
                 "student_id": str(student_id),
                 "subject": "english",
@@ -71,6 +96,9 @@ def test_dashboard_bootstrap_returns_active_subject_and_course(monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body["active_subject"] == "english"
+    assert body["diagnostic_status"]["onboarding_complete"] is True
+    assert body["learning_gap_summary"]["recommended_start_topic_title"] == "Comprehension Skills"
+    assert body["initial_lesson_plan"]["recommended_topic_title"] == "Comprehension Skills"
     assert body["course_bootstrap"]["subject"] == "english"
 
 

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowLeft, ArrowRight, BrainCircuit, Clipboard, Download, Loader2, Presentation, Printer, Route, Sparkles, Target, TrendingUp, Users } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { API_URL } from '../config/runtime';
 import PresentationCueCard from '../components/PresentationCueCard';
 import TeacherClassGraph from '../components/teacher/TeacherClassGraph';
 
@@ -17,7 +18,7 @@ const percent = (value) => (value == null ? 'Unassessed' : `${Math.round(Number(
 const TeacherPresentationPage = () => {
   const { classId } = useParams();
   const { token } = useAuth();
-  const apiUrl = import.meta.env.VITE_API_URL;
+  const apiUrl = API_URL;
   const [presentation, setPresentation] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');

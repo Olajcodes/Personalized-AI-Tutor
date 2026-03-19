@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Star, Loader2, Trophy } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
+import { API_URL } from '../config/runtime';
+import { resolveStudentId } from '../utils/sessionIdentity';
 
 const LeaderboardItem = ({ rank, name, points, isCurrentUser }) => {
   const getRankColor = () => {
@@ -46,8 +48,8 @@ const LeaderboardItem = ({ rank, name, points, isCurrentUser }) => {
 export default function Leaderboard({ leagueName = "Current League" }) {
   const { token } = useAuth();
   const { userData, studentData } = useUser();
-  const activeId = studentData?.user_id || studentData?.student_id || userData?.id;
-  const apiUrl = import.meta.env.VITE_API_URL;
+  const activeId = resolveStudentId(studentData, userData);
+  const apiUrl = API_URL;
 
   const [items, setItems] = useState([]);
   const [isLoading, setIsLoading] = useState(true);

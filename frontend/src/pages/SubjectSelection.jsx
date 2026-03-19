@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
+import { API_URL } from '../config/runtime';
+import { fetchStudentProfileStatus, fetchUserProfile } from '../services/api';
 
 const SubjectSelection = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { token } = useAuth();
-  const { studentData, userData, updateLocalStudent } = useUser();
-  const apiUrl = import.meta.env.VITE_API_URL || 'https://mastery-backend-7xe8.onrender.com/api/v1';
+  const { studentData, userData, replaceLocalStudent } = useUser();
   
   const [selectedSubjects, setSelectedSubjects] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -36,6 +37,36 @@ const SubjectSelection = () => {
     }
   };
 
+  const readErrorMessage = async (response, fallbackMessage) => {
+    const errData = await response.json().catch(() => ({}));
+    if (Array.isArray(errData?.detail)) {
+      return errData.detail[0]?.msg || fallbackMessage;
+    }
+    return errData?.detail || fallbackMessage;
+  };
+
+  const resolveActiveId = async () => {
+    const localId = localStorage.getItem('mastery_student_id');
+    let activeId =
+      studentData?.user_id ||
+      studentData?.student_id ||
+      userData?.user_id ||
+      userData?.student_id ||
+      userData?.id ||
+      localId;
+
+    if (!activeId) {
+      const userMeData = await fetchUserProfile(token);
+      activeId = userMeData?.user_id || userMeData?.id || null;
+    }
+
+    if (activeId) {
+      localStorage.setItem('mastery_student_id', activeId);
+    }
+
+    return activeId;
+  };
+
   const handleContinue = async () => {
     if (selectedSubjects.length === 0) {
       alert("Please select at least one subject to continue.");
@@ -45,26 +76,8 @@ const SubjectSelection = () => {
     setIsLoading(true);
     setErrorMsg("");
 
-    let activeId = studentData?.user_id || studentData?.student_id || userData?.user_id || userData?.student_id || userData?.id;
-
     try {
-      // 1. BULLETPROOF CHECK: Fallback to /users/me if ID is missing
-      if (!activeId) {
-        const userMeResponse = await fetch(`${apiUrl}/users/me`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (!userMeResponse.ok) {
-          throw new Error("Could not verify user session. Please log in again.");
-        }
-
-        const userMeData = await userMeResponse.json();
-        activeId = userMeData.user_id || userMeData.id; 
-      }
+      const activeId = await resolveActiveId();
 
       if (!activeId) {
         throw new Error("User ID is missing. Please contact support or try logging in again.");
@@ -78,61 +91,59 @@ const SubjectSelection = () => {
         'Content-Type': 'application/json'
       };
 
-      // 2. Build the UPDATE payload (No student_id included - prevents 422 errors on PUT)
+      const profileStatus = await fetchStudentProfileStatus(token);
       const updatePayload = {
         sss_level: grade,
         current_term: term,
-        term: term, 
         subjects: selectedSubjects
       };
 
-      // 3. Build the SETUP payload (Includes student_id for POST)
       const setupPayload = {
         student_id: activeId,
-        ...updatePayload
+        sss_level: grade,
+        term,
+        subjects: selectedSubjects,
       };
 
-      // 4. Attempt POST (Creation) first
-      let response = await fetch(`${apiUrl}/students/profile/setup`, {
-        method: 'POST', 
-        headers: headers,
-        body: JSON.stringify(setupPayload)
-      });
+      let response = await fetch(
+        `${API_URL}${profileStatus?.has_profile ? '/students/profile' : '/students/profile/setup'}`,
+        {
+          method: profileStatus?.has_profile ? 'PUT' : 'POST',
+          headers,
+          body: JSON.stringify(profileStatus?.has_profile ? updatePayload : setupPayload),
+        }
+      );
 
-      // 5. THE FALLBACK: If POST fails, pivot to PUT
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        
-        // Safely extract the error message
-        const rawError = errData.detail 
-          ? (Array.isArray(errData.detail) ? errData.detail[0]?.msg : errData.detail)
-          : "";
-
-        // If the backend says it already exists, use the PUT endpoint!
-        if (typeof rawError === 'string' && rawError.toLowerCase().includes("already exists")) {
-          console.log("Profile exists. Switching to PUT (Update) request...");
-          
-          response = await fetch(`${apiUrl}/students/profile`, {
-            method: 'PUT', 
-            headers: headers,
-            body: JSON.stringify(updatePayload) // <--- Sending the clean payload here!
+      if (!response.ok && profileStatus?.has_profile && response.status === 404) {
+        response = await fetch(`${API_URL}/students/profile/setup`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(setupPayload),
+        });
+      } else if (!response.ok && !profileStatus?.has_profile) {
+        const errorMessage = await readErrorMessage(response, 'Failed to save your subjects.');
+        if (String(errorMessage).toLowerCase().includes('already exists')) {
+          response = await fetch(`${API_URL}/students/profile`, {
+            method: 'PUT',
+            headers,
+            body: JSON.stringify(updatePayload),
           });
-
-          if (!response.ok) {
-             const putErrData = await response.json().catch(() => ({}));
-             const putErrorMsg = putErrData.detail 
-                ? (Array.isArray(putErrData.detail) ? putErrData.detail[0]?.msg : putErrData.detail)
-                : "Failed to update your subjects.";
-             throw new Error(`Update failed: ${putErrorMsg}`);
-          }
-        } else {
-          // If it failed for a different reason (like a 500 error), throw it
-          throw new Error(rawError || "Failed to save your subjects.");
         }
       }
 
-      // 6. Success! Update Context & Navigate
-      updateLocalStudent({ subjects: selectedSubjects });
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, 'Failed to save your subjects.'));
+      }
+
+      const savedProfile = await response.json();
+      const normalizedStudent = {
+        ...savedProfile,
+        has_profile: true,
+        student_id: savedProfile?.user_id || activeId,
+      };
+
+      localStorage.setItem('mastery_student_id', normalizedStudent.student_id);
+      replaceLocalStudent(normalizedStudent);
       navigate('/learning-preferences');
 
     } catch (err) {

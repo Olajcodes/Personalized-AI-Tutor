@@ -11,7 +11,9 @@ import ConceptCard from "../components/ConceptCard";
 import AITutorInsights from "../components/AITutorInsights";
 import PathProgress from "../components/PathProgress";
 import FooterActions from "../components/FooterActions";
+import { API_URL } from '../config/runtime';
 import { saveGraphIntervention } from '../services/graphIntervention';
+import { resolveStudentId } from '../utils/sessionIdentity';
 
 const isLikelyUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
 
@@ -70,13 +72,13 @@ const QuizPage = () => {
   const { topicId } = useParams();
   const { token } = useAuth();
   const { studentData, userData } = useUser();
-  const activeId = studentData?.user_id || userData?.id;
+  const activeId = resolveStudentId(studentData, userData);
 
   const currentSubject = localStorage.getItem('active_subject') || studentData?.subjects?.[0] || 'math';
   const currentLevel = studentData?.sss_level || 'SSS3';
   const currentTerm = studentData?.current_term || 1;
 
-  const apiUrl = import.meta.env.VITE_API_URL || 'https://mastery-backend-7xe8.onrender.com/api/v1';
+  const apiUrl = API_URL;
 
   // --- LIFECYCLE STATES ---
   const [phase, setPhase] = useState('setup'); // 'setup' | 'generating' | 'active' | 'submitting' | 'results'

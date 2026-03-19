@@ -590,6 +590,9 @@ def _build_seed_candidates(root: Path) -> list[ScopeTopicCandidate]:
     """Build clean canonical scope topics and attach best available document text."""
     if _root_has_json_topics(root):
         json_candidates = _build_json_candidates(root)
+        if not _is_truthy(os.getenv("SEED_ENABLE_FALLBACK_TOPICS")):
+            return json_candidates
+
         supplements = _fallback_candidates(json_candidates)
         combined = [*json_candidates]
         seen = {(item.subject, item.sss_level, item.term, item.title.lower()) for item in combined}
@@ -928,8 +931,7 @@ def run() -> None:
         print(f"Topics created: {created_topics}")
         print(f"Topics updated: {updated_topics}")
         print(f"Scopes populated: {len(scope_counter)}")
-        top_scopes = sorted(scope_counter.items(), key=lambda item: item[1], reverse=True)[:8]
-        for (subject, sss_level, term), count in top_scopes:
+        for (subject, sss_level, term), count in sorted(scope_counter.items()):
             print(f"  - {subject} {sss_level} term {term}: {count} topics")
     except Exception:
         db.rollback()

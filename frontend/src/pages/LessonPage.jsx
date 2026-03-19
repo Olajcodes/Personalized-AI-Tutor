@@ -28,8 +28,10 @@ import LessonKnowledgeGraph from '../components/lesson/LessonKnowledgeGraph';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
 import { saveGraphIntervention } from '../services/graphIntervention';
+import { API_URL as RUNTIME_API_URL } from '../config/runtime';
+import { resolveStudentId } from '../utils/sessionIdentity';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://mastery-backend-7xe8.onrender.com/api/v1';
+const API_URL = RUNTIME_API_URL;
 const safeArray = (value) => (Array.isArray(value) ? value : []);
 const BOOTSTRAP_CACHE_TTL_MS = 45_000;
 const lessonBootstrapCache = new Map();
@@ -440,7 +442,7 @@ export default function LessonPage() {
   const { token } = useAuth();
   const { studentData, userData } = useUser();
 
-  const activeId = studentData?.user_id || userData?.id;
+  const activeId = resolveStudentId(studentData, userData);
   const currentSubject = localStorage.getItem('active_subject') || studentData?.subjects?.[0] || 'math';
   const currentLevel = studentData?.sss_level || 'SSS1';
   const currentTerm = studentData?.current_term || 1;

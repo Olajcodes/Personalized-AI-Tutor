@@ -4,6 +4,7 @@ from backend.main import app
 
 
 SECTION3_DIAGNOSTIC_PATHS = [
+    "/api/v1/learning/diagnostic/status",
     "/api/v1/learning/diagnostic/start",
     "/api/v1/learning/diagnostic/submit",
 ]

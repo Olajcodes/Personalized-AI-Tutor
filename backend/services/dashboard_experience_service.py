@@ -15,8 +15,10 @@ from backend.core.database import SessionLocal
 from backend.core.telemetry import log_timed_event, now_ms
 from backend.models.student import StudentProfile, StudentSubject
 from backend.models.subject import Subject
+from backend.schemas.diagnostic_schema import DiagnosticStatusOut
 from backend.schemas.dashboard_schema import DashboardBootstrapOut, StudentExportSectionOut, StudentPathBriefingOut
 from backend.services.course_experience_service import CourseExperienceService
+from backend.services.diagnostic_service import DiagnosticValidationError, diagnostic_service
 from backend.services.prewarm_job_service import PrewarmJobService
 
 logger = logging.getLogger(__name__)
@@ -135,6 +137,35 @@ class DashboardExperienceService:
         subjects = [str(row[0]) for row in rows if str(row[0]) in {"math", "english", "civic"}]
         return profile, subjects  # type: ignore[return-value]
 
+    @staticmethod
+    def _subject_from_diagnostic_status(
+        diagnostic_status: DiagnosticStatusOut | None,
+    ) -> Literal["math", "english", "civic"] | None:
+        if diagnostic_status is None:
+            return None
+        completed_runs = [run for run in list(diagnostic_status.subject_runs or []) if run.status == "completed"]
+        if not completed_runs:
+            return None
+
+        def weakest_score(run) -> float:
+            weakest = [float(item.mastery_score) for item in list(run.weakest_concepts or [])]
+            return min(weakest) if weakest else 1.0
+
+        ranked_runs = sorted(
+            completed_runs,
+            key=lambda run: (weakest_score(run), run.completion_timestamp or ""),
+        )
+        subject = ranked_runs[0].subject if ranked_runs else None
+        return subject if subject in {"math", "english", "civic"} else None  # type: ignore[return-value]
+
+    @staticmethod
+    def _course_attr(course_bootstrap, key: str):
+        if course_bootstrap is None:
+            return None
+        if isinstance(course_bootstrap, dict):
+            return course_bootstrap.get(key)
+        return getattr(course_bootstrap, key, None)
+
     def bootstrap(
         self,
         *,
@@ -143,6 +174,11 @@ class DashboardExperienceService:
     ) -> DashboardBootstrapOut:
         started_at = now_ms()
         profile, available_subjects = self._profile_and_subjects(student_id=student_id)
+        diagnostic_status = None
+        try:
+            diagnostic_status = diagnostic_service.get_diagnostic_status(db=self.db, student_id=student_id)
+        except (DiagnosticValidationError, AttributeError, TypeError):
+            diagnostic_status = None
         profile_signature = self._profile_signature(profile=profile, subjects=available_subjects)
         cache_key = self._cache_key(
             student_id=student_id,
@@ -175,7 +211,7 @@ class DashboardExperienceService:
                 course_bootstrap_source = "latest_intervention"
 
         if active_subject is None and available_subjects:
-            active_subject = available_subjects[0]
+            active_subject = self._subject_from_diagnostic_status(diagnostic_status) or available_subjects[0]
 
         if active_subject is not None and course_bootstrap is None:
             course_bootstrap = self.course_service.bootstrap(
@@ -212,6 +248,9 @@ class DashboardExperienceService:
             active_subject=active_subject,
             warmed_subjects=warmed_subjects,
             failed_subjects=failed_subjects,
+            diagnostic_status=diagnostic_status,
+            learning_gap_summary=self._course_attr(course_bootstrap, "learning_gap_summary"),
+            initial_lesson_plan=self._course_attr(course_bootstrap, "initial_lesson_plan"),
             course_bootstrap=course_bootstrap,
         )
         output = self._write_cached_bootstrap(cache_key=cache_key, payload=payload)

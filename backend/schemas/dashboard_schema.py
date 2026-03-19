@@ -3,7 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from backend.schemas.course_schema import CourseBootstrapOut
+from backend.schemas.diagnostic_schema import DiagnosticLearningGapSummaryOut, DiagnosticStatusOut
+from backend.schemas.course_schema import CourseBootstrapOut, CourseInitialLessonPlanOut
 
 
 class DashboardBootstrapOut(BaseModel):
@@ -14,6 +15,9 @@ class DashboardBootstrapOut(BaseModel):
     active_subject: Literal["math", "english", "civic"] | None = None
     warmed_subjects: list[Literal["math", "english", "civic"]] = Field(default_factory=list)
     failed_subjects: list[Literal["math", "english", "civic"]] = Field(default_factory=list)
+    diagnostic_status: DiagnosticStatusOut | None = None
+    learning_gap_summary: DiagnosticLearningGapSummaryOut | None = None
+    initial_lesson_plan: CourseInitialLessonPlanOut | None = None
     course_bootstrap: CourseBootstrapOut | None = None
 
 

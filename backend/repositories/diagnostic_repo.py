@@ -16,6 +16,24 @@ class DiagnosticRepository:
     def __init__(self, db: Session):
         self.db = db
 
+    def get_student_scope_context(self, *, student_id: UUID) -> tuple[StudentProfile | None, list[str]]:
+        profile = (
+            self.db.query(StudentProfile)
+            .filter(StudentProfile.student_id == student_id)
+            .first()
+        )
+        if not profile:
+            return None, []
+
+        subjects = (
+            self.db.query(Subject.slug)
+            .join(StudentSubject, StudentSubject.subject_id == Subject.id)
+            .filter(StudentSubject.student_profile_id == profile.id)
+            .order_by(Subject.slug.asc())
+            .all()
+        )
+        return profile, [str(row.slug) for row in subjects]
+
     def validate_student_scope(self, *, student_id: UUID, subject: str, sss_level: str, term: int) -> bool:
         profile = (
             self.db.query(StudentProfile)
@@ -54,6 +72,64 @@ class DiagnosticRepository:
             .order_by(Topic.created_at.asc(), Topic.title.asc())
             .all()
         )
+
+    def get_in_progress_diagnostic(
+        self,
+        *,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+    ) -> Diagnostic | None:
+        return (
+            self.db.query(Diagnostic)
+            .filter(
+                Diagnostic.student_id == student_id,
+                Diagnostic.subject == subject,
+                Diagnostic.sss_level == sss_level,
+                Diagnostic.term == term,
+                Diagnostic.status == "started",
+            )
+            .order_by(Diagnostic.created_at.desc())
+            .first()
+        )
+
+    def get_latest_scope_diagnostics(
+        self,
+        *,
+        student_id: UUID,
+        sss_level: str,
+        term: int,
+        subjects: list[str],
+    ) -> dict[str, tuple[Diagnostic | None, DiagnosticAttempt | None]]:
+        diagnostics = (
+            self.db.query(Diagnostic)
+            .filter(
+                Diagnostic.student_id == student_id,
+                Diagnostic.sss_level == sss_level,
+                Diagnostic.term == term,
+                Diagnostic.subject.in_(subjects or ["math", "english", "civic"]),
+            )
+            .order_by(Diagnostic.subject.asc(), Diagnostic.created_at.desc())
+            .all()
+        )
+        latest_by_subject: dict[str, Diagnostic] = {}
+        for diagnostic in diagnostics:
+            latest_by_subject.setdefault(str(diagnostic.subject), diagnostic)
+
+        diagnostic_ids = [diagnostic.id for diagnostic in latest_by_subject.values()]
+        attempts = (
+            self.db.query(DiagnosticAttempt)
+            .filter(DiagnosticAttempt.diagnostic_id.in_(diagnostic_ids))
+            .all()
+            if diagnostic_ids
+            else []
+        )
+        attempts_by_diagnostic = {attempt.diagnostic_id: attempt for attempt in attempts}
+        return {
+            subject: (latest_by_subject.get(subject), attempts_by_diagnostic.get(latest_by_subject[subject].id) if subject in latest_by_subject else None)
+            for subject in subjects
+        }
 
     def get_scope_topic_concept_rows(
         self,
@@ -134,7 +210,9 @@ class DiagnosticRepository:
         student_id: UUID,
         answers: list[dict],
         baseline_mastery_updates: list[dict],
+        gap_summary: dict,
         recommended_start_topic_id: str | None,
+        recommended_start_topic_title: str | None,
         score: float,
     ) -> DiagnosticAttempt:
         existing = (
@@ -145,7 +223,9 @@ class DiagnosticRepository:
         if existing:
             existing.answers = answers
             existing.baseline_mastery_updates = baseline_mastery_updates
+            existing.gap_summary = gap_summary
             existing.recommended_start_topic_id = recommended_start_topic_id
+            existing.recommended_start_topic_title = recommended_start_topic_title
             existing.score = score
             self.db.flush()
             return existing
@@ -155,7 +235,9 @@ class DiagnosticRepository:
             student_id=student_id,
             answers=answers,
             baseline_mastery_updates=baseline_mastery_updates,
+            gap_summary=gap_summary,
             recommended_start_topic_id=recommended_start_topic_id,
+            recommended_start_topic_title=recommended_start_topic_title,
             score=score,
         )
         self.db.add(attempt)

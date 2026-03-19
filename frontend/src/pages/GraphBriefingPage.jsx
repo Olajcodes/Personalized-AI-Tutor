@@ -5,6 +5,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import PresentationCueCard from '../components/PresentationCueCard';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
+import { API_URL } from '../config/runtime';
+import { resolveStudentId } from '../utils/sessionIdentity';
 
 const formatDateTime = (value) => {
   if (!value) return 'Not available';
@@ -18,8 +20,8 @@ export default function GraphBriefingPage() {
   const subject = searchParams.get('subject') || null;
   const { token } = useAuth();
   const { userData, studentData } = useUser();
-  const apiUrl = import.meta.env.VITE_API_URL;
-  const studentId = studentData?.user_id || userData?.id;
+  const apiUrl = API_URL;
+  const studentId = resolveStudentId(studentData, userData);
 
   const [briefing, setBriefing] = useState(null);
   const [isLoading, setIsLoading] = useState(true);

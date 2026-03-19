@@ -1,20 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
+import { updateStudentPreferences } from '../services/api';
+import { resolveUserId } from '../utils/sessionIdentity';
 
 const LearningPreferencesView = () => {
   const { token } = useAuth();
   // studentData holds academic info; userData holds basic account info
   const { studentData, userData, updateLocalStudent } = useUser();
-  const apiUrl = import.meta.env.VITE_API_URL;
 
   // 1. Initialize state from global context
-  const savedPrefs = studentData?.learning_preferences || {};
+  const savedPrefs = studentData?.preferences || {};
   
-  const [depth, setDepth] = useState(savedPrefs.depth || 'standard');
-  const [styles, setStyles] = useState(savedPrefs.styles || {
-    visual: true,
-    interactive: true,
+  const [depth, setDepth] = useState(
+    savedPrefs.explanation_depth === 'simple'
+      ? 'quick'
+      : savedPrefs.explanation_depth === 'detailed'
+        ? 'deep'
+        : 'standard',
+  );
+  const [styles, setStyles] = useState({
+    visual: Boolean(savedPrefs.examples_first),
+    interactive: savedPrefs.pace === 'fast',
     auditory: false,
   });
 
@@ -23,10 +30,20 @@ const LearningPreferencesView = () => {
 
   // 2. Sync local state if global context data updates (e.g., after initial fetch)
   useEffect(() => {
-    if (studentData?.learning_preferences) {
-      const prefs = studentData.learning_preferences;
-      if (prefs.depth) setDepth(prefs.depth);
-      if (prefs.styles) setStyles(prefs.styles);
+    if (studentData?.preferences) {
+      const prefs = studentData.preferences;
+      setDepth(
+        prefs.explanation_depth === 'simple'
+          ? 'quick'
+          : prefs.explanation_depth === 'detailed'
+            ? 'deep'
+            : 'standard',
+      );
+      setStyles({
+        visual: Boolean(prefs.examples_first),
+        interactive: prefs.pace === 'fast',
+        auditory: false,
+      });
     }
   }, [studentData]);
 
@@ -43,33 +60,28 @@ const LearningPreferencesView = () => {
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     // Identify the correct User ID from context
-    const targetUserId = studentData?.user_id || userData?.id;
+    const targetUserId = resolveUserId(studentData, userData);
 
     const payload = {
-      learning_preferences: { depth, styles }
+      explanation_depth: depth === 'quick' ? 'simple' : depth === 'deep' ? 'detailed' : 'standard',
+      examples_first: Boolean(styles.visual),
+      pace: styles.interactive ? 'fast' : 'normal',
     };
 
     try {
-      // 3. Use the canonical PUT endpoint per documentation
-      const response = await fetch(`${apiUrl}/users/${targetUserId}/preferences`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => null);
-        throw new Error(errData?.detail || "Failed to save preferences. Please try again.");
-      }
+      await updateStudentPreferences(token, targetUserId, payload);
 
       // 4. Update global state instantly so Navbar/Dashboard are in sync
-      updateLocalStudent(payload);
+      updateLocalStudent({
+        preferences: {
+          ...(studentData?.preferences || {}),
+          student_id: targetUserId,
+          explanation_depth: payload.explanation_depth,
+          examples_first: payload.examples_first,
+          pace: payload.pace,
+          updated_at: new Date().toISOString(),
+        },
+      });
       setStatusMsg({ type: 'success', text: 'Learning preferences updated successfully!' });
 
     } catch (err) {
@@ -79,6 +91,7 @@ const LearningPreferencesView = () => {
         text: err.name === 'AbortError' ? 'Server timeout. Please try again.' : err.message 
       });
     } finally {
+      clearTimeout(timeoutId);
       setIsSaving(false);
     }
   };

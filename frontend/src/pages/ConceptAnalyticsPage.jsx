@@ -17,6 +17,7 @@ import {
   Users,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { API_URL } from '../config/runtime';
 import TeacherClassGraph from '../components/teacher/TeacherClassGraph';
 import TeacherExportModal from '../components/teacher/TeacherExportModal';
 import TeacherStudentFocusDrawer from '../components/teacher/TeacherStudentFocusDrawer';
@@ -76,7 +77,7 @@ const StatCard = ({ title, value, subtitle, icon: Icon, tone = 'indigo' }) => {
 
 const ConceptAnalyticsPage = () => {
   const { token } = useAuth();
-  const apiUrl = import.meta.env.VITE_API_URL;
+  const apiUrl = API_URL;
 
   const [classes, setClasses] = useState([]);
   const [activeClassId, setActiveClassId] = useState('');

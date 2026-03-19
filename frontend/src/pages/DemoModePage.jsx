@@ -17,6 +17,8 @@ import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
+import { AI_CORE_URL, API_URL } from '../config/runtime';
+import { resolveStudentId } from '../utils/sessionIdentity';
 import {
   createPresentationWalkthroughSteps,
   readPresentationWalkthrough,
@@ -121,10 +123,10 @@ export default function DemoModePage() {
   const { token } = useAuth();
   const { userData, studentData } = useUser();
   const navigate = useNavigate();
-  const apiUrl = import.meta.env.VITE_API_URL;
-  const aiCoreUrl = import.meta.env.VITE_AI_CORE_URL;
+  const apiUrl = API_URL;
+  const aiCoreUrl = AI_CORE_URL;
 
-  const studentId = studentData?.user_id || userData?.id || null;
+  const studentId = resolveStudentId(studentData, userData);
   const role = userData?.role || null;
   const initialSubject = localStorage.getItem('active_subject') || studentData?.subjects?.[0] || null;
 
@@ -156,7 +158,7 @@ export default function DemoModePage() {
           requests.push(fetch(`${aiCoreUrl.replace(/\/$/, '')}/health`));
         }
 
-        if (studentData && studentId) {
+        if (studentData?.has_profile && studentId) {
           const query = new URLSearchParams({ student_id: String(studentId) });
           if (initialSubject) query.set('subject', initialSubject);
           requests.push(fetch(`${apiUrl}/learning/dashboard/bootstrap?${query.toString()}`, {
@@ -198,7 +200,7 @@ export default function DemoModePage() {
           setAiCoreHealth(null);
         }
 
-        if (studentData && studentId) {
+        if (studentData?.has_profile && studentId) {
           const studentResponse = responses[index++];
           if (studentResponse?.status === 'fulfilled' && studentResponse.value.ok) {
             setStudentBootstrap(await studentResponse.value.json());

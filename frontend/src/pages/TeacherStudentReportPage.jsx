@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Clipboard, Download, Loader2, Printer, UserRound } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { API_URL } from '../config/runtime';
 
 const formatDateTime = (value) => {
   if (!value) return 'Not available';
@@ -13,7 +14,7 @@ const formatDateTime = (value) => {
 const TeacherStudentReportPage = () => {
   const { classId, studentId, conceptId } = useParams();
   const { token } = useAuth();
-  const apiUrl = import.meta.env.VITE_API_URL;
+  const apiUrl = API_URL;
   const [report, setReport] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');

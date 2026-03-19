@@ -18,14 +18,21 @@ from backend.models.personalized_lesson import PersonalizedLesson
 from backend.models.student import StudentProfile, StudentSubject
 from backend.models.subject import Subject
 from backend.models.topic import Topic
+from backend.repositories.diagnostic_repo import DiagnosticRepository
 from backend.repositories.graph_repo import GraphRepository
 from backend.schemas.course_schema import (
     CourseBootstrapOut,
+    CourseInitialLessonPlanOut,
     CourseInterventionEventOut,
     CourseBootstrapTopicOut,
     CourseRecentEvidenceOut,
     CourseRecommendationStoryOut,
     CourseEvidenceSummaryOut,
+)
+from backend.schemas.diagnostic_schema import (
+    DiagnosticLearningGapSummaryOut,
+    DiagnosticSubjectRunOut,
+    DiagnosticWeakConceptOut,
 )
 from backend.schemas.learning_path_schema import LearningMapNodeOut, PathNextIn
 from backend.services.learning_path_service import LearningPathValidationError, learning_path_service
@@ -273,6 +280,114 @@ class CourseExperienceService:
             next_concept_label=next_concept_label,
             evidence_summary=evidence_summary,
             action_label=action_label,
+        )
+
+    @staticmethod
+    def _scope_diagnostic_signal(
+        *,
+        db: Session,
+        student_id: UUID,
+        subject: str,
+        sss_level: str,
+        term: int,
+    ) -> tuple[DiagnosticSubjectRunOut | None, DiagnosticLearningGapSummaryOut | None]:
+        repo = DiagnosticRepository(db)
+        latest_runs = repo.get_latest_scope_diagnostics(
+            student_id=student_id,
+            sss_level=sss_level,
+            term=term,
+            subjects=[subject],
+        )
+        diagnostic, attempt = latest_runs.get(subject, (None, None))
+        if diagnostic is None:
+            return DiagnosticSubjectRunOut(subject=subject, status="pending"), None
+
+        question_count = len(list(diagnostic.questions or []))
+        if diagnostic.status != "submitted" or attempt is None:
+            return (
+                DiagnosticSubjectRunOut(
+                    subject=subject,
+                    status="in_progress",
+                    diagnostic_id=diagnostic.id,
+                    question_count=question_count,
+                ),
+                None,
+            )
+
+        raw_gap_summary = dict(attempt.gap_summary or {})
+        weakest_concepts = [
+            DiagnosticWeakConceptOut(**item)
+            for item in list(raw_gap_summary.get("weakest_concepts") or [])
+            if isinstance(item, dict)
+        ]
+        gap_summary = DiagnosticLearningGapSummaryOut(
+            weakest_concepts=weakest_concepts,
+            blocking_prerequisite_id=raw_gap_summary.get("blocking_prerequisite_id"),
+            blocking_prerequisite_label=raw_gap_summary.get("blocking_prerequisite_label"),
+            recommended_start_topic_id=attempt.recommended_start_topic_id or raw_gap_summary.get("recommended_start_topic_id"),
+            recommended_start_topic_title=attempt.recommended_start_topic_title or raw_gap_summary.get("recommended_start_topic_title"),
+            next_best_action=raw_gap_summary.get("next_best_action"),
+            rationale=raw_gap_summary.get("rationale"),
+            question_count=int(raw_gap_summary.get("question_count") or question_count),
+            completion_timestamp=raw_gap_summary.get("completion_timestamp")
+            or (attempt.created_at.isoformat() if getattr(attempt, "created_at", None) else None),
+        )
+        diagnostic_status = DiagnosticSubjectRunOut(
+            subject=subject,
+            status="completed",
+            diagnostic_id=diagnostic.id,
+            question_count=question_count,
+            recommended_start_topic_id=gap_summary.recommended_start_topic_id,
+            recommended_start_topic_title=gap_summary.recommended_start_topic_title,
+            weakest_concepts=weakest_concepts,
+            blocking_prerequisite_id=gap_summary.blocking_prerequisite_id,
+            blocking_prerequisite_label=gap_summary.blocking_prerequisite_label,
+            completion_timestamp=gap_summary.completion_timestamp,
+        )
+        return diagnostic_status, gap_summary
+
+    @staticmethod
+    def _initial_lesson_plan(
+        *,
+        next_step,
+        recommendation_story: CourseRecommendationStoryOut | None,
+        gap_summary: DiagnosticLearningGapSummaryOut | None,
+    ) -> CourseInitialLessonPlanOut | None:
+        recommended_topic_id = (
+            gap_summary.recommended_start_topic_id
+            if gap_summary and gap_summary.recommended_start_topic_id
+            else (next_step.recommended_topic_id if next_step else None)
+        )
+        recommended_topic_title = (
+            gap_summary.recommended_start_topic_title
+            if gap_summary and gap_summary.recommended_start_topic_title
+            else (next_step.recommended_topic_title if next_step else None)
+        )
+        prerequisite_repair_label = (
+            gap_summary.blocking_prerequisite_label
+            if gap_summary and gap_summary.blocking_prerequisite_label
+            else (next_step.prereq_gap_labels[0] if next_step and next_step.prereq_gap_labels else None)
+        )
+        next_best_action = (
+            gap_summary.next_best_action
+            if gap_summary and gap_summary.next_best_action
+            else (recommendation_story.action_label if recommendation_story else None)
+        )
+        rationale = (
+            gap_summary.rationale
+            if gap_summary and gap_summary.rationale
+            else (recommendation_story.supporting_reason if recommendation_story else (next_step.reason if next_step else None))
+        )
+
+        if not any([recommended_topic_id, recommended_topic_title, prerequisite_repair_label, next_best_action, rationale]):
+            return None
+
+        return CourseInitialLessonPlanOut(
+            recommended_topic_id=recommended_topic_id,
+            recommended_topic_title=recommended_topic_title,
+            prerequisite_repair_label=prerequisite_repair_label,
+            next_best_action=next_best_action,
+            rationale=rationale,
         )
 
     @staticmethod
@@ -631,6 +746,22 @@ class CourseExperienceService:
             sss_level=str(student_profile.sss_level),
             term=term,
         )
+        recommendation_story = self._recommendation_story(
+            next_step=next_step,
+            recent_evidence=recent_evidence,
+        )
+        diagnostic_status, learning_gap_summary = self._scope_diagnostic_signal(
+            db=self.db,
+            student_id=student_id,
+            subject=subject,
+            sss_level=str(student_profile.sss_level),
+            term=term,
+        )
+        initial_lesson_plan = self._initial_lesson_plan(
+            next_step=next_step,
+            recommendation_story=recommendation_story,
+            gap_summary=learning_gap_summary,
+        )
 
         payload = CourseBootstrapOut(
             student_id=student_id,
@@ -643,11 +774,11 @@ class CourseExperienceService:
             next_step=next_step,
             recent_evidence=recent_evidence,
             intervention_timeline=intervention_timeline,
-            recommendation_story=self._recommendation_story(
-                next_step=next_step,
-                recent_evidence=recent_evidence,
-            ),
+            recommendation_story=recommendation_story,
             evidence_summary=evidence_summary,
+            diagnostic_status=diagnostic_status,
+            learning_gap_summary=learning_gap_summary,
+            initial_lesson_plan=initial_lesson_plan,
             map_error=map_error,
             warmed_topic_ids=warmed_topic_ids,
             cache_hit_topic_ids=cache_hit_topic_ids,

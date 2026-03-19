@@ -102,6 +102,36 @@ def test_course_bootstrap_returns_graph_ready_payload(monkeypatch):
                 "evidence_summary": "Latest practice strengthened Arithmetic Progression but exposed a gap in Simple Interest.",
                 "action_label": "Open recommended lesson",
             },
+            "diagnostic_status": {
+                "subject": kwargs["subject"],
+                "status": "completed",
+                "diagnostic_id": str(uuid4()),
+                "question_count": 10,
+                "recommended_start_topic_id": str(uuid4()),
+                "recommended_start_topic_title": "Sequences and Series",
+                "weakest_concepts": [],
+                "blocking_prerequisite_id": None,
+                "blocking_prerequisite_label": None,
+                "completion_timestamp": "2026-03-19T10:00:00+00:00",
+            },
+            "learning_gap_summary": {
+                "weakest_concepts": [],
+                "blocking_prerequisite_id": None,
+                "blocking_prerequisite_label": None,
+                "recommended_start_topic_id": str(uuid4()),
+                "recommended_start_topic_title": "Sequences and Series",
+                "next_best_action": "Open Sequences and Series",
+                "rationale": "Diagnostic baseline points here first.",
+                "question_count": 10,
+                "completion_timestamp": "2026-03-19T10:00:00+00:00",
+            },
+            "initial_lesson_plan": {
+                "recommended_topic_id": str(uuid4()),
+                "recommended_topic_title": "Sequences and Series",
+                "prerequisite_repair_label": None,
+                "next_best_action": "Open recommended lesson",
+                "rationale": "Diagnostic baseline points here first.",
+            },
             "map_error": None,
             "warmed_topic_ids": [],
             "cache_hit_topic_ids": [],
@@ -131,6 +161,9 @@ def test_course_bootstrap_returns_graph_ready_payload(monkeypatch):
     assert body["recent_evidence"]["strongest_drop_concept_label"] == "Simple Interest"
     assert body["intervention_timeline"][0]["source_label"] == "Quiz result"
     assert body["recommendation_story"]["headline"] == "Push into Sequences and Series next."
+    assert body["diagnostic_status"]["status"] == "completed"
+    assert body["learning_gap_summary"]["recommended_start_topic_title"] == "Sequences and Series"
+    assert body["initial_lesson_plan"]["recommended_topic_title"] == "Sequences and Series"
 
 
 def test_latest_intervention_bootstrap_returns_recent_scope(monkeypatch):

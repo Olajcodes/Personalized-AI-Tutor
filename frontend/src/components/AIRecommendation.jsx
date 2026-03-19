@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronRight, Brain, Loader2, AlertCircle, GitBranch, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
+import { API_URL } from '../config/runtime';
+import { resolveStudentId } from '../utils/sessionIdentity';
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
 
@@ -38,14 +40,14 @@ export default function AIRecommendation({
   const navigate = useNavigate();
   const { token } = useAuth();
   const { studentData, userData } = useUser();
-  const activeId = studentData?.user_id || userData?.id;
+  const activeId = resolveStudentId(studentData, userData);
 
   // Derive scope from student profile
   const currentSubject = activeSubjectProp || localStorage.getItem('active_subject') || studentData?.subjects?.[0] || 'math';
   const currentLevel = studentData?.sss_level || 'SSS1';
   const currentTerm = studentData?.current_term || 1;
 
-  const apiUrl = import.meta.env.VITE_API_URL || 'https://mastery-backend-7xe8.onrender.com/api/v1';
+  const apiUrl = API_URL;
 
   // State
   const [recommendation, setRecommendation] = useState(null);
