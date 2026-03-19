@@ -22,6 +22,11 @@ class DiagnosticLearningGapSummaryOut(BaseModel):
     completion_timestamp: str | None = None
 
 
+class DiagnosticOptionOut(BaseModel):
+    label: str
+    context_title: str | None = None
+
+
 class DiagnosticQuestionOut(BaseModel):
     question_id: str
     concept_id: str
@@ -30,6 +35,7 @@ class DiagnosticQuestionOut(BaseModel):
     topic_title: str | None = None
     prompt: str
     options: list[str]
+    option_details: list[DiagnosticOptionOut] = Field(default_factory=list)
 
 
 class DiagnosticStartIn(BaseModel):

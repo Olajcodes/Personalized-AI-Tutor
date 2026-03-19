@@ -10,7 +10,6 @@ import {
   ClipboardList,
   Loader2,
   PlayCircle,
-  Route,
   Sparkles,
   Target,
   TimerReset,
@@ -329,7 +328,7 @@ export default function AssessmentSplash() {
                 <BrainCircuit className="h-3.5 w-3.5" />
                 Graph-grounded onboarding
               </div>
-              <h1 className="mt-5 max-w-4xl text-3xl font-black tracking-tight text-slate-950 sm:text-4xl lg:text-[3.2rem]">
+              <h1 className="mt-5 max-w-4xl text-[2.2rem] font-black tracking-tight text-slate-950 sm:text-[2.8rem] lg:text-[3rem]">
                 Build a real mastery baseline before your first lesson.
               </h1>
               <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600 sm:text-[15px]">
@@ -340,17 +339,17 @@ export default function AssessmentSplash() {
               <div className="mt-6 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-4">
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Subjects selected</p>
-                  <p className="mt-2 text-2xl font-black text-slate-900">{selectedSubjects.length || 0}</p>
+                  <p className="mt-2 text-[1.65rem] font-black text-slate-900">{selectedSubjects.length || 0}</p>
                   <p className="mt-1 text-xs font-semibold text-slate-500">One diagnostic run per enrolled subject</p>
                 </div>
                 <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-4">
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Questions answered</p>
-                  <p className="mt-2 text-2xl font-black text-slate-900">{overallAnsweredCount}</p>
+                  <p className="mt-2 text-[1.65rem] font-black text-slate-900">{overallAnsweredCount}</p>
                   <p className="mt-1 text-xs font-semibold text-slate-500">Baseline evidence already captured</p>
                 </div>
                 <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-4">
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Graph target</p>
-                  <p className="mt-2 text-2xl font-black text-slate-900">{status?.completed_subjects?.length || 0}</p>
+                  <p className="mt-2 text-[1.65rem] font-black text-slate-900">{status?.completed_subjects?.length || 0}</p>
                   <p className="mt-1 text-xs font-semibold text-slate-500">Subjects already mapped into mastery</p>
                 </div>
               </div>
@@ -363,7 +362,7 @@ export default function AssessmentSplash() {
                 <BrainCircuit className="h-3.5 w-3.5" />
                 Progress pulse
               </div>
-              <p className="text-4xl font-black text-white">{overallProgress}%</p>
+              <p className="text-[2.35rem] font-black text-white">{overallProgress}%</p>
             </div>
             <div className="mt-5 h-3 overflow-hidden rounded-full bg-white/10">
               <div
@@ -445,9 +444,9 @@ export default function AssessmentSplash() {
                               )}
                             </div>
                             <div className="min-w-0">
-                              <p className="truncate text-lg font-black text-slate-900">{subjectLabel(run.subject)}</p>
+                              <p className="truncate text-[1.02rem] font-black text-slate-900 sm:text-[1.08rem]">{subjectLabel(run.subject)}</p>
                               <p className="mt-1 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                                {RUN_STATUS_LABELS[run.status]} · {run.question_count || 10} questions
+                                {RUN_STATUS_LABELS[run.status]} - {run.question_count || 10} questions
                               </p>
                             </div>
                           </div>
@@ -526,7 +525,7 @@ export default function AssessmentSplash() {
                 <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-4">
                   <div className="flex items-start gap-3">
                     <div className="mt-0.5 rounded-2xl bg-amber-100 p-2 text-amber-700">
-                      <Route className="h-4 w-4" />
+                      <Target className="h-4 w-4" />
                     </div>
                     <div>
                       <p className="text-sm font-black text-slate-900">Weak prerequisites become your first repair route</p>
@@ -561,18 +560,18 @@ export default function AssessmentSplash() {
                   <div className="rounded-[2rem] bg-emerald-100 p-4 text-emerald-700">
                     <CheckCircle2 className="h-12 w-12" />
                   </div>
-                  <h2 className="mt-5 text-3xl font-black text-slate-900">Diagnostic complete</h2>
+                  <h2 className="mt-5 text-[2.1rem] font-black text-slate-900">Diagnostic complete</h2>
                   <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
                     Your baseline graph profile is ready. We have stored weak concepts, blocking prerequisites, and recommended lesson starts for each subject.
                   </p>
                   <div className="mt-8 grid w-full max-w-3xl gap-3 sm:grid-cols-3">
                     <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 text-left">
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Subjects mapped</p>
-                      <p className="mt-2 text-2xl font-black text-slate-900">{status?.completed_subjects?.length || 0}</p>
+                      <p className="mt-2 text-[1.65rem] font-black text-slate-900">{status?.completed_subjects?.length || 0}</p>
                     </div>
                     <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 text-left">
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Question total</p>
-                      <p className="mt-2 text-2xl font-black text-slate-900">{selectedSubjects.length * 10 || 0}</p>
+                      <p className="mt-2 text-[1.65rem] font-black text-slate-900">{selectedSubjects.length * 10 || 0}</p>
                     </div>
                     <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 text-left">
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Next step</p>
@@ -594,7 +593,7 @@ export default function AssessmentSplash() {
                     <Sparkles className="h-3.5 w-3.5" />
                     Ready to begin
                   </div>
-                  <h2 className="mt-5 max-w-3xl text-3xl font-black leading-tight text-slate-900 sm:text-[2.6rem]">
+                  <h2 className="mt-5 max-w-3xl text-[1.7rem] font-black leading-tight text-slate-900 sm:text-[1.95rem]">
                     {nextRun?.status === 'in_progress'
                       ? `Resume ${subjectLabel(nextRun.subject)} diagnostic`
                       : 'Start your subject diagnostics'}
@@ -605,7 +604,7 @@ export default function AssessmentSplash() {
                   <div className="mt-8 grid gap-3 sm:grid-cols-2">
                     <div className="rounded-[1.6rem] border border-slate-200 bg-slate-50/80 p-5">
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Next subject</p>
-                      <p className="mt-2 text-xl font-black text-slate-900">
+                      <p className="mt-2 text-[1.18rem] font-black text-slate-900">
                         {nextRun?.subject ? subjectLabel(nextRun.subject) : subjectLabel(selectedSubjects[0])}
                       </p>
                       <p className="mt-1 text-sm leading-6 text-slate-600">
@@ -616,7 +615,7 @@ export default function AssessmentSplash() {
                     </div>
                     <div className="rounded-[1.6rem] border border-slate-200 bg-slate-50/80 p-5">
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Question format</p>
-                      <p className="mt-2 text-xl font-black text-slate-900">10 questions per subject</p>
+                      <p className="mt-2 text-[1.18rem] font-black text-slate-900">10 questions per subject</p>
                       <p className="mt-1 text-sm leading-6 text-slate-600">Grounded in approved mappings for {level} term {term}.</p>
                     </div>
                   </div>
@@ -650,7 +649,7 @@ export default function AssessmentSplash() {
                         <BrainCircuit className="h-3.5 w-3.5" />
                         {subjectLabel(activeSession.subject)}
                       </div>
-                      <h2 className="mt-4 text-2xl font-black text-slate-900 sm:text-[2rem]">
+                      <h2 className="mt-4 text-[1.42rem] font-black text-slate-900 sm:text-[1.58rem]">
                         Question {currentIndex + 1} of {activeSession.question_count}
                       </h2>
                       <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-600">
@@ -660,13 +659,13 @@ export default function AssessmentSplash() {
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="rounded-[1.35rem] border border-slate-200 bg-white px-4 py-3 shadow-sm">
                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Answered</p>
-                        <p className="mt-1 text-2xl font-black text-slate-900">
+                        <p className="mt-1 text-[1.28rem] font-black text-slate-900">
                           {answeredCurrentSubjectCount} / {activeSession.question_count}
                         </p>
                       </div>
                       <div className="rounded-[1.35rem] border border-slate-200 bg-white px-4 py-3 shadow-sm">
                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Subject progress</p>
-                        <p className="mt-1 text-2xl font-black text-slate-900">
+                        <p className="mt-1 text-[1.28rem] font-black text-slate-900">
                           {Math.round(((currentIndex + 1) / activeSession.question_count) * 100)}%
                         </p>
                       </div>
@@ -684,43 +683,26 @@ export default function AssessmentSplash() {
                   <div className="space-y-4">
                     <div className="rounded-[1.7rem] border border-slate-200 bg-slate-50/80 p-5">
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Concept focus</p>
-                      <p className="mt-3 text-2xl font-black leading-tight text-slate-900">
+                      <p className="mt-3 text-[1.18rem] font-black leading-tight text-slate-900 sm:text-[1.28rem]">
                         {currentQuestion?.concept_label || 'Mapped concept'}
                       </p>
                       {currentQuestion?.topic_title && (
-                        <p className="mt-3 text-sm leading-6 text-slate-600">
-                          Topic: <span className="font-semibold text-slate-800">{currentQuestion.topic_title}</span>
+                        <p className="mt-3 text-sm font-semibold leading-6 text-slate-700">
+                          {currentQuestion.topic_title}
                         </p>
                       )}
-                    </div>
-
-                    <div className="rounded-[1.7rem] border border-slate-200 bg-slate-50/80 p-5">
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Question design</p>
-                      <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
-                        <div className="flex items-start gap-3">
-                          <div className="rounded-xl bg-indigo-100 p-2 text-indigo-700">
-                            <CheckCircle2 className="h-4 w-4" />
-                          </div>
-                          <p>Option order is shuffled so the correct answer is not fixed to one letter.</p>
-                        </div>
-                        <div className="flex items-start gap-3">
-                          <div className="rounded-xl bg-emerald-100 p-2 text-emerald-700">
-                            <Route className="h-4 w-4" />
-                          </div>
-                          <p>Strong answers unlock better starting lessons. Weak answers expose prerequisite gaps.</p>
-                        </div>
-                      </div>
                     </div>
                   </div>
 
                   <div>
                     <div className="rounded-[1.9rem] border border-slate-200 bg-white p-6 shadow-sm">
-                      <h3 className="text-2xl font-black leading-tight text-slate-950 sm:text-[2.2rem]">{currentQuestion?.prompt}</h3>
+                      <h3 className="text-[1.4rem] font-black leading-tight text-slate-950 sm:text-[1.55rem]">{currentQuestion?.prompt}</h3>
 
                       <div className="mt-6 grid gap-4 lg:grid-cols-2">
                         {(currentQuestion?.options || []).map((option, index) => {
                           const optionLetter = String.fromCharCode(65 + index);
                           const isSelected = selectedAnswer === optionLetter;
+                          const optionDetail = currentQuestion?.option_details?.[index] || null;
                           return (
                             <button
                               key={`${currentQuestion?.question_id}-${optionLetter}`}
@@ -749,7 +731,14 @@ export default function AssessmentSplash() {
                                   </span>
                                 ) : null}
                               </div>
-                              <p className="mt-4 break-words text-[1.02rem] font-semibold leading-8 text-slate-900">{option}</p>
+                              <p className="mt-4 break-words text-[0.98rem] font-semibold leading-7 text-slate-900">
+                                {optionDetail?.label || option}
+                              </p>
+                              {optionDetail?.context_title ? (
+                                <p className="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                                  Lesson area: {optionDetail.context_title}
+                                </p>
+                              ) : null}
                             </button>
                           );
                         })}

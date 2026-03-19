@@ -13,6 +13,7 @@ from backend.repositories.graph_repo import GraphRepository
 from backend.schemas.diagnostic_schema import (
     BaselineMasteryUpdateOut,
     DiagnosticLearningGapSummaryOut,
+    DiagnosticOptionOut,
     DiagnosticQuestionOut,
     DiagnosticStartIn,
     DiagnosticStartOut,
@@ -33,6 +34,23 @@ QUESTION_PROMPTS = [
     "If you begin studying '{topic_title}', which concept is the best starting focus?",
     "Which concept is most central to understanding '{topic_title}'?",
 ]
+_MINOR_WORDS = {
+    "a",
+    "an",
+    "and",
+    "as",
+    "at",
+    "by",
+    "for",
+    "from",
+    "in",
+    "of",
+    "on",
+    "or",
+    "the",
+    "to",
+    "with",
+}
 
 
 class DiagnosticValidationError(ValueError):
@@ -49,37 +67,232 @@ class DiagnosticAlreadySubmittedError(ValueError):
 
 class DiagnosticService:
     @staticmethod
-    def _readable_concept_label(concept_id: str, *, fallback_topic_title: str | None = None) -> str:
-        value = str(concept_id or "").strip()
-        if not value:
-            return str(fallback_topic_title or "Untitled Concept").strip()
-        token = value.rsplit(":", 1)[-1].strip().lower()
-        token = re.sub(r"-(\d+)$", "", token)
-        token = re.sub(r"[_-]+", " ", token)
-        token = re.sub(r"\s+", " ", token).strip()
-        return token.title() if token else str(fallback_topic_title or "Untitled Concept").strip()
+    def _normalize_lookup_key(value: str) -> str:
+        normalized = re.sub(r"[_-]+", " ", str(value or "").strip().lower())
+        normalized = re.sub(r"\btopic\b\s+", "", normalized, count=1)
+        normalized = re.sub(r"\s+", " ", normalized).strip(" -:\t\r\n'\"")
+        return normalized
+
+    @classmethod
+    def _sentence_case(cls, value: str) -> str:
+        cleaned = re.sub(r"\s+", " ", str(value or "").strip())
+        if not cleaned:
+            return ""
+        tokens = cleaned.lower().split(" ")
+        if not tokens:
+            return ""
+        normalized: list[str] = []
+        for index, token in enumerate(tokens):
+            if not token:
+                continue
+            if index == 0:
+                normalized.append(token.capitalize())
+            elif token in _MINOR_WORDS:
+                normalized.append(token)
+            else:
+                normalized.append(token)
+        return " ".join(normalized)
+
+    @classmethod
+    def _display_text(cls, value: str, *, strip_topic_prefix: bool = False) -> str:
+        cleaned = re.sub(r"[_-]+", " ", str(value or "").strip())
+        if strip_topic_prefix:
+            cleaned = re.sub(r"^\s*topic\s+", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip(" -:\t\r\n'\"")
+        if not cleaned:
+            return ""
+        return cls._sentence_case(cleaned)
+
+    @classmethod
+    def _prefer_topic_title(cls, concept_text: str, fallback_topic_title: str | None) -> bool:
+        topic_title = str(fallback_topic_title or "").strip()
+        if not topic_title:
+            return False
+
+        concept_key = cls._normalize_lookup_key(concept_text)
+        topic_key = cls._normalize_lookup_key(topic_title)
+        if not concept_key or not topic_key:
+            return False
+
+        if concept_key.startswith("topic "):
+            return True
+
+        if topic_key == concept_key:
+            return True
+
+        if (
+            len(concept_key) >= 14
+            and topic_key.startswith(concept_key)
+            and len(concept_key) >= int(len(topic_key) * 0.72)
+        ):
+            return True
+
+        return False
 
     @staticmethod
-    def _build_options(correct_title: str, all_titles: list[str], *, rng: random.Random) -> tuple[list[str], str]:
-        distractors = [title for title in all_titles if title != correct_title]
-        rng.shuffle(distractors)
-        options = distractors[:3] + [correct_title]
-        seen: list[str] = []
-        deduped: list[str] = []
-        for option in options:
-            if option in seen:
+    def _is_topic_surrogate_concept(concept_id: str) -> bool:
+        token = str(concept_id or "").rsplit(":", 1)[-1].strip().lower()
+        return token.startswith("topic-") or token == "topic"
+
+    @classmethod
+    def _readable_concept_label(cls, concept_id: str, *, fallback_topic_title: str | None = None) -> str:
+        value = str(concept_id or "").strip()
+        if not value:
+            return cls._display_text(str(fallback_topic_title or "Untitled Concept"))
+        token = value.rsplit(":", 1)[-1].strip().lower()
+        if token.startswith("topic-") and fallback_topic_title:
+            return cls._display_text(str(fallback_topic_title or "Untitled Concept"))
+        token = re.sub(r"-(\d+)$", "", token)
+        token = re.sub(r"^\s*topic[-\s]+", "", token)
+        token = re.sub(r"[_-]+", " ", token)
+        token = re.sub(r"\s+", " ", token).strip()
+        if cls._prefer_topic_title(token, fallback_topic_title):
+            return cls._display_text(str(fallback_topic_title or "Untitled Concept"))
+        return cls._display_text(token) if token else cls._display_text(str(fallback_topic_title or "Untitled Concept"))
+
+    @classmethod
+    def _display_topic_title(cls, topic_title: str | None) -> str | None:
+        cleaned = cls._display_text(str(topic_title or ""))
+        return cleaned or None
+
+    @classmethod
+    def _normalize_prompt(cls, prompt: str | None, *, topic_title: str | None) -> str:
+        readable_topic = cls._display_topic_title(topic_title) or "this topic"
+        raw_prompt = str(prompt or "").strip()
+        if not raw_prompt:
+            return QUESTION_PROMPTS[0].format(topic_title=readable_topic)
+
+        raw_topic = str(topic_title or "").strip()
+        if raw_topic:
+            raw_prompt = raw_prompt.replace(raw_topic, readable_topic)
+        return re.sub(r"\s+", " ", raw_prompt).strip()
+
+    @classmethod
+    def _build_option_display_lookup(cls, concept_rows: list[dict]) -> dict[str, str]:
+        lookup: dict[str, str] = {}
+        for row in concept_rows:
+            topic_title = str(row.get("topic_title") or "").strip()
+            concept_id = str(row.get("concept_id") or "").strip()
+            display_label = cls._readable_concept_label(concept_id, fallback_topic_title=topic_title)
+            keys = {
+                cls._normalize_lookup_key(concept_id),
+                cls._normalize_lookup_key(display_label),
+                cls._normalize_lookup_key(topic_title),
+                cls._normalize_lookup_key(concept_id.rsplit(":", 1)[-1]),
+            }
+            for key in keys:
+                if key:
+                    lookup.setdefault(key, display_label)
+        return lookup
+
+    @classmethod
+    def _build_option_context_lookup(cls, concept_rows: list[dict]) -> dict[str, str | None]:
+        lookup: dict[str, str | None] = {}
+        for row in concept_rows:
+            topic_title = cls._display_topic_title(row.get("topic_title"))
+            concept_id = str(row.get("concept_id") or "").strip()
+            display_label = cls._readable_concept_label(concept_id, fallback_topic_title=topic_title)
+            context_title = topic_title if topic_title and cls._normalize_lookup_key(topic_title) != cls._normalize_lookup_key(display_label) else None
+            keys = {
+                cls._normalize_lookup_key(concept_id),
+                cls._normalize_lookup_key(display_label),
+                cls._normalize_lookup_key(topic_title or ""),
+                cls._normalize_lookup_key(concept_id.rsplit(":", 1)[-1]),
+            }
+            for key in keys:
+                if key:
+                    lookup.setdefault(key, context_title)
+        return lookup
+
+    @classmethod
+    def _display_option_text(cls, option: str, *, option_display_lookup: dict[str, str] | None = None) -> str:
+        key = cls._normalize_lookup_key(option)
+        if option_display_lookup and key in option_display_lookup:
+            return option_display_lookup[key]
+        return cls._display_text(option, strip_topic_prefix=True)
+
+    @classmethod
+    def _option_context_text(cls, option: str, *, option_context_lookup: dict[str, str | None] | None = None) -> str | None:
+        key = cls._normalize_lookup_key(option)
+        if option_context_lookup and key in option_context_lookup:
+            return option_context_lookup[key]
+        return None
+
+    @staticmethod
+    def _dedupe_titles(rows: list[dict]) -> list[str]:
+        titles: list[str] = []
+        seen: set[str] = set()
+        for row in rows:
+            label = str(row.get("concept_label") or "").strip()
+            if not label or label in seen:
                 continue
-            seen.append(option)
-            deduped.append(option)
-        options = deduped
-        if len(options) < 4:
-            for title in all_titles:
-                if title not in options:
-                    options.append(title)
-                if len(options) == 4:
+            seen.add(label)
+            titles.append(label)
+        return titles
+
+    def _build_options(self, current_row: dict, all_rows: list[dict], *, rng: random.Random) -> tuple[list[str], str]:
+        correct_title = str(current_row.get("concept_label") or "").strip()
+        if not correct_title:
+            raise DiagnosticValidationError("Diagnostic question is missing a readable concept label.")
+
+        correct_id = str(current_row.get("concept_id") or "").strip()
+        current_topic_id = str(current_row.get("topic_id") or "").strip()
+        prereq_ids = {
+            str(value).strip()
+            for value in list(current_row.get("prereq_concept_ids") or [])
+            if str(value).strip()
+        }
+        neighbor_ids = set(prereq_ids)
+        if correct_id:
+            neighbor_ids.update(
+                str(row.get("concept_id") or "").strip()
+                for row in all_rows
+                if correct_id in {
+                    str(value).strip()
+                    for value in list(row.get("prereq_concept_ids") or [])
+                    if str(value).strip()
+                }
+            )
+
+        same_topic_rows = [
+            row
+            for row in all_rows
+            if str(row.get("topic_id") or "").strip() == current_topic_id
+            and str(row.get("concept_label") or "").strip() != correct_title
+        ]
+        neighboring_rows = [
+            row
+            for row in all_rows
+            if str(row.get("concept_id") or "").strip() in neighbor_ids
+            and str(row.get("concept_label") or "").strip() != correct_title
+        ]
+        fallback_rows = [
+            row
+            for row in all_rows
+            if str(row.get("concept_label") or "").strip() != correct_title
+        ]
+
+        rng.shuffle(same_topic_rows)
+        rng.shuffle(neighboring_rows)
+        rng.shuffle(fallback_rows)
+
+        distractor_titles: list[str] = []
+        seen: set[str] = {correct_title}
+        for pool in (same_topic_rows, neighboring_rows, fallback_rows):
+            for title in self._dedupe_titles(pool):
+                if title in seen:
+                    continue
+                distractor_titles.append(title)
+                seen.add(title)
+                if len(distractor_titles) == 3:
                     break
-        if len(options) < 4:
+            if len(distractor_titles) == 3:
+                break
+
+        if len(distractor_titles) < 3:
             raise DiagnosticValidationError("At least four mapped concept labels are required to build a diagnostic question.")
+
+        options = distractor_titles + [correct_title]
         rng.shuffle(options)
         correct_index = options.index(correct_title)
         return options, chr(ord("A") + correct_index)
@@ -122,7 +335,14 @@ class DiagnosticService:
                     break
         return selected
 
-    def _serialize_existing_questions(self, diagnostic, *, resumed: bool) -> DiagnosticStartOut:
+    def _serialize_existing_questions(
+        self,
+        diagnostic,
+        *,
+        resumed: bool,
+        option_display_lookup: dict[str, str] | None = None,
+        option_context_lookup: dict[str, str | None] | None = None,
+    ) -> DiagnosticStartOut:
         questions = list(diagnostic.questions or [])
         concept_targets = list(dict.fromkeys(str(item.get("concept_id") or "").strip() for item in questions if str(item.get("concept_id") or "").strip()))
         return DiagnosticStartOut(
@@ -137,11 +357,27 @@ class DiagnosticService:
                 DiagnosticQuestionOut(
                     question_id=str(q["question_id"]),
                     concept_id=str(q["concept_id"]),
-                    concept_label=q.get("concept_label"),
+                    concept_label=self._readable_concept_label(
+                        str(q.get("concept_label") or q["concept_id"]),
+                        fallback_topic_title=q.get("topic_title"),
+                    ),
                     topic_id=q.get("topic_id"),
-                    topic_title=q.get("topic_title"),
-                    prompt=str(q["prompt"]),
-                    options=list(q.get("options") or []),
+                    topic_title=self._display_topic_title(q.get("topic_title")),
+                    prompt=self._normalize_prompt(str(q.get("prompt") or ""), topic_title=q.get("topic_title")),
+                    options=[
+                        self._display_option_text(str(option or ""), option_display_lookup=option_display_lookup)
+                        for option in list(q.get("options") or [])
+                    ],
+                    option_details=[
+                        DiagnosticOptionOut(
+                            label=self._display_option_text(str(option or ""), option_display_lookup=option_display_lookup),
+                            context_title=self._option_context_text(
+                                str(option or ""),
+                                option_context_lookup=option_context_lookup,
+                            ),
+                        )
+                        for option in list(q.get("options") or [])
+                    ],
                 )
                 for q in questions
             ],
@@ -165,14 +401,20 @@ class DiagnosticService:
             sss_level=payload.sss_level,
             term=payload.term,
         )
-        if existing is not None and existing.questions:
-            return self._serialize_existing_questions(existing, resumed=True)
-
         concept_rows = repo.get_scope_topic_concept_rows(
             subject=payload.subject,
             sss_level=payload.sss_level,
             term=payload.term,
         )
+        option_display_lookup = self._build_option_display_lookup(concept_rows)
+        option_context_lookup = self._build_option_context_lookup(concept_rows)
+        if existing is not None and existing.questions:
+            return self._serialize_existing_questions(
+                existing,
+                resumed=True,
+                option_display_lookup=option_display_lookup,
+                option_context_lookup=option_context_lookup,
+            )
         if not concept_rows:
             raise DiagnosticValidationError(
                 "No curriculum concept mappings found for this scope. Ingest and approve mapped curriculum first."
@@ -191,27 +433,28 @@ class DiagnosticService:
                     "topic_title": topic_title,
                     "concept_id": concept_id,
                     "concept_label": self._readable_concept_label(concept_id, fallback_topic_title=topic_title),
+                    "is_topic_surrogate": self._is_topic_surrogate_concept(concept_id),
                 }
             )
-        if len(self._unique_concept_titles(normalized_rows)) < 4:
+        primary_rows = [row for row in normalized_rows if not row.get("is_topic_surrogate")]
+        question_rows = primary_rows if len(self._unique_concept_titles(primary_rows)) >= 4 else normalized_rows
+        if len(self._unique_concept_titles(question_rows)) < 4:
             raise DiagnosticValidationError(
                 "At least four mapped concepts are required in this scope before the onboarding diagnostic can run."
             )
 
         rng = random.Random(f"{payload.student_id}:{payload.subject}:{payload.sss_level}:{payload.term}:{payload.num_questions}")
         selected_rows = self._select_question_rows(
-            normalized_rows,
+            question_rows,
             num_questions=payload.num_questions,
             rng=rng,
         )
-        all_titles = self._unique_concept_titles(normalized_rows)
-
         questions: list[dict] = []
         for index, row in enumerate(selected_rows):
             prompt_template = QUESTION_PROMPTS[index % len(QUESTION_PROMPTS)]
             options, correct_answer = self._build_options(
-                row["concept_label"],
-                all_titles,
+                row,
+                question_rows,
                 rng=rng,
             )
             questions.append(
@@ -220,9 +463,21 @@ class DiagnosticService:
                     "concept_id": row["concept_id"],
                     "concept_label": row["concept_label"],
                     "topic_id": row["topic_id"],
-                    "topic_title": row["topic_title"],
-                    "prompt": prompt_template.format(topic_title=row["topic_title"]),
+                    "topic_title": self._display_topic_title(row["topic_title"]),
+                    "prompt": prompt_template.format(
+                        topic_title=self._display_topic_title(row["topic_title"]) or "this topic",
+                    ),
                     "options": options,
+                    "option_details": [
+                        {
+                            "label": self._display_option_text(option, option_display_lookup=option_display_lookup),
+                            "context_title": self._option_context_text(
+                                option,
+                                option_context_lookup=option_context_lookup,
+                            ),
+                        }
+                        for option in options
+                    ],
                     "correct_answer": correct_answer,
                 }
             )
@@ -249,7 +504,12 @@ class DiagnosticService:
         )
         db.commit()
         db.refresh(diagnostic)
-        return self._serialize_existing_questions(diagnostic, resumed=False)
+        return self._serialize_existing_questions(
+            diagnostic,
+            resumed=False,
+            option_display_lookup=option_display_lookup,
+            option_context_lookup=option_context_lookup,
+        )
 
     def get_diagnostic_status(self, db: Session, *, student_id: UUID) -> DiagnosticStatusOut:
         repo = DiagnosticRepository(db)

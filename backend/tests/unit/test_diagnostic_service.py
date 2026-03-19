@@ -104,8 +104,9 @@ def test_create_diagnostic_session_uses_real_concept_labels(monkeypatch):
 
     question_by_concept = {question.concept_id: question for question in result.questions}
     assert "civic:sss1:t1:individualistic-values" in question_by_concept
-    assert question_by_concept["civic:sss1:t1:individualistic-values"].concept_label == "Individualistic Values"
-    assert question_by_concept["civic:sss1:t1:individualistic-values"].topic_title == "Our Values"
+    assert question_by_concept["civic:sss1:t1:individualistic-values"].concept_label == "Individualistic values"
+    assert question_by_concept["civic:sss1:t1:individualistic-values"].topic_title == "Our values"
+    assert len(question_by_concept["civic:sss1:t1:individualistic-values"].option_details) == 4
 
 
 def test_create_diagnostic_session_respects_question_count_and_shuffles_answers(monkeypatch):
@@ -162,3 +163,194 @@ def test_create_diagnostic_session_respects_question_count_and_shuffles_answers(
     correct_answers = {question["correct_answer"] for question in created_questions}
     assert correct_answers.issubset({"A", "B", "C", "D"})
     assert len(correct_answers) > 1
+
+
+def test_build_options_prefers_same_topic_distractors_before_scope_fallback():
+    rng = diagnostic_service_module.random.Random(42)
+    current_row = {
+        "topic_id": "topic-a",
+        "topic_title": "Poverty and its Effects",
+        "concept_id": "civic:sss2:t1:poverty-and-its-effects",
+        "concept_label": "Poverty and its effects",
+        "prereq_concept_ids": [],
+    }
+    all_rows = [
+        current_row,
+        {
+            "topic_id": "topic-a",
+            "topic_title": "Poverty and its Effects",
+            "concept_id": "civic:sss2:t1:effects-of-poverty",
+            "concept_label": "Effects of poverty",
+            "prereq_concept_ids": [],
+        },
+        {
+            "topic_id": "topic-a",
+            "topic_title": "Poverty and its Effects",
+            "concept_id": "civic:sss2:t1:importance-of-employment",
+            "concept_label": "Importance of employment",
+            "prereq_concept_ids": [],
+        },
+        {
+            "topic_id": "topic-a",
+            "topic_title": "Poverty and its Effects",
+            "concept_id": "civic:sss2:t1:poverty-alleviation-programmes",
+            "concept_label": "Poverty alleviation programmes in Nigeria",
+            "prereq_concept_ids": [],
+        },
+        {
+            "topic_id": "topic-b",
+            "topic_title": "Political Apathy",
+            "concept_id": "civic:sss2:t1:forms-of-political-apathy",
+            "concept_label": "Forms of political apathy",
+            "prereq_concept_ids": [],
+        },
+    ]
+
+    options, correct_answer = diagnostic_service_module.diagnostic_service._build_options(
+        current_row,
+        all_rows,
+        rng=rng,
+    )
+
+    assert correct_answer in {"A", "B", "C", "D"}
+    assert "Poverty and its effects" in options
+    assert "Effects of poverty" in options
+    assert "Importance of employment" in options
+    assert "Poverty alleviation programmes in Nigeria" in options
+
+
+def test_create_diagnostic_session_filters_topic_surrogates_from_student_options(monkeypatch):
+    topic_id = uuid4()
+    repo = MagicMock()
+    repo.validate_student_scope.return_value = True
+    repo.get_in_progress_diagnostic.return_value = None
+    repo.get_scope_topic_concept_rows.return_value = [
+        {
+            "topic_id": str(topic_id),
+            "topic_title": "Citizenship Education and Importance of Citizenship Education",
+            "concept_id": "civic:sss2:t1:citizenship-education",
+            "prereq_concept_ids": [],
+        },
+        {
+            "topic_id": str(topic_id),
+            "topic_title": "Citizenship Education and Importance of Citizenship Education",
+            "concept_id": "civic:sss2:t1:importance-of-citizenship-education",
+            "prereq_concept_ids": [],
+        },
+        {
+            "topic_id": str(topic_id),
+            "topic_title": "Citizenship Education and Importance of Citizenship Education",
+            "concept_id": "civic:sss2:t1:topic-citizenship-education-and-importance-of-ci",
+            "prereq_concept_ids": [],
+        },
+        {
+            "topic_id": str(topic_id),
+            "topic_title": "Political Party",
+            "concept_id": "civic:sss2:t1:functions-of-political-parties",
+            "prereq_concept_ids": [],
+        },
+        {
+            "topic_id": str(topic_id),
+            "topic_title": "Poverty and its Effects",
+            "concept_id": "civic:sss2:t1:importance-of-employment",
+            "prereq_concept_ids": [],
+        },
+    ]
+    repo.create_diagnostic.side_effect = lambda **kwargs: SimpleNamespace(id=uuid4(), **kwargs)
+
+    monkeypatch.setattr(diagnostic_service_module, "DiagnosticRepository", lambda db: repo)
+
+    payload = DiagnosticStartIn(
+        student_id=uuid4(),
+        subject="civic",
+        sss_level="SSS2",
+        term=1,
+        num_questions=4,
+    )
+
+    result = diagnostic_service_module.diagnostic_service.create_diagnostic_session(db=MagicMock(), payload=payload)
+
+    rendered_options = [option for question in result.questions for option in question.options]
+    assert all(not option.lower().startswith("topic ") for option in rendered_options)
+    assert "Citizenship education and importance of citizenship education" not in rendered_options
+    assert "Functions of political parties" in rendered_options
+    details = result.questions[0].option_details
+    assert any(detail.label == "Functions of political parties" and detail.context_title == "Political party" for detail in details)
+
+
+def test_resume_diagnostic_session_normalizes_existing_prompt_and_options(monkeypatch):
+    student_id = uuid4()
+    diagnostic_id = uuid4()
+    topic_id = uuid4()
+    existing = SimpleNamespace(
+        id=diagnostic_id,
+        subject="civic",
+        sss_level="SSS2",
+        term=1,
+        questions=[
+            {
+                "question_id": str(uuid4()),
+                "concept_id": "civic:sss2:t1:why-leaders-fail-to-protect-the-interest-of-thei",
+                "concept_label": "Why Leaders Fail To Protect The Interest Of Thei",
+                "topic_id": str(topic_id),
+                "topic_title": "WHY LEADERS FAIL TO PROTECT THE INTEREST OF THEIR FOLLOWERS",
+                "prompt": "Which concept is most central to understanding 'WHY LEADERS FAIL TO PROTECT THE INTEREST OF THEIR FOLLOWERS'?",
+                "options": [
+                    "Functions Of Political Parties",
+                    "Topic Citizenship Education And Importance Of Ci",
+                    "Why Leaders Fail To Protect The Interest Of Thei",
+                    "Importance Of Employment",
+                ],
+                "correct_answer": "C",
+            }
+        ],
+    )
+    repo = MagicMock()
+    repo.validate_student_scope.return_value = True
+    repo.get_in_progress_diagnostic.return_value = existing
+    repo.get_scope_topic_concept_rows.return_value = [
+        {
+            "topic_id": str(uuid4()),
+            "topic_title": "Political Party",
+            "concept_id": "civic:sss2:t1:functions-of-political-parties",
+            "prereq_concept_ids": [],
+        },
+        {
+            "topic_id": str(uuid4()),
+            "topic_title": "Citizenship Education and Importance of Citizenship Education",
+            "concept_id": "civic:sss2:t1:topic-citizenship-education-and-importance-of-ci",
+            "prereq_concept_ids": [],
+        },
+        {
+            "topic_id": str(topic_id),
+            "topic_title": "WHY LEADERS FAIL TO PROTECT THE INTEREST OF THEIR FOLLOWERS",
+            "concept_id": "civic:sss2:t1:why-leaders-fail-to-protect-the-interest-of-thei",
+            "prereq_concept_ids": [],
+        },
+        {
+            "topic_id": str(uuid4()),
+            "topic_title": "Poverty and its Effects",
+            "concept_id": "civic:sss2:t1:importance-of-employment",
+            "prereq_concept_ids": [],
+        },
+    ]
+
+    monkeypatch.setattr(diagnostic_service_module, "DiagnosticRepository", lambda db: repo)
+
+    payload = DiagnosticStartIn(
+        student_id=student_id,
+        subject="civic",
+        sss_level="SSS2",
+        term=1,
+        num_questions=10,
+    )
+
+    result = diagnostic_service_module.diagnostic_service.create_diagnostic_session(db=MagicMock(), payload=payload)
+
+    question = result.questions[0]
+    assert question.topic_title == "Why leaders fail to protect the interest of their followers"
+    assert question.concept_label == "Why leaders fail to protect the interest of their followers"
+    assert "WHY LEADERS FAIL" not in question.prompt
+    assert "Functions of political parties" in question.options
+    assert "Citizenship education and importance of citizenship education" in question.options
+    assert any(detail.label == "Functions of political parties" and detail.context_title == "Political party" for detail in question.option_details)
