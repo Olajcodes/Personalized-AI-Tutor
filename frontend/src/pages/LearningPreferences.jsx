@@ -107,7 +107,7 @@ const LearningPreferences = () => {
     } catch (err) {
       console.error('Preferences Save Error:', err);
       if (err.name === 'AbortError') {
-        setErrorMsg('The server is taking too long to respond. Please try again.');
+        setErrorMsg('Your learning data is still syncing. Please refresh in a moment.');
       } else {
         setErrorMsg(err.message);
       }

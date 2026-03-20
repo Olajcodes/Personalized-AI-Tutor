@@ -22,8 +22,9 @@ import { AI_CORE_URL, API_URL } from '../config/runtime';
 import { readLatestGraphIntervention } from '../services/graphIntervention';
 import { resolveStudentId } from '../utils/sessionIdentity';
 
-const REFRESH_INTERVAL_MS = 15_000;
-const STORAGE_KEY = 'mastery_runtime_dock_open';
+const REFRESH_INTERVAL_MS = 15000;
+const OPEN_STORAGE_KEY = 'mastery_runtime_dock_open';
+const ENABLED_STORAGE_KEY = 'mastery_show_runtime_dock';
 
 const STATUS_STYLES = {
   ok: 'border-emerald-200 bg-emerald-50 text-emerald-700',
@@ -55,11 +56,7 @@ const formatUpdatedAt = (value) => {
 const sortEvents = (runtimeTelemetry, limit = 4) => {
   const events = Object.entries(runtimeTelemetry?.events || {});
   return events
-    .sort((left, right) => {
-      const rightDuration = Number(right[1]?.last_duration_ms || 0);
-      const leftDuration = Number(left[1]?.last_duration_ms || 0);
-      return rightDuration - leftDuration;
-    })
+    .sort((left, right) => Number(right[1]?.last_duration_ms || 0) - Number(left[1]?.last_duration_ms || 0))
     .slice(0, limit);
 };
 
@@ -67,12 +64,30 @@ const resolveStatusTone = (status) => STATUS_STYLES[status] || 'border-slate-200
 
 const readOpenState = () => {
   if (typeof window === 'undefined') return false;
-  return window.localStorage.getItem(STORAGE_KEY) === 'true';
+  return window.localStorage.getItem(OPEN_STORAGE_KEY) === 'true';
 };
 
 const writeOpenState = (value) => {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(STORAGE_KEY, value ? 'true' : 'false');
+  window.localStorage.setItem(OPEN_STORAGE_KEY, value ? 'true' : 'false');
+};
+
+const readEnabledState = (search = '') => {
+  if (typeof window === 'undefined') return false;
+  const params = new URLSearchParams(search || window.location.search || '');
+  if (params.get('runtime') === '1') {
+    window.sessionStorage.setItem(ENABLED_STORAGE_KEY, 'true');
+    return true;
+  }
+  return window.sessionStorage.getItem(ENABLED_STORAGE_KEY) === 'true';
+};
+
+const writeEnabledState = (value) => {
+  if (typeof window === 'undefined') return;
+  window.sessionStorage.setItem(ENABLED_STORAGE_KEY, value ? 'true' : 'false');
+  if (!value) {
+    window.localStorage.removeItem(ENABLED_STORAGE_KEY);
+  }
 };
 
 const fetchHealth = async (url, options = {}) => {
@@ -82,20 +97,12 @@ const fetchHealth = async (url, options = {}) => {
   try {
     const response = await fetch(url, options);
     if (!response.ok) {
-      return {
-        status: 'error',
-        detail: `HTTP ${response.status}`,
-        payload: null,
-      };
+      return { status: 'error', detail: `HTTP ${response.status}`, payload: null };
     }
     const payload = await response.json();
     return { status: shortText(payload?.status, 'ok').toLowerCase(), detail: '', payload };
   } catch (error) {
-    return {
-      status: 'error',
-      detail: error?.message || 'Request failed',
-      payload: null,
-    };
+    return { status: 'error', detail: error?.message || 'Request failed', payload: null };
   }
 };
 
@@ -114,6 +121,7 @@ function MetricCard({ label, value, tone = 'slate' }) {
     emerald: 'border-emerald-200 bg-emerald-50 text-emerald-700',
     amber: 'border-amber-200 bg-amber-50 text-amber-700',
   };
+
   return (
     <div className={`rounded-2xl border px-3 py-3 ${toneMap[tone] || toneMap.slate}`}>
       <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-70">{label}</p>
@@ -124,6 +132,7 @@ function MetricCard({ label, value, tone = 'slate' }) {
 
 function EventList({ title, icon: Icon, telemetry, emptyText }) {
   const events = useMemo(() => sortEvents(telemetry), [telemetry]);
+
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-4">
       <div className="flex items-center gap-2 text-slate-700">
@@ -160,6 +169,7 @@ export default function RuntimeDebugDock() {
   const { studentData, userData } = useUser();
   const location = useLocation();
   const studentId = resolveStudentId(studentData, userData);
+  const isEnabled = readEnabledState(location.search);
   const [isOpen, setIsOpen] = useState(() => readOpenState());
   const [isLoading, setIsLoading] = useState(false);
   const [backendState, setBackendState] = useState({ status: 'not_configured', detail: '', payload: null });
@@ -174,6 +184,12 @@ export default function RuntimeDebugDock() {
       writeOpenState(next);
       return next;
     });
+  }, []);
+
+  const hideDock = useCallback(() => {
+    writeEnabledState(false);
+    writeOpenState(false);
+    setIsOpen(false);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -192,7 +208,7 @@ export default function RuntimeDebugDock() {
   }, [token]);
 
   useEffect(() => {
-    if (!token || !isOpen) return undefined;
+    if (!token || !isOpen || !isEnabled) return undefined;
     const initialTimer = window.setTimeout(() => {
       void refresh();
     }, 0);
@@ -201,20 +217,26 @@ export default function RuntimeDebugDock() {
       window.clearInterval(interval);
       window.clearTimeout(initialTimer);
     };
-  }, [isOpen, refresh, token]);
+  }, [isEnabled, isOpen, refresh, token]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
       if (event.shiftKey && event.key.toLowerCase() === 'd') {
         event.preventDefault();
+        if (!isEnabled) {
+          writeEnabledState(true);
+          writeOpenState(true);
+          setIsOpen(true);
+          return;
+        }
         toggleOpen();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [toggleOpen]);
+  }, [isEnabled, toggleOpen]);
 
-  if (!token) return null;
+  if (!token || !isEnabled) return null;
 
   const backendChecks = backendState.payload?.checks || {};
   const backendRuntime = backendState.payload?.runtime || {};
@@ -226,32 +248,32 @@ export default function RuntimeDebugDock() {
   const recentEvidence = latestIntervention?.payload?.recent_evidence || null;
 
   return (
-    <div className="pointer-events-none fixed bottom-5 right-5 z-[90] flex flex-col items-end gap-3">
+    <div className="pointer-events-none fixed bottom-4 right-4 z-[90] flex flex-col items-end gap-3">
       <button
         type="button"
         onClick={toggleOpen}
-        className="pointer-events-auto inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-950 px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-white shadow-2xl shadow-slate-950/20"
+        className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-950 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-white shadow-xl shadow-slate-950/20"
       >
         <Activity size={15} />
-        Live runtime
+        Runtime
         {isOpen ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
       </button>
 
       {isOpen && (
         <div
-          className="pointer-events-auto flex w-[min(92vw,420px)] flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl shadow-slate-950/15"
-          style={{ maxHeight: 'min(78dvh, 680px)' }}
+          className="pointer-events-auto flex w-[min(88vw,380px)] flex-col overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-2xl shadow-slate-950/15"
+          style={{ maxHeight: 'min(72dvh, 620px)' }}
         >
-          <div className="sticky top-0 z-10 border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.18),_transparent_42%),linear-gradient(135deg,#ffffff,_#f8fafc)] px-5 py-4 backdrop-blur">
+          <div className="sticky top-0 z-10 border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.16),_transparent_42%),linear-gradient(135deg,#ffffff,_#f8fafc)] px-4 py-3 backdrop-blur">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-700">
                   <GitBranch size={13} />
-                  Graph-first runtime
+                  Runtime
                 </div>
-                <h2 className="mt-3 text-lg font-black tracking-tight text-slate-950">Demo cockpit</h2>
+                <h2 className="mt-2 text-base font-black tracking-tight text-slate-950">System runtime</h2>
                 <p className="mt-1 text-xs leading-6 text-slate-500">
-                  Route {location.pathname} · refreshed {refreshedAt ? formatUpdatedAt(refreshedAt) : 'not yet'}
+                  {location.pathname} - {refreshedAt ? formatUpdatedAt(refreshedAt) : 'not refreshed'}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -266,9 +288,9 @@ export default function RuntimeDebugDock() {
                 </button>
                 <button
                   type="button"
-                  onClick={toggleOpen}
+                  onClick={hideDock}
                   className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-                  aria-label="Collapse runtime dock"
+                  aria-label="Hide runtime dock"
                 >
                   <X size={15} />
                 </button>
@@ -281,11 +303,11 @@ export default function RuntimeDebugDock() {
             </div>
           </div>
 
-          <div className="space-y-4 overflow-y-auto p-5">
+          <div className="space-y-4 overflow-y-auto p-4">
             <section className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-center gap-2 text-slate-700">
                 <BrainCircuit size={16} />
-                <h3 className="text-[11px] font-black uppercase tracking-[0.22em]">Graph intervention</h3>
+                <h3 className="text-[11px] font-black uppercase tracking-[0.22em]">Latest graph signal</h3>
               </div>
               {latestIntervention?.payload ? (
                 <div className="mt-3 space-y-3">
@@ -297,11 +319,7 @@ export default function RuntimeDebugDock() {
                   </p>
                   <div className="grid gap-2 sm:grid-cols-2">
                     <MetricCard label="Subject" value={shortText(latestIntervention.subject)} tone="indigo" />
-                    <MetricCard
-                      label="Focus concept"
-                      value={shortText(recentEvidence?.strongest_drop_concept_label || recentEvidence?.strongest_gain_concept_label)}
-                      tone="amber"
-                    />
+                    <MetricCard label="Focus concept" value={shortText(recentEvidence?.strongest_drop_concept_label || recentEvidence?.strongest_gain_concept_label)} tone="amber" />
                     <MetricCard label="Next topic" value={shortText(nextStep?.recommended_topic_title || nextStep?.recommended_concept_label)} tone="emerald" />
                     <MetricCard label="Updated" value={formatUpdatedAt(latestIntervention.updated_at)} />
                   </div>
@@ -328,8 +346,8 @@ export default function RuntimeDebugDock() {
                 <MetricCard label="Lesson snapshots" value={String(backendCaches.lesson_experience?.topic_snapshot_cache?.entries ?? 0)} />
                 <MetricCard label="Lesson bootstraps" value={String(backendCaches.lesson_experience?.bootstrap_cache?.entries ?? 0)} />
                 <MetricCard label="Cockpit cache" value={String(backendCaches.lesson_cockpit?.bootstrap_cache?.entries ?? 0)} />
-                <MetricCard label="Course bootstrap cache" value={String(backendCaches.course_experience?.bootstrap_cache?.entries ?? 0)} />
-                <MetricCard label="Dashboard bootstrap cache" value={String(backendCaches.dashboard_experience?.bootstrap_cache?.entries ?? 0)} />
+                <MetricCard label="Course cache" value={String(backendCaches.course_experience?.bootstrap_cache?.entries ?? 0)} />
+                <MetricCard label="Dashboard cache" value={String(backendCaches.dashboard_experience?.bootstrap_cache?.entries ?? 0)} />
               </div>
               {backendState.detail && (
                 <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs leading-6 text-rose-700">
@@ -384,3 +402,4 @@ export default function RuntimeDebugDock() {
     </div>
   );
 }
+

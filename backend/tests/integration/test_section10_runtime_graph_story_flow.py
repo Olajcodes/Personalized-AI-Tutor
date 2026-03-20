@@ -15,6 +15,7 @@ from backend.tests.integration.test_section8_graph_first_flow import (
 def test_section10_runtime_graph_story_flow(setup_graph_first_scope, monkeypatch):
     reset_telemetry_snapshot()
     monkeypatch.setattr(SystemHealthService, "_check_postgres", lambda self: {"status": "ok"})
+    monkeypatch.setattr(SystemHealthService, "_check_schema", lambda self: {"status": "ok"})
     monkeypatch.setattr(SystemHealthService, "_check_redis", lambda self: {"status": "not_configured"})
     monkeypatch.setattr(SystemHealthService, "_check_neo4j", lambda self: {"status": "not_configured"})
     monkeypatch.setattr(SystemHealthService, "_check_vector_db", lambda self: {"status": "ok"})

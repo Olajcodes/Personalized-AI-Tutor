@@ -5,12 +5,14 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+from sqlalchemy import inspect
 
 from backend.core.database import get_db
 from backend.models.topic import Topic
 from backend.models.subject import Subject
 from backend.models.student import StudentProfile, StudentSubject
 from backend.models.personalized_lesson import PersonalizedLesson
+from backend.repositories.lesson_repo import ensure_personalized_lessons_table
 from backend.services.rag_retrieve_service import RagRetrieveService, RagRetrieveServiceError
 
 router = APIRouter(prefix="/learning", tags=["Topics"])
@@ -36,6 +38,18 @@ def _clean_topic_description(raw: str | None, topic_title: str) -> str | None:
 
 def _has_cached_personalized_lesson(lesson: PersonalizedLesson | None) -> bool:
     return bool(lesson and isinstance(lesson.content_blocks, list) and lesson.content_blocks)
+
+
+def _personalized_lessons_available(db: Session) -> bool:
+    bind = db.get_bind()
+    inspector = inspect(bind)
+    if inspector.has_table("personalized_lessons"):
+        return True
+    try:
+        ensure_personalized_lessons_table(db)
+    except Exception:
+        return False
+    return inspect(bind).has_table("personalized_lessons")
 
 @router.get("/topics")
 def list_topics(
@@ -65,27 +79,45 @@ def list_topics(
         ).all()
     ]
 
-    q = (
-        select(Topic, PersonalizedLesson, Subject.slug)
-        .join(Subject, Subject.id == Topic.subject_id)
-        .outerjoin(
-            PersonalizedLesson,
-            (PersonalizedLesson.topic_id == Topic.id)
-            & (PersonalizedLesson.student_id == student_id),
+    personalized_lessons_available = _personalized_lessons_available(db)
+
+    if personalized_lessons_available:
+        q = (
+            select(Topic, PersonalizedLesson, Subject.slug)
+            .join(Subject, Subject.id == Topic.subject_id)
+            .outerjoin(
+                PersonalizedLesson,
+                (PersonalizedLesson.topic_id == Topic.id)
+                & (PersonalizedLesson.student_id == student_id),
+            )
+            .where(
+                Topic.is_approved.is_(True),
+                Topic.sss_level == sp.sss_level,
+                Topic.term == (term if term is not None else sp.active_term),
+                Topic.subject_id.in_(enrolled_subject_ids),
+            )
         )
-        .where(
-        Topic.is_approved.is_(True),
-        Topic.sss_level == sp.sss_level,
-        Topic.term == (term if term is not None else sp.active_term),
-        Topic.subject_id.in_(enrolled_subject_ids),
+    else:
+        q = (
+            select(Topic, Subject.slug)
+            .join(Subject, Subject.id == Topic.subject_id)
+            .where(
+                Topic.is_approved.is_(True),
+                Topic.sss_level == sp.sss_level,
+                Topic.term == (term if term is not None else sp.active_term),
+                Topic.subject_id.in_(enrolled_subject_ids),
+            )
         )
-    )
 
     if subject is not None:
         q = q.where(Subject.slug == subject.lower())
 
     q = q.order_by(Topic.created_at.asc(), Topic.title.asc())
-    rows = db.execute(q).all()
+    raw_rows = db.execute(q).all()
+    if personalized_lessons_available:
+        rows = raw_rows
+    else:
+        rows = [(topic, None, subject_slug) for topic, subject_slug in raw_rows]
     rag_service = RagRetrieveService()
     payload = []
     readiness_check_failed = False

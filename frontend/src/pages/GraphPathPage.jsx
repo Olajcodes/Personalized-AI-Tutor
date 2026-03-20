@@ -14,7 +14,6 @@ import {
 
 import LearningMap from '../components/LearningMap';
 import InterventionTimeline from '../components/InterventionTimeline';
-import PresentationCueCard from '../components/PresentationCueCard';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
 import { API_URL } from '../config/runtime';
@@ -78,14 +77,14 @@ const StatCard = ({ icon: Icon, label, value, subtext, tone = 'indigo' }) => {
   };
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</p>
-          <p className="mt-2 text-2xl font-black text-slate-900">{value}</p>
-          {subtext ? <p className="mt-2 text-sm leading-6 text-slate-500">{subtext}</p> : null}
+          <p className="mt-2 text-xl font-black text-slate-900 sm:text-2xl">{value}</p>
+          {subtext ? <p className="mt-2 text-xs leading-6 text-slate-500">{subtext}</p> : null}
         </div>
-        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${tones[tone] || tones.indigo}`}>
+        <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${tones[tone] || tones.indigo}`}>
           <Icon className="h-5 w-5" />
         </div>
       </div>
@@ -203,9 +202,9 @@ export default function GraphPathPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.08),_transparent_38%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)] px-6 py-8">
-      <main className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.08),_transparent_38%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)] px-4 py-6 sm:px-6">
+      <main className="mx-auto max-w-[1440px]">
+        <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <button
               type="button"
@@ -217,11 +216,11 @@ export default function GraphPathPage() {
             </button>
             <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white/80 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-700">
               <GitBranch className="h-3.5 w-3.5" />
-              Graph explorer
+              Path view
             </div>
-            <h1 className="mt-4 text-4xl font-black tracking-tight text-slate-900">See your learning path as a live concept graph</h1>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-              This view pulls directly from your graph-backed course bootstrap. It shows what is ready, what is blocked, what your latest evidence changed, and which lesson the system recommends next.
+            <h1 className="mt-4 text-2xl font-black tracking-tight text-slate-900 sm:text-[2.7rem]">Your graph-backed learning path</h1>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
+              Track what is ready now, what is still blocked, and which lesson the graph recommends next.
             </p>
             {mapData?.map_error && (
               <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
@@ -235,7 +234,7 @@ export default function GraphPathPage() {
                 key={subject}
                 type="button"
                 onClick={() => setActiveSubject(subject)}
-                className={`rounded-2xl px-4 py-3 text-sm font-black capitalize transition ${
+                className={`rounded-2xl px-4 py-2.5 text-sm font-black capitalize transition ${
                   subject === activeSubject
                     ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200'
                     : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
@@ -244,47 +243,23 @@ export default function GraphPathPage() {
                 {subject}
               </button>
             ))}
-            <button
-              type="button"
-              onClick={() => navigate(activeSubject ? `/graph-briefing?subject=${encodeURIComponent(activeSubject)}` : '/graph-briefing')}
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
-            >
-              <span className="inline-flex items-center gap-2">
-                <ClipboardList className="h-4 w-4" />
-                Briefing
-              </span>
-            </button>
           </div>
         </div>
 
-        <div className="mb-8">
-          <PresentationCueCard
-            stepId="graph-path"
-            nextClickLabel={recommendedTopic?.recommended_topic_id ? 'Open recommended lesson' : 'Briefing'}
-            speakerNotes={[
-              'Use this page to prove the graph is shaping the route, not a fixed topic order.',
-              'Point to ready nodes, blocked nodes, and the evidence events count before clicking deeper.',
-              recommendedTopic?.recommended_topic_title
-                ? `Call out ${recommendedTopic.recommended_topic_title} as the graph-selected next lesson.`
-                : 'If no lesson is recommended yet, move to the briefing to summarize the current graph story.',
-            ]}
-          />
-        </div>
-
         {isLoading ? (
-          <div className="flex min-h-[50vh] flex-col items-center justify-center rounded-[2rem] border border-slate-200 bg-white/90 text-center shadow-sm">
+          <div className="flex min-h-[34vh] flex-col items-center justify-center rounded-[2rem] border border-slate-200 bg-white/90 px-6 text-center shadow-sm">
             <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
             <p className="mt-4 text-sm font-semibold text-slate-700">Loading your graph path...</p>
             <p className="mt-2 text-xs text-slate-500">We are pulling your latest mastery evidence and next graph recommendation.</p>
           </div>
         ) : error ? (
-          <div className="rounded-[2rem] border border-rose-200 bg-white/90 p-8 shadow-sm">
+          <div className="rounded-[2rem] border border-rose-200 bg-white/90 p-6 shadow-sm">
             <p className="text-sm font-black uppercase tracking-[0.18em] text-rose-500">Graph unavailable</p>
             <p className="mt-3 text-lg font-bold text-slate-900">{error}</p>
           </div>
         ) : (
           <>
-            <div className="grid gap-4 lg:grid-cols-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <StatCard
                 icon={Sparkles}
                 label="Ready nodes"
@@ -316,22 +291,22 @@ export default function GraphPathPage() {
             </div>
 
             {evidenceSummary && (
-              <div className="mt-6 grid gap-4 md:grid-cols-3">
+              <div className="mt-5 grid gap-3 md:grid-cols-3">
                 {[
                   { label: 'Demonstrated', value: evidenceSummary.demonstrated, tone: 'text-emerald-700' },
                   { label: 'Needs review', value: evidenceSummary.needs_review, tone: 'text-amber-700' },
                   { label: 'Unassessed', value: evidenceSummary.unassessed, tone: 'text-slate-500' },
                 ].map((item) => (
-                  <div key={item.label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{item.label}</p>
-                    <p className={`mt-2 text-2xl font-black ${item.tone}`}>{item.value}</p>
-                    <p className="mt-2 text-sm text-slate-500">Graph-wide mastery evidence in this scope.</p>
+                    <p className={`mt-2 text-xl font-black ${item.tone}`}>{item.value}</p>
+                    <p className="mt-2 text-xs text-slate-500">Graph-wide mastery evidence in this scope.</p>
                   </div>
                 ))}
               </div>
             )}
 
-            <div className="mt-6 grid gap-6 lg:grid-cols-[1.4fr_0.8fr]">
+            <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_320px] 2xl:grid-cols-[minmax(0,1.2fr)_340px]">
               <div className="space-y-6">
                 <LearningMap
                   classLevel={currentLevel}
@@ -350,12 +325,12 @@ export default function GraphPathPage() {
               </div>
 
               <div className="space-y-6">
-                <div className="rounded-[2rem] border border-indigo-200 bg-white p-6 shadow-sm">
+                <div className="rounded-[2rem] border border-indigo-200 bg-white p-5 shadow-sm">
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-500">Recommendation story</p>
-                  <h2 className="mt-3 text-2xl font-black text-slate-900">
+                  <h2 className="mt-3 text-xl font-black text-slate-900">
                     {recommendationStory?.headline || recommendedTopic?.recommended_topic_title || 'Stay on the current graph path'}
                   </h2>
-                  <p className="mt-3 text-sm leading-7 text-slate-600">
+                  <p className="mt-3 text-sm leading-6 text-slate-600">
                     {recommendationStory?.supporting_reason || recommendedTopic?.reason || 'The graph is waiting for more evidence before changing your route.'}
                   </p>
                   {recommendationStory?.blocking_prerequisite_label && (
@@ -376,7 +351,7 @@ export default function GraphPathPage() {
                   )}
                 </div>
 
-                <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex items-center gap-2">
                     <Target className="h-4 w-4 text-emerald-600" />
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">Ready to move</p>
@@ -398,7 +373,7 @@ export default function GraphPathPage() {
                   </div>
                 </div>
 
-                <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex items-center gap-2">
                     <Lock className="h-4 w-4 text-amber-600" />
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-600">Still blocked</p>

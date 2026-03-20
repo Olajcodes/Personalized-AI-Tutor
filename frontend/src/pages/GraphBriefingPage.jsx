@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Clipboard, Download, Loader2, Printer } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 
-import PresentationCueCard from '../components/PresentationCueCard';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
 import { API_URL } from '../config/runtime';
@@ -86,18 +85,8 @@ export default function GraphBriefingPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 p-8 print:bg-white print:p-0">
+    <main className="min-h-screen bg-slate-50 p-4 print:bg-white print:p-0 sm:p-6">
       <div className="mx-auto max-w-5xl space-y-6">
-        <PresentationCueCard
-          stepId="graph-briefing"
-          nextClickLabel="Print"
-          speakerNotes={[
-            'Explain that this page turns live graph state into a student-ready briefing.',
-            'Use the sections to summarize why the recommendation changed and what is blocking progress.',
-            'Click Print or Download to show this is presentation-ready and shareable, not just an internal screen.',
-          ]}
-        />
-
         <div className="flex flex-col gap-4 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm print:hidden">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>

@@ -9,12 +9,11 @@ import InterventionTimeline from '../components/InterventionTimeline';
 import LearningMap from '../components/LearningMap';
 import LearningTasks from '../components/LearningTasks';
 import Leaderboard from '../components/Leaderboard';
-import PresentationCueCard from '../components/PresentationCueCard';
-import Footer from '../components/Footer';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
 import { API_URL } from '../config/runtime';
 import { resolveStudentId } from '../utils/sessionIdentity';
+import { apiFetchJson } from '../services/api';
 import {
     applyGraphInterventionOverlay,
     buildGraphInterventionScope,
@@ -173,19 +172,9 @@ export default function Dashboard() {
                     queryParams.set('subject', activeSubject);
                 }
 
-                const response = await fetch(`${apiUrl}/learning/dashboard/bootstrap?${queryParams.toString()}`, {
-                    method: 'GET',
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                    },
+                const data = await apiFetchJson(`/learning/dashboard/bootstrap?${queryParams.toString()}`, {
+                    token,
                 });
-
-                if (!response.ok) {
-                    throw new Error('Failed to fetch learning map');
-                }
-
-                const data = await response.json();
                 if (data?.active_subject && data.active_subject !== activeSubject) {
                     setActiveSubject(data.active_subject);
                 }
@@ -324,9 +313,9 @@ export default function Dashboard() {
     }, [dashboardSignal, effectiveMapData, openTopicFromGraph, resumeLatestIntervention]);
 
     return (
-        <div className="min-h-screen bg-[#F8FAFC] font-sans">
-            <main className="max-w-9xl mx-auto px-6 py-8">
-                <div className="mb-8 flex flex-col gap-6 lg:flex-row">
+        <div className="min-h-screen overflow-x-hidden bg-[#F8FAFC] font-sans">
+            <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6">
+                <div className="mb-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
                     <HeroSection
                         enrolledSubjects={dashboardBootstrap.available_subjects.length ? dashboardBootstrap.available_subjects : enrolledSubjects}
                         activeSubject={activeSubject}
@@ -342,11 +331,13 @@ export default function Dashboard() {
                         recommendation={activeSubject ? effectiveMapData?.next_step : null}
                         recentEvidence={activeSubject ? effectiveMapData?.recent_evidence : null}
                         recommendationStory={activeSubject ? effectiveMapData?.recommendation_story : null}
+                        errorOverride={activeSubject ? mapError : ''}
+                        disableAutoFetch={Boolean(activeSubject)}
                     />
                 </div>
 
                 {activeSubject && effectiveMapData?.evidence_summary && (
-                    <div className="mb-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                         <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
                             <GitBranch className="h-3.5 w-3.5 text-emerald-500" />
                             Mastery evidence snapshot
@@ -359,7 +350,7 @@ export default function Dashboard() {
                             ].map((item) => (
                                 <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                                     <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">{item.label}</div>
-                                    <p className={`mt-2 text-2xl font-black ${item.tone}`}>{item.value}</p>
+                                    <p className={`mt-2 text-xl font-black ${item.tone}`}>{item.value}</p>
                                 </div>
                             ))}
                         </div>
@@ -367,14 +358,14 @@ export default function Dashboard() {
                 )}
 
                 {(initialLessonPlan || learningGapSummary) && (
-                    <div className="mb-8 rounded-3xl border border-indigo-200 bg-gradient-to-r from-indigo-50 via-white to-cyan-50 p-6 shadow-sm">
+                    <div className="mb-6 rounded-2xl border border-indigo-200 bg-gradient-to-r from-indigo-50 via-white to-cyan-50 p-4 shadow-sm">
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                             <div className="max-w-3xl">
                                 <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-700">
                                     <GitBranch className="h-3.5 w-3.5" />
-                                    Diagnostic-backed start plan
+                                    Start plan
                                 </div>
-                                <h2 className="mt-3 text-2xl font-black text-slate-900">
+                                <h2 className="mt-3 text-xl font-black text-slate-900 sm:text-2xl">
                                     {initialLessonPlan?.recommended_topic_title
                                         || learningGapSummary?.recommended_start_topic_title
                                         || 'Your first graph-backed study move is ready'}
@@ -420,29 +411,15 @@ export default function Dashboard() {
                     </div>
                 )}
 
-                <div className="mb-8">
-                    <PresentationCueCard
-                        stepId="dashboard"
-                        nextClickLabel={dashboardSignal?.payload?.next_step?.recommended_topic_id ? 'Resume now' : 'Full graph view'}
-                        speakerNotes={[
-                            'Open with the graph-backed recommendation, not the tutor panel.',
-                            'Point out that the intervention summary and evidence timeline are live, not mock data.',
-                            dashboardSignal?.payload?.next_step?.recommended_topic_title
-                                ? `Use "Resume now" to jump straight into ${dashboardSignal.payload.next_step.recommended_topic_title}.`
-                                : 'If no lesson is available yet, use "Full graph view" to explain blockers and ready nodes.',
-                        ]}
-                    />
-                </div>
-
                 {dashboardSignal?.payload && (
-                    <div className="mb-8 rounded-3xl border border-indigo-200 bg-gradient-to-r from-indigo-50 via-white to-sky-50 p-6 shadow-sm">
+                    <div className="mb-6 rounded-2xl border border-indigo-200 bg-gradient-to-r from-indigo-50 via-white to-sky-50 p-4 shadow-sm">
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                             <div className="max-w-3xl">
                                 <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-700">
                                     <GitBranch className="h-3.5 w-3.5" />
-                                    Resume last intervention
+                                    Continue from your latest evidence
                                 </div>
-                                <h2 className="mt-3 text-2xl font-black text-slate-900">
+                                <h2 className="mt-3 text-xl font-black text-slate-900 sm:text-2xl">
                                     {dashboardSignal.payload.recommendation_story?.headline
                                         || dashboardSignal.payload.next_step?.recommended_topic_title
                                         || dashboardSignal.payload.next_step?.recommended_concept_label
@@ -475,21 +452,7 @@ export default function Dashboard() {
                                     onClick={openGraphPath}
                                     className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
                                 >
-                                    Full graph view
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => navigate(activeSubject ? `/graph-briefing?subject=${encodeURIComponent(activeSubject)}` : '/graph-briefing')}
-                                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
-                                >
-                                    Briefing
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => navigate('/presentation-hub')}
-                                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
-                                >
-                                    Presentation hub
+                                    View path
                                 </button>
                                 {dashboardSignal.payload.next_step?.recommended_topic_id && (
                                     <button
@@ -518,10 +481,10 @@ export default function Dashboard() {
                 )}
 
                 {activeSubject && Array.isArray(effectiveMapData?.intervention_timeline) && effectiveMapData.intervention_timeline.length > 0 && (
-                    <div className="mb-8">
+                    <div className="mb-6">
                         <InterventionTimeline
                             title={`${activeSubject} Evidence Timeline`}
-                            subtitle="Recent quiz and checkpoint evidence from the backend graph state."
+                            subtitle="Recent quiz and checkpoint evidence shaping this subject."
                             timeline={effectiveMapData.intervention_timeline}
                         />
                     </div>
@@ -530,25 +493,25 @@ export default function Dashboard() {
                 <DashboardStats />
 
                 {!activeSubject ? (
-                    <div className="mb-8 flex w-full flex-col items-center justify-center rounded-3xl border border-slate-200 bg-white p-16 text-center shadow-sm">
+                    <div className="mb-6 flex w-full flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
                         <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-indigo-50 text-indigo-400 shadow-inner">
                             <svg className="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path></svg>
                         </div>
-                        <h3 className="mb-3 text-2xl font-bold text-slate-800">Your Learning Map is Waiting</h3>
-                        <p className="mx-auto max-w-md text-lg text-slate-500">Select a subject from the top section to generate your personalized AI curriculum map.</p>
+                        <h3 className="mb-3 text-lg font-bold text-slate-800">Choose a subject to load the path</h3>
+                        <p className="mx-auto max-w-md text-sm leading-6 text-slate-500">Select a subject to load the graph-backed path and the next lesson recommendation.</p>
                     </div>
                 ) : isLoadingMap ? (
-                    <div className="mb-8 flex w-full flex-col items-center rounded-3xl border border-slate-200 bg-white p-16 text-center font-medium text-indigo-500 shadow-sm animate-pulse">
+                    <div className="mb-6 flex w-full flex-col items-center rounded-2xl border border-slate-200 bg-white p-6 text-center font-medium text-indigo-500 shadow-sm animate-pulse">
                         <div className="mb-4 h-10 w-10 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent"></div>
-                        Generating your personalized {activeSubject} path...
+                        Syncing your {activeSubject} path...
                     </div>
                 ) : mapError ? (
-                    <div className="mb-8 flex w-full flex-col items-center justify-center rounded-3xl border border-rose-200 bg-white p-16 text-center shadow-sm">
+                    <div className="mb-6 flex w-full flex-col items-center justify-center rounded-2xl border border-rose-200 bg-white p-6 text-center shadow-sm">
                         <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-rose-50 text-rose-400 shadow-inner">
                             <svg className="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v4m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z"></path></svg>
                         </div>
-                        <h3 className="mb-3 text-2xl font-bold text-slate-800">Learning Map Unavailable</h3>
-                        <p className="mx-auto max-w-md text-lg text-slate-500">{mapError}</p>
+                        <h3 className="mb-3 text-lg font-bold text-slate-800">Learning map unavailable</h3>
+                        <p className="mx-auto max-w-md text-sm leading-6 text-slate-500">{mapError}</p>
                     </div>
                 ) : (
                     <LearningMap
@@ -560,27 +523,13 @@ export default function Dashboard() {
                 )}
 
                 {activeSubject && !isLoadingMap && !mapError && (
-                    <div className="mb-8 flex justify-end gap-3">
-                        <button
-                            type="button"
-                            onClick={() => navigate('/presentation-hub')}
-                            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50"
-                        >
-                            Open presentation hub
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => navigate(`/graph-briefing?subject=${encodeURIComponent(activeSubject)}`)}
-                            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50"
-                        >
-                            Open graph briefing
-                        </button>
+                    <div className="mb-6 flex justify-end gap-3">
                         <button
                             type="button"
                             onClick={openGraphPath}
                             className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50"
                         >
-                            Open full graph explorer
+                            Open full path
                             <ArrowRight className="h-4 w-4" />
                         </button>
                     </div>
@@ -590,8 +539,6 @@ export default function Dashboard() {
                     <LearningTasks tasks={dashboardTasks} />
                     <Leaderboard leagueName={studentData?.league_name || 'Current League'} />
                 </div>
-
-                <Footer />
             </main>
         </div>
     );

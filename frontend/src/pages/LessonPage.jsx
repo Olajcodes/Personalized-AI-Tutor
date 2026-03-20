@@ -18,12 +18,12 @@ import {
   ShieldAlert,
   Sparkles,
   Target,
+  X,
   Zap,
 } from 'lucide-react';
 
 import CourseSidebar from '../components/CourseSidebar';
 import InterventionTimeline from '../components/InterventionTimeline';
-import PresentationCueCard from '../components/PresentationCueCard';
 import LessonKnowledgeGraph from '../components/lesson/LessonKnowledgeGraph';
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
@@ -448,6 +448,7 @@ export default function LessonPage() {
   const currentTerm = studentData?.current_term || 1;
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(typeof window !== 'undefined' ? window.innerWidth > 1180 : true);
+  const [isTutorOpen, setIsTutorOpen] = useState(typeof window !== 'undefined' ? window.innerWidth >= 1280 : false);
   const [bootstrap, setBootstrap] = useState(null);
   const [sidebarTopics, setSidebarTopics] = useState([]);
   const [messages, setMessages] = useState([]);
@@ -627,11 +628,6 @@ export default function LessonPage() {
       return acc;
     }, { demonstrated: 0, needs_review: 0, unassessed: 0 });
   }, [graphContext]);
-
-  const evidenceTotal = useMemo(() => {
-    if (!evidenceSummary) return 0;
-    return evidenceSummary.demonstrated + evidenceSummary.needs_review + evidenceSummary.unassessed;
-  }, [evidenceSummary]);
 
   const whyStory = useMemo(() => {
     if (whyTopicDetail?.explanation) return whyTopicDetail.explanation;
@@ -1566,6 +1562,282 @@ export default function LessonPage() {
     }
   };
 
+  const tutorWorkbench = (
+    <>
+      <button
+        type="button"
+        onClick={() => setIsTutorOpen((prev) => !prev)}
+        className="fixed bottom-4 right-4 z-[70] inline-flex items-center gap-3 rounded-full bg-slate-950 px-3.5 py-3 text-sm font-black text-white shadow-2xl shadow-slate-950/20 transition hover:bg-slate-900"
+      >
+        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[radial-gradient(circle_at_top_left,_#8b5cf6,_#4f46e5)] text-white shadow-lg shadow-indigo-950/20">
+          <Bot size={20} />
+        </span>
+        <span className="hidden md:inline">AI Tutor</span>
+      </button>
+
+      {isTutorOpen && (
+        <>
+          <button
+            type="button"
+            onClick={() => setIsTutorOpen(false)}
+            className="fixed inset-0 z-[74] bg-slate-950/35 backdrop-blur-[2px]"
+            aria-label="Close tutor drawer"
+          />
+          <section className="fixed bottom-3 right-3 z-[75] flex h-[min(78dvh,760px)] w-[min(96vw,390px)] flex-col overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-2xl shadow-slate-950/15 md:bottom-6 md:right-6">
+            <div className="border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.16),_transparent_42%),linear-gradient(135deg,#ffffff,_#f8fafc)] px-4 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600 text-white">
+                    <Bot size={18} />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-black uppercase tracking-[0.2em] text-slate-700">AI Tutor</h2>
+                    <p className="text-xs text-slate-500">{streamPhase || 'Lesson-aware, graph-grounded, and ready'}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsTutorOpen(false)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                  aria-label="Close tutor drawer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+              <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Tutor mode</p>
+                    <p className="mt-1 text-xs leading-6 text-slate-600">{activeMode.description}</p>
+                  </div>
+                  <span className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-indigo-700">
+                    {activeMode.label}
+                  </span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {TUTOR_MODES.map((mode) => (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      onClick={() => setSelectedMode(mode.id)}
+                      className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold transition ${
+                        selectedMode === mode.id
+                          ? 'border-indigo-600 bg-indigo-600 text-white'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-700'
+                      }`}
+                    >
+                      {mode.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={runModeAction}
+                    disabled={isBusy}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white hover:bg-indigo-700 disabled:opacity-60"
+                  >
+                    Run {activeMode.label}
+                    <ArrowRight size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => sendChat('Teach me like I am completely new to this lesson.', { mode: 'teach' })}
+                    disabled={isBusy}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    Teach from zero
+                  </button>
+                </div>
+              </div>
+
+              {quickActionSpotlight.primary && (
+                <div className={`rounded-[1.5rem] border p-4 ${spotlightToneStyles[quickActionSpotlight.tone] || spotlightToneStyles.indigo}`}>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-70">Best next move</p>
+                  <h3 className="mt-2 text-base font-black">{quickActionSpotlight.headline}</h3>
+                  <p className="mt-2 text-sm leading-6 opacity-90">{quickActionSpotlight.detail}</p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={isBusy}
+                      onClick={() => handleQuickAction(quickActionSpotlight.primary)}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white disabled:opacity-60"
+                    >
+                      {quickActionSpotlight.primary.label}
+                      <ArrowRight size={14} />
+                    </button>
+                    {quickActionSpotlight.secondary.slice(0, 3).map((action) => (
+                      <button
+                        key={action.id}
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => handleQuickAction(action)}
+                        className="rounded-full border border-white/70 bg-white/90 px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:border-slate-300 disabled:opacity-60"
+                      >
+                        {action.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                {quickActions.map((action) => {
+                  const Icon = iconByIntent[action.icon] || iconByIntent[action.intent] || MessageSquare;
+                  const isPrimaryAction = quickActionSpotlight.primary?.id === action.id;
+                  return (
+                    <button
+                      key={action.id}
+                      type="button"
+                      disabled={isBusy}
+                      onClick={() => handleQuickAction(action)}
+                      className={`rounded-2xl border p-3 text-left transition disabled:opacity-60 ${
+                        isPrimaryAction
+                          ? 'border-indigo-300 bg-indigo-50 shadow-sm'
+                          : 'border-slate-200 bg-slate-50 hover:border-indigo-300 hover:bg-indigo-50'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 rounded-xl bg-white p-2 text-indigo-600 shadow-sm">
+                          <Icon size={16} />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-slate-800">{action.label}</p>
+                          <p className="mt-1 text-xs leading-5 text-slate-500">{action.prompt}</p>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {pendingAssessment && (
+                <div className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="mb-3 flex items-center gap-2 text-emerald-700">
+                    <Target size={16} />
+                    <p className="text-xs font-black uppercase tracking-[0.2em]">Checkpoint</p>
+                  </div>
+                  <p className="text-sm font-semibold leading-7 text-slate-800">{pendingAssessment.question}</p>
+                  {pendingAssessment.hint && <p className="mt-2 text-xs leading-6 text-emerald-800">Hint: {pendingAssessment.hint}</p>}
+                  <textarea value={assessmentAnswer} onChange={(event) => setAssessmentAnswer(event.target.value)} rows={4} placeholder="Answer the checkpoint here..." className="mt-4 w-full rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-400" />
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    <button type="button" onClick={submitAssessment} disabled={isBusy || !assessmentAnswer.trim()} className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-60">
+                      <CheckCircle2 size={16} />
+                      Submit checkpoint
+                    </button>
+                    <button type="button" onClick={() => startAssessment('hard')} disabled={isBusy} className="inline-flex items-center gap-2 rounded-2xl border border-emerald-300 bg-white px-4 py-3 text-sm font-bold text-emerald-700 disabled:opacity-60">
+                      <Zap size={16} />
+                      Try harder
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {lastAssessmentReview && (
+                <div className={`rounded-[1.5rem] border p-4 ${lastAssessmentReview.isCorrect ? 'border-indigo-200 bg-indigo-50' : 'border-amber-200 bg-amber-50'}`}>
+                  <div className={`mb-3 flex items-center gap-2 ${lastAssessmentReview.isCorrect ? 'text-indigo-700' : 'text-amber-700'}`}>
+                    {lastAssessmentReview.isCorrect ? <CheckCircle2 size={16} /> : <ShieldAlert size={16} />}
+                    <p className="text-xs font-black uppercase tracking-[0.2em]">
+                      {lastAssessmentReview.isCorrect ? 'Checkpoint cleared' : 'Checkpoint follow-up'}
+                    </p>
+                  </div>
+                  <p className="text-sm font-semibold text-slate-800">
+                    {lastAssessmentReview.conceptLabel} - {Math.round((lastAssessmentReview.score || 0) * 100)}%
+                  </p>
+                  <p className="mt-2 text-xs leading-6 text-slate-600">
+                    {lastAssessmentReview.isCorrect
+                      ? 'Push forward to the next unlock or try a harder drill.'
+                      : 'Review the mistake explanation, then retry or bridge the blocking prerequisite.'}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    {!lastAssessmentReview.isCorrect && (
+                      <button type="button" onClick={explainLastMistake} disabled={isBusy} className="inline-flex items-center gap-2 rounded-2xl bg-amber-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-60">
+                        <ShieldAlert size={16} />
+                        Explain my mistake
+                      </button>
+                    )}
+                    <button type="button" onClick={() => startAssessment(lastAssessmentReview.isCorrect ? 'hard' : 'medium')} disabled={isBusy} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 disabled:opacity-60">
+                      <Target size={16} />
+                      {lastAssessmentReview.isCorrect ? 'Try harder' : 'Retry'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {assessmentRecommendation && (
+                <div className={`rounded-[1.5rem] border p-4 ${
+                  assessmentRecommendation.tone === 'amber'
+                    ? 'border-amber-200 bg-amber-50'
+                    : assessmentRecommendation.tone === 'rose'
+                      ? 'border-rose-200 bg-rose-50'
+                      : assessmentRecommendation.tone === 'emerald'
+                        ? 'border-emerald-200 bg-emerald-50'
+                        : 'border-indigo-200 bg-indigo-50'
+                }`}>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Next best action</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-800">{assessmentRecommendation.headline}</p>
+                  <p className="mt-2 text-xs leading-6 text-slate-600">{assessmentRecommendation.detail}</p>
+                  <button
+                    type="button"
+                    onClick={handleAssessmentRecommendation}
+                    disabled={isBusy}
+                    className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white disabled:opacity-60"
+                  >
+                    {assessmentRecommendation.actionLabel}
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
+              )}
+
+              <div ref={scrollRef} className="space-y-4 rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
+                {messages.map((item, index) => (
+                  <MessageCard
+                    key={item.id || `${item.role}-${index}`}
+                    item={item}
+                    onOpenRecommendation={openRecommendedLesson}
+                    onStartCheckpoint={() => startAssessment()}
+                    onOpenPrereqBridge={handlePrereqBridge}
+                    onStartDrill={handleDrill}
+                    followUps={FOLLOW_UP_ACTIONS}
+                    onFollowUp={handleFollowUp}
+                    showFollowUps={index === lastAssistantIndex}
+                  />
+                ))}
+                {isBusy && (
+                  <div className="rounded-3xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+                    <div className="flex items-center gap-3">
+                      <LoaderCircle className="animate-spin text-indigo-600" size={18} />
+                      <span>{streamPhase || 'Tutor is building a grounded response...'}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <form onSubmit={(event) => { event.preventDefault(); sendChat(); }} className="border-t border-slate-100 px-4 py-4">
+              <div className="rounded-[1.5rem] border border-slate-200 bg-white p-3 shadow-sm">
+                <textarea value={chatInput} onChange={(event) => setChatInput(event.target.value)} rows={3} placeholder="Ask about this lesson, a prerequisite, or how this unlocks the next concept..." className="w-full resize-none border-none bg-transparent px-1 py-1 text-sm text-slate-700 outline-none" />
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <button type="button" onClick={() => sendChat('Explain this lesson with one real-life example.', { mode: 'teach' })} className="rounded-full bg-slate-100 px-3 py-1.5 font-semibold text-slate-600">Real-life example</button>
+                    <button type="button" onClick={() => sendChat('Show me the common mistake students make here.', { mode: 'diagnose' })} className="rounded-full bg-slate-100 px-3 py-1.5 font-semibold text-slate-600">Common mistake</button>
+                  </div>
+                  <button type="submit" disabled={isBusy || !chatInput.trim()} className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60">
+                    Send
+                    <Send size={15} />
+                  </button>
+                </div>
+              </div>
+            </form>
+          </section>
+        </>
+      )}
+    </>
+  );
+
   if (status === 'loading') {
     return (
       <div className="flex min-h-[calc(100vh-64px)] items-center justify-center bg-slate-50">
@@ -1600,227 +1872,210 @@ export default function LessonPage() {
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-64px)] bg-slate-50">
-      {isSidebarOpen && <button type="button" className="fixed inset-0 z-30 bg-slate-950/35 lg:hidden" onClick={() => setIsSidebarOpen(false)} />}
+    <div className="min-h-[calc(100vh-64px)] overflow-x-hidden bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.08),_transparent_36%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)]">
+      {isSidebarOpen && (
+        <button
+          type="button"
+          className="fixed inset-0 z-30 bg-slate-950/35 lg:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+          aria-label="Close lesson syllabus"
+        />
+      )}
 
-      <div className={`fixed inset-y-0 left-0 z-40 transition-transform duration-300 lg:relative ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-        <CourseSidebar activeStep={topicId} subject={currentSubject} level={currentLevel} topics={sidebarTopics} />
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 px-4 backdrop-blur md:px-8">
-          <div className="flex h-16 items-center justify-between">
-            <button type="button" onClick={() => setIsSidebarOpen((prev) => !prev)} className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100">
-              <Menu size={18} />
-              <span className="hidden md:inline">Syllabus</span>
-            </button>
-            <div className="hidden items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-500 md:flex">
-              <GitBranch size={14} className="text-indigo-500" />
-              Graph-first lesson mode
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => navigate(`/graph-path?subject=${encodeURIComponent(currentSubject)}`)}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100"
-              >
-                <GitBranch size={16} />
-                Graph view
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate(`/graph-briefing?subject=${encodeURIComponent(currentSubject)}`)}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100"
-              >
-                Briefing
-              </button>
-              <button type="button" onClick={() => navigate(`/quiz/${topicId}`)} className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700">
-                Take quiz
-                <ArrowRight size={16} />
-              </button>
-            </div>
+      <div className="mx-auto flex max-w-[1600px]">
+        <aside
+          className={`fixed inset-y-0 left-0 z-40 w-[min(19rem,86vw)] transition-transform duration-300 lg:sticky lg:top-0 lg:h-[calc(100vh-64px)] lg:w-[19rem] lg:shrink-0 ${
+            isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+          }`}
+        >
+          <div className="h-full overflow-y-auto bg-white/95 backdrop-blur">
+            <CourseSidebar activeStep={topicId} subject={currentSubject} level={currentLevel} topics={sidebarTopics} />
           </div>
-        </div>
+        </aside>
 
-          <div className="grid gap-8 p-4 md:p-8 xl:grid-cols-[minmax(0,1.35fr)_minmax(380px,1fr)]">
-          <div className="xl:col-span-2">
-            <PresentationCueCard
-              stepId="lesson"
-              nextClickLabel="Graph view"
-              speakerNotes={[
-                'This is the graph-first lesson cockpit, not a static lesson page with a chatbot attached.',
-                `Use ${lesson?.title ? `"${lesson.title}"` : 'the lesson'} to show how the graph recommendation flows into content, tutor actions, and checkpointing.`,
-                'Click "Graph view" next to reconnect this lesson to the wider concept map, then point out Check understanding or Take quiz.',
-              ]}
-            />
-          </div>
-          <motion.section
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35 }}
-            className="space-y-6 overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm"
-          >
-            <div className="border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.18),_transparent_40%),linear-gradient(135deg,#ffffff,_#f8fafc)] p-6 md:p-8">
-              <div className="mb-4 flex flex-wrap items-center gap-3 text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
-                <button type="button" onClick={() => navigate('/dashboard')} className="inline-flex items-center gap-1 text-slate-400 hover:text-indigo-600">
-                  <ArrowLeft size={14} />
-                  Dashboard
+        <div className="min-w-0 flex-1">
+          <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/88 backdrop-blur">
+            <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
+              <div className="flex min-w-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSidebarOpen((prev) => !prev)}
+                  className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  <Menu size={16} />
+                  <span className="hidden sm:inline">Syllabus</span>
                 </button>
-                <span>/</span>
-                <span className="capitalize">{currentSubject}</span>
-                <span>/</span>
-                <span className="truncate text-slate-700">{lesson?.title || 'Lesson unavailable'}</span>
+                <div className="hidden items-center gap-2 rounded-full border border-indigo-200 bg-white/80 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-700 sm:inline-flex">
+                  <GitBranch size={13} />
+                  Graph-first lesson
+                </div>
               </div>
 
-              <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
-                <div>
-                  <h1 className="text-3xl font-black tracking-tight text-slate-950 md:text-4xl">{lesson?.title || 'Lesson unavailable'}</h1>
-                  <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600 md:text-base">
-                    {lesson?.summary || (lessonAvailable ? '' : 'Lesson summary is unavailable for this topic right now.')}
-                  </p>
-                  <div className="mt-6 flex flex-wrap gap-3">
-                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs shadow-sm">
-                      <p className="font-black uppercase tracking-[0.2em] text-slate-400">Lesson Focus</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-800">
-                        {graphAvailable
-                          ? (graphContext?.weakest_concepts?.[0]?.label || 'Graph context warming up')
-                          : 'Graph context unavailable'}
-                      </p>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => navigate(`/graph-path?subject=${encodeURIComponent(currentSubject)}`)}
+                  className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  <GitBranch size={15} />
+                  Graph view
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsTutorOpen(true)}
+                  className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  <Bot size={15} />
+                  Tutor
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/quiz/${topicId}`)}
+                  className="inline-flex h-10 items-center gap-2 rounded-2xl bg-indigo-600 px-4 text-sm font-bold text-white hover:bg-indigo-700"
+                >
+                  Take quiz
+                  <ArrowRight size={15} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <main className="mx-auto max-w-[1440px] px-4 py-5 sm:px-6 lg:px-8">
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] 2xl:grid-cols-[minmax(0,1.06fr)_340px]">
+              <motion.section
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.28 }}
+                className="min-w-0 space-y-5"
+              >
+                <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
+                  <div className="border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.14),_transparent_34%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-5 py-5 sm:px-6">
+                    <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                      <button
+                        type="button"
+                        onClick={() => navigate('/dashboard')}
+                        className="inline-flex items-center gap-1 text-slate-400 transition hover:text-slate-700"
+                      >
+                        <ArrowLeft size={13} />
+                        Dashboard
+                      </button>
+                      <span>/</span>
+                      <span className="capitalize">{currentSubject}</span>
+                      <span>/</span>
+                      <span className="truncate text-slate-700">{lesson?.title || 'Lesson unavailable'}</span>
                     </div>
-                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs shadow-sm">
-                      <p className="font-black uppercase tracking-[0.2em] text-slate-400">Mastery Pulse</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-800">
-                        {graphAvailable ? (masteryPulse !== null ? `${masteryPulse}% ready` : 'Unassessed') : 'Unavailable'}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs shadow-sm">
-                      <p className="font-black uppercase tracking-[0.2em] text-slate-400">Next Unlock</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-800">
-                        {graphAvailable
-                          ? (bootstrap?.next_unlock?.topic_title || 'No unlock yet')
-                          : 'Graph context unavailable'}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs shadow-sm">
-                      <p className="font-black uppercase tracking-[0.2em] text-slate-400">Context warmed</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-800">
-                        {graphAvailable
-                          ? `${topicWarmSummary.currentCount} live / ${topicWarmSummary.prereqCount} prereq / ${topicWarmSummary.downstreamCount} unlock`
-                          : 'Graph context unavailable'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="rounded-[1.75rem] border border-indigo-200 bg-indigo-50 p-5 shadow-sm">
-                  <div className="flex items-center gap-2 text-indigo-700">
-                    <BrainCircuit size={18} />
-                    <p className="text-xs font-black uppercase tracking-[0.2em]">Progress Pulse</p>
-                  </div>
-                  <p className="mt-4 text-sm leading-7 text-slate-700">{bootstrap?.why_this_topic}</p>
-                  <div className="mt-5 grid gap-3">
-                    <div className="rounded-2xl bg-white p-4">
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Assessment status</p>
-                      <p className={`mt-1 text-sm font-semibold ${
-                        assessmentStatus.tone === 'emerald'
-                          ? 'text-emerald-700'
-                          : assessmentStatus.tone === 'amber'
-                            ? 'text-amber-700'
-                            : assessmentStatus.tone === 'indigo'
-                              ? 'text-indigo-700'
-                              : 'text-slate-700'
-                      }`}>{assessmentStatus.label}</p>
-                      <p className="mt-1 text-xs leading-5 text-slate-500">{assessmentStatus.detail}</p>
-                    </div>
-                    <div className="rounded-2xl bg-white p-4">
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Weak prerequisite</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-800">
-                        {graphAvailable
-                          ? (graphContext?.prerequisite_concepts?.[0]?.label || 'No blocking prerequisite detected')
-                          : 'Graph context unavailable'}
-                      </p>
-                    </div>
-                    {evidenceSummary && (
-                      <div className="rounded-2xl bg-white p-4">
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Evidence breakdown</p>
-                        <div className="mt-2 grid gap-2 text-xs font-semibold text-slate-600">
-                          <div className="flex items-center justify-between">
-                            <span>Demonstrated</span>
-                            <span className="text-emerald-700">{evidenceSummary.demonstrated}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span>Needs review</span>
-                            <span className="text-amber-700">{evidenceSummary.needs_review}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span>Unassessed</span>
-                            <span className="text-slate-500">{evidenceSummary.unassessed}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {recentEvidence && (
-                      <div className="rounded-2xl bg-white p-4">
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Latest evidence</p>
-                        <p className="mt-1 text-sm font-semibold leading-6 text-slate-800">{recentEvidence.summary}</p>
-                        {(recentEvidence.strongest_gain_concept_label || recentEvidence.strongest_drop_concept_label) && (
-                          <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
-                            {recentEvidence.strongest_gain_concept_label ? `Gain: ${recentEvidence.strongest_gain_concept_label}` : 'No recent gain'}
-                            {recentEvidence.strongest_drop_concept_label ? ` · Gap: ${recentEvidence.strongest_drop_concept_label}` : ''}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    {!graphAvailable && (
-                      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-700">Graph context unavailable</p>
-                        <p className="mt-2 text-xs leading-6 text-amber-800">
-                          {graphUnavailableReason || 'No approved concept mappings found for this topic yet.'}
+
+                    <div className="mt-4 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <h1 className="max-w-4xl text-[2rem] font-black tracking-tight text-slate-950 sm:text-[2.3rem]">
+                          {lesson?.title || 'Lesson unavailable'}
+                        </h1>
+                        <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
+                          {lesson?.summary || (lessonAvailable ? 'Move through the lesson sequence, then open the tutor whenever you want explanation, practice, or checkpointing.' : 'Lesson content is unavailable for this topic right now.')}
                         </p>
                       </div>
+
+                      <div className="grid w-full gap-3 sm:grid-cols-3 lg:w-[330px] lg:grid-cols-1">
+                        <div className="rounded-[1.25rem] border border-indigo-200 bg-indigo-50 p-4">
+                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-500">Best next move</p>
+                          <p className="mt-2 text-sm font-semibold text-slate-900">
+                            {quickActionSpotlight.primary?.label || 'Open the tutor and keep this topic moving.'}
+                          </p>
+                          <p className="mt-2 text-xs leading-6 text-slate-600">
+                            {quickActionSpotlight.detail || bootstrap?.why_this_topic || 'Use the tutor to explain the topic, bridge a prerequisite, or run a quick checkpoint.'}
+                          </p>
+                        </div>
+
+                        <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
+                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Assessment</p>
+                          <p className={`mt-2 text-sm font-semibold ${
+                            assessmentStatus.tone === 'emerald'
+                              ? 'text-emerald-700'
+                              : assessmentStatus.tone === 'amber'
+                                ? 'text-amber-700'
+                                : assessmentStatus.tone === 'indigo'
+                                  ? 'text-indigo-700'
+                                  : 'text-slate-800'
+                          }`}>
+                            {assessmentStatus.label}
+                          </p>
+                          <p className="mt-2 text-xs leading-6 text-slate-500">{assessmentStatus.detail}</p>
+                        </div>
+
+                        <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
+                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Next unlock</p>
+                          <p className="mt-2 text-sm font-semibold text-slate-900">
+                            {bootstrap?.next_unlock?.topic_title || 'Stay on this concept cluster'}
+                          </p>
+                          <p className="mt-2 text-xs leading-6 text-slate-500">
+                            {bootstrap?.next_unlock?.reason || 'The graph will update this after more evidence is captured.'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Current focus</p>
+                        <p className="mt-2 text-sm font-semibold text-slate-900">{graphPulse.currentLabel || lesson?.title || 'Current lesson'}</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Mastery pulse</p>
+                        <p className="mt-2 text-sm font-semibold text-slate-900">{masteryPulse !== null ? `${masteryPulse}% ready` : 'Unassessed'}</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Weak prerequisite</p>
+                        <p className="mt-2 text-sm font-semibold text-slate-900">{graphPulse.weakPrereqLabel || 'No blocking prerequisite detected'}</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Graph coverage</p>
+                        <p className="mt-2 text-sm font-semibold text-slate-900">
+                          {graphAvailable
+                            ? `${topicWarmSummary.currentCount} current / ${topicWarmSummary.prereqCount} prereq / ${topicWarmSummary.downstreamCount} unlock`
+                            : (graphUnavailableReason || 'Awaiting concept mapping')}
+                        </p>
+                      </div>
+                    </div>
+
+                    {!graphAvailable && (
+                      <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        {graphUnavailableReason || 'Graph context is not available for this topic yet.'}
+                      </div>
                     )}
                   </div>
-                </div>
-              </div>
-            </div>
-              <div className="grid gap-8 p-6 md:p-8">
+                </section>
+
                 {(whyStory || evidenceSummary || recentEvidence || lastAssessmentReview) && (
-                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(260px,0.9fr)]">
-                    <div className="rounded-[1.5rem] border border-indigo-200 bg-indigo-50 p-5">
-                      <div className="flex items-center gap-2 text-indigo-700">
+                  <section className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_300px]">
+                    <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm">
+                      <div className="flex items-center gap-2 text-indigo-600">
                         <Route size={16} />
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em]">Why this matters</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em]">Why this matters</p>
                       </div>
                       <p className="mt-3 text-sm leading-7 text-slate-700">
-                        {whyStory || (graphUnavailableReason || 'Graph context is warming up for this topic.')}
+                        {whyStory || bootstrap?.why_this_topic || graphUnavailableReason || 'The graph story for this lesson is still warming up.'}
                       </p>
                       <div className="mt-4 flex flex-wrap gap-2">
                         {safeArray(whyTopicDetail?.prerequisite_labels).slice(0, 3).map((label) => (
-                          <span key={label} className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-bold text-amber-800">
+                          <span key={label} className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-800">
                             Builds from {label}
                           </span>
                         ))}
                         {safeArray(whyTopicDetail?.unlock_labels).slice(0, 2).map((label) => (
-                          <span key={label} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-800">
+                          <span key={label} className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-800">
                             Unlocks {label}
                           </span>
                         ))}
-                        {whyTopicDetail?.recommended_next?.topic_title && (
-                          <span className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-[11px] font-bold text-indigo-700">
-                            Then {whyTopicDetail.recommended_next.topic_title}
-                          </span>
-                        )}
                       </div>
                     </div>
-                    <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5">
+
+                    <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm">
                       <div className="flex items-center gap-2 text-slate-700">
                         <BrainCircuit size={16} />
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em]">Mastery evidence</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em]">Evidence snapshot</p>
                       </div>
-                      <p className="mt-2 text-xs leading-5 text-slate-500">
-                        Mastery only updates from checkpoints and quizzes.
-                      </p>
                       {evidenceSummary ? (
-                        <div className="mt-3 grid gap-2 text-xs font-semibold text-slate-600">
+                        <div className="mt-4 grid gap-2 text-xs font-semibold text-slate-600">
                           <div className="flex items-center justify-between">
                             <span>Demonstrated</span>
                             <span className="text-emerald-700">{evidenceSummary.demonstrated}</span>
@@ -1833,421 +2088,193 @@ export default function LessonPage() {
                             <span>Unassessed</span>
                             <span className="text-slate-500">{evidenceSummary.unassessed}</span>
                           </div>
-                          <div className="flex items-center justify-between text-[11px] text-slate-500">
-                            <span>Total concepts</span>
-                            <span>{evidenceTotal}</span>
-                          </div>
                         </div>
                       ) : (
-                        <p className="mt-3 text-xs text-slate-500">No mastery evidence recorded yet.</p>
+                        <p className="mt-3 text-xs leading-6 text-slate-500">Evidence will appear here after quizzes and checkpoints.</p>
                       )}
-                      {lastAssessmentReview && (
-                        <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                          <p className="font-semibold text-slate-700">
-                            Latest checkpoint: {lastAssessmentReview.conceptLabel}
-                          </p>
-                          <p className="mt-1">
-                            {lastAssessmentReview.isCorrect ? 'Correct' : 'Needs review'} · {Math.round((lastAssessmentReview.score || 0) * 100)}%
-                          </p>
-                        </div>
-                      )}
-                      {recentEvidence && (
-                        <div className="mt-3 rounded-2xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
-                          <p className="font-semibold">Latest evidence</p>
-                          <p className="mt-1">{recentEvidence.summary}</p>
+                      {recentEvidence?.summary && (
+                        <div className="mt-4 rounded-2xl bg-slate-50 px-3 py-3 text-xs leading-6 text-slate-600">
+                          {recentEvidence.summary}
                         </div>
                       )}
                     </div>
-                  </div>
+                  </section>
                 )}
-                {!lessonAvailable && (
-                  <div className="rounded-3xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-800">
-                    Lesson content is unavailable for this topic right now. Please refresh after curriculum ingestion completes.
-                  </div>
-                )}
-                {lessonAvailable && (
-                  <div className="space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.5rem] border border-slate-200 bg-slate-50 px-4 py-3">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Lesson sequence</p>
-                        <p className="mt-1 text-sm font-semibold text-slate-800">
-                          {lessonBlocks.length} guided {lessonBlocks.length === 1 ? 'step' : 'steps'} in this lesson path
-                        </p>
-                      </div>
-                      <p className="text-xs leading-6 text-slate-500">
-                        Move from core idea to example to checkpoint, then use the tutor or quiz to log evidence.
-                      </p>
-                    </div>
-                    {lessonBlocks.map((block, index) => {
-                      const meta = lessonBlockMeta(block, index);
-                      const text = lessonBlockText(block);
-                      return (
-                        <div key={`${block.type}-${index}`} className={`rounded-[1.75rem] border p-5 shadow-sm ${meta.shellClass}`}>
-                          <div className="flex flex-wrap items-start justify-between gap-4">
-                            <div>
-                              <p className={`text-[10px] font-black uppercase tracking-[0.24em] ${meta.eyebrowClass}`}>{meta.eyebrow}</p>
-                              <h3 className="mt-2 text-xl font-black text-slate-900">{meta.title}</h3>
-                              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{meta.detail}</p>
-                            </div>
-                            <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
-                              Step {index + 1}
-                            </div>
-                          </div>
-                          <div className={`mt-4 rounded-[1.25rem] p-4 ${meta.bodyClass}`}>
-                            <div className="whitespace-pre-wrap text-sm leading-8 text-slate-700">
-                              {text}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              <div className="flex flex-wrap gap-3 border-t border-slate-100 pt-6">
-                <button type="button" onClick={() => navigate(`/quiz/${topicId}`)} className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white hover:bg-indigo-700">
-                  Take mastery quiz
-                  <ArrowRight size={16} />
-                </button>
-                <button type="button" onClick={handleDrill} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">
-                  <Zap size={16} />
-                  1-minute drill
-                </button>
-                <button type="button" onClick={handleStudyPlan} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">
-                  <NotebookPen size={16} />
-                  7-day plan
-                </button>
-              </div>
-            </div>
-          </motion.section>
 
-            <motion.aside
-              initial={{ opacity: 0, x: 18 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.35, delay: 0.05 }}
-              className="space-y-6 xl:sticky xl:top-6 self-start"
-            >
-              <section className="rounded-[2rem] border border-indigo-200 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.18),_transparent_45%),linear-gradient(135deg,#ffffff,_#eef2ff)] p-5 shadow-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500">Graph Rail Pulse</p>
-                    <p className="mt-2 text-sm font-semibold text-slate-800">
-                      {graphPulse.currentLabel || (graphAvailable ? 'Current concept focus' : 'Graph context unavailable')}
-                    </p>
-                  </div>
-                  <div className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-700">
-                    {graphPulse.readiness}
-                  </div>
-                </div>
-                <div className="mt-4 grid gap-3">
-                  <div className="rounded-2xl border border-white bg-white/80 px-4 py-3 text-xs text-slate-700">
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Weak prerequisite</p>
-                    <p className="mt-1 font-semibold">{graphPulse.weakPrereqLabel || 'No blocking prerequisite detected'}</p>
-                  </div>
-                  <div className="rounded-2xl border border-white bg-white/80 px-4 py-3 text-xs text-slate-700">
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Next unlock</p>
-                    <p className="mt-1 font-semibold">{graphPulse.nextUnlockLabel || 'Stay on this concept cluster'}</p>
-                  </div>
-                  <div className="rounded-2xl border border-white bg-white/80 px-4 py-3 text-xs text-slate-600">
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Graph coverage</p>
-                    <p className="mt-1 font-semibold">
-                      {graphAvailable
-                        ? `${topicWarmSummary.currentCount} current · ${topicWarmSummary.prereqCount} prereq · ${topicWarmSummary.downstreamCount} unlock`
-                        : (graphUnavailableReason || 'Awaiting graph mapping')}
-                    </p>
-                  </div>
-                </div>
-              </section>
-
-              <LessonKnowledgeGraph
-                graphContext={graphContext}
-                nextUnlock={bootstrap?.next_unlock}
-                whyTopicDetail={whyTopicDetail}
-                onOpenTopic={openRecommendedLesson}
-                onExplainConcept={handleGraphExplain}
-                onBridgeConcept={handleGraphBridge}
-                onDrillConcept={handleGraphDrill}
-                onSelectConcept={setSelectedGraphConcept}
-              />
-
-            <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="mb-4 flex items-center gap-2">
-                <BrainCircuit className="text-indigo-600" size={18} />
-                <h2 className="text-sm font-black uppercase tracking-[0.2em] text-slate-600">Mastery Overlay</h2>
-              </div>
-              <div className="grid gap-3">
-                {safeArray(graphContext?.current_concepts).map((concept) => <ConceptChip key={concept.concept_id} concept={concept} />)}
-                {!safeArray(graphContext?.current_concepts).length && (
-                  <p className={`rounded-2xl px-3 py-3 text-xs ${graphAvailable ? 'bg-slate-50 text-slate-500' : 'border border-amber-200 bg-amber-50 text-amber-700'}`}>
-                    {graphAvailable
-                      ? 'Graph context is still warming for this topic.'
-                      : (graphUnavailableReason || 'Graph context is unavailable for this topic yet.')}
-                  </p>
-                )}
-              </div>
-            </section>
-
-            {interventionTimeline.length > 0 && (
-              <InterventionTimeline
-                title="Intervention Timeline"
-                subtitle="Recent quiz and checkpoint evidence shaping this lesson path."
-                timeline={interventionTimeline}
-                compact
-              />
-            )}
-
-            <section className="rounded-[2rem] border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-100 p-5">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-600 text-white">
-                      <Bot size={18} />
-                    </div>
-                      <div>
-                        <h2 className="text-sm font-black uppercase tracking-[0.2em] text-slate-600">Tutor Workbench</h2>
-                      <p className="text-xs text-slate-500">{streamPhase || 'Lesson-aware, graph-grounded, and cache-warmed'}</p>
-                    </div>
-                  </div>
-                  <button type="button" onClick={() => sendChat('Teach me like I am completely new to this lesson.', { mode: 'teach' })} className="hidden rounded-2xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 md:inline-flex">
-                    Teach from zero
-                  </button>
-                </div>
-              </div>
-              <div className="p-5">
-                <div className="mb-4 rounded-[1.25rem] border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex items-start justify-between gap-3">
+                <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex flex-col gap-4 border-b border-slate-100 pb-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Tutor mode</p>
-                      <p className="mt-1 text-xs leading-6 text-slate-600">{activeMode.description}</p>
-                    </div>
-                    <span className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-indigo-700">
-                      {activeMode.label}
-                    </span>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {TUTOR_MODES.map((mode) => (
-                      <button
-                        key={mode.id}
-                        type="button"
-                        onClick={() => setSelectedMode(mode.id)}
-                        className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold transition ${
-                          selectedMode === mode.id
-                            ? 'border-indigo-600 bg-indigo-600 text-white'
-                            : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-700'
-                        }`}
-                      >
-                        {mode.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={runModeAction}
-                      disabled={isBusy}
-                      className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white hover:bg-indigo-700 disabled:opacity-60"
-                    >
-                      Run {activeMode.label} flow
-                      <ArrowRight size={14} />
-                    </button>
-                    <p className="text-xs leading-5 text-slate-500">
-                      {MODE_DEFAULT_PROMPTS[activeMode.id]}
-                    </p>
-                  </div>
-                </div>
-                {quickActionSpotlight.primary && (
-                  <div className={`mb-4 rounded-[1.5rem] border p-4 ${spotlightToneStyles[quickActionSpotlight.tone] || spotlightToneStyles.indigo}`}>
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="max-w-xl">
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-70">Best next move</p>
-                        <h3 className="mt-2 text-lg font-black">{quickActionSpotlight.headline}</h3>
-                        <p className="mt-2 text-sm leading-7 opacity-90">{quickActionSpotlight.detail}</p>
-                        {selectedGraphConcept?.label && (
-                          <p className="mt-3 text-xs font-semibold opacity-80">
-                            Focus node: {selectedGraphConcept.label}
-                          </p>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        onClick={() => handleQuickAction(quickActionSpotlight.primary)}
-                        className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-white disabled:opacity-60"
-                      >
-                        {quickActionSpotlight.primary.label}
-                        <ArrowRight size={14} />
-                      </button>
-                    </div>
-                    {quickActionSpotlight.secondary.length > 0 && (
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {quickActionSpotlight.secondary.map((action) => (
-                          <button
-                            key={action.id}
-                            type="button"
-                            disabled={isBusy}
-                            onClick={() => handleQuickAction(action)}
-                            className="rounded-full border border-white/70 bg-white/90 px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:border-slate-300 disabled:opacity-60"
-                          >
-                            {action.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div className="mb-4 grid gap-2 sm:grid-cols-2">
-                  {quickActions.map((action) => {
-                    const Icon = iconByIntent[action.icon] || iconByIntent[action.intent] || MessageSquare;
-                    const isPrimaryAction = quickActionSpotlight.primary?.id === action.id;
-                    return (
-                      <button key={action.id} type="button" disabled={isBusy} onClick={() => handleQuickAction(action)} className={`rounded-2xl border p-3 text-left transition disabled:opacity-60 ${
-                        isPrimaryAction
-                          ? 'border-indigo-300 bg-indigo-50 shadow-sm'
-                          : 'border-slate-200 bg-slate-50 hover:border-indigo-300 hover:bg-indigo-50'
-                      }`}>
-                        <div className="flex items-start gap-3">
-                          <div className="mt-0.5 rounded-xl bg-white p-2 text-indigo-600 shadow-sm">
-                            <Icon size={16} />
-                          </div>
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="text-sm font-bold text-slate-800">{action.label}</p>
-                              {isPrimaryAction && (
-                                <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.16em] text-indigo-700">
-                                  Best now
-                                </span>
-                              )}
-                            </div>
-                            <p className="mt-1 text-xs leading-5 text-slate-500">{action.prompt}</p>
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-                {pendingAssessment && (
-                  <div className="mb-4 rounded-[1.5rem] border border-emerald-200 bg-emerald-50 p-4">
-                    <div className="mb-3 flex items-center gap-2 text-emerald-700">
-                      <Target size={16} />
-                      <p className="text-xs font-black uppercase tracking-[0.2em]">Live checkpoint</p>
-                    </div>
-                    <p className="text-sm font-semibold leading-7 text-slate-800">{pendingAssessment.question}</p>
-                    {pendingAssessment.hint && <p className="mt-2 text-xs leading-6 text-emerald-800">Hint: {pendingAssessment.hint}</p>}
-                    <textarea value={assessmentAnswer} onChange={(event) => setAssessmentAnswer(event.target.value)} rows={4} placeholder="Answer the checkpoint here..." className="mt-4 w-full rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-400" />
-                    <div className="mt-3 flex flex-wrap gap-3">
-                      <button type="button" onClick={submitAssessment} disabled={isBusy || !assessmentAnswer.trim()} className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-60">
-                        <CheckCircle2 size={16} />
-                        Submit checkpoint
-                      </button>
-                      <button type="button" onClick={() => startAssessment('hard')} disabled={isBusy} className="inline-flex items-center gap-2 rounded-2xl border border-emerald-300 bg-white px-4 py-3 text-sm font-bold text-emerald-700 disabled:opacity-60">
-                        <Zap size={16} />
-                        Try harder checkpoint
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {lastAssessmentReview && (
-                  <div className={`mb-4 rounded-[1.5rem] border p-4 ${lastAssessmentReview.isCorrect ? 'border-indigo-200 bg-indigo-50' : 'border-amber-200 bg-amber-50'}`}>
-                    <div className={`mb-3 flex items-center gap-2 ${lastAssessmentReview.isCorrect ? 'text-indigo-700' : 'text-amber-700'}`}>
-                      {lastAssessmentReview.isCorrect ? <CheckCircle2 size={16} /> : <ShieldAlert size={16} />}
-                      <p className="text-xs font-black uppercase tracking-[0.2em]">
-                        {lastAssessmentReview.isCorrect ? 'Checkpoint cleared' : 'Checkpoint follow-up'}
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Lesson sequence</p>
+                      <h2 className="mt-2 text-xl font-black text-slate-900">
+                        {lessonAvailable ? `${lessonBlocks.length} guided steps in this lesson` : 'Lesson content unavailable'}
+                      </h2>
+                      <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-600">
+                        {lessonAvailable
+                          ? 'Stay in the lesson for the core explanation, then open the tutor whenever you want a faster explanation, a bridge, or a checkpoint.'
+                          : (lesson?.unavailable_reason || 'We do not have generated lesson blocks for this topic yet. Use the tutor and graph rail while this content is being prepared.')}
                       </p>
                     </div>
-                    <p className="text-sm font-semibold text-slate-800">
-                      {lastAssessmentReview.conceptLabel} - {Math.round((lastAssessmentReview.score || 0) * 100)}%
-                    </p>
-                    <p className="mt-2 text-xs leading-6 text-slate-600">
-                      {lastAssessmentReview.isCorrect
-                        ? 'Push into a harder checkpoint or open the recommended next lesson while the concept is warm.'
-                        : 'Review the mistake explanation, then retry or bridge the blocking prerequisite.'}
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-3">
-                      {!lastAssessmentReview.isCorrect && (
-                        <button type="button" onClick={explainLastMistake} disabled={isBusy} className="inline-flex items-center gap-2 rounded-2xl bg-amber-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-60">
-                          <ShieldAlert size={16} />
-                          Explain my mistake
-                        </button>
-                      )}
-                      <button type="button" onClick={() => startAssessment(lastAssessmentReview.isCorrect ? 'hard' : 'medium')} disabled={isBusy} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 disabled:opacity-60">
-                        <Target size={16} />
-                        {lastAssessmentReview.isCorrect ? 'Try harder checkpoint' : 'Retry checkpoint'}
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsTutorOpen(true)}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100"
+                      >
+                        <Bot size={15} />
+                        Open tutor
                       </button>
-                      {lastAssessmentReview.recommendedTopicId && (
-                        <button type="button" onClick={() => openRecommendedLesson(lastAssessmentReview.recommendedTopicId)} className="inline-flex items-center gap-2 rounded-2xl border border-indigo-200 bg-white px-4 py-3 text-sm font-bold text-indigo-700">
-                          Open recommended lesson
-                          <ArrowRight size={16} />
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={handleDrill}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        <Zap size={15} />
+                        1-minute drill
+                      </button>
                     </div>
                   </div>
-                )}
-                {assessmentRecommendation && (
-                  <div className={`mb-4 rounded-[1.5rem] border p-4 ${
-                    assessmentRecommendation.tone === 'amber'
-                      ? 'border-amber-200 bg-amber-50'
-                      : assessmentRecommendation.tone === 'rose'
-                        ? 'border-rose-200 bg-rose-50'
-                        : assessmentRecommendation.tone === 'emerald'
-                          ? 'border-emerald-200 bg-emerald-50'
-                          : 'border-indigo-200 bg-indigo-50'
-                  }`}>
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Next best action</p>
-                    <p className="mt-2 text-sm font-semibold text-slate-800">{assessmentRecommendation.headline}</p>
-                    <p className="mt-2 text-xs leading-6 text-slate-600">{assessmentRecommendation.detail}</p>
-                    <button
-                      type="button"
-                      onClick={handleAssessmentRecommendation}
-                      disabled={isBusy}
-                      className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white disabled:opacity-60"
-                    >
-                      {assessmentRecommendation.actionLabel}
-                      <ArrowRight size={14} />
-                    </button>
-                  </div>
-                )}
-                <div ref={scrollRef} className="max-h-[480px] space-y-4 overflow-y-auto rounded-[1.5rem] bg-slate-50 p-4">
-                  {messages.map((item, index) => (
-                    <MessageCard
-                      key={item.id || `${item.role}-${index}`}
-                      item={item}
-                      onOpenRecommendation={openRecommendedLesson}
-                      onStartCheckpoint={() => startAssessment()}
-                      onOpenPrereqBridge={handlePrereqBridge}
-                      onStartDrill={handleDrill}
-                      followUps={FOLLOW_UP_ACTIONS}
-                      onFollowUp={handleFollowUp}
-                      showFollowUps={index === lastAssistantIndex}
-                    />
-                  ))}
-                  {isBusy && (
-                    <div className="rounded-3xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
-                      <div className="flex items-center gap-3">
-                        <LoaderCircle className="animate-spin text-indigo-600" size={18} />
-                        <span>{streamPhase || 'Tutor is building a grounded response...'}</span>
-                      </div>
+
+                  {!lessonAvailable ? (
+                    <div className="mt-5 rounded-[1.5rem] border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
+                      {lesson?.unavailable_reason || 'Lesson content has not been generated for this topic yet.'}
+                    </div>
+                  ) : (
+                    <div className="mt-5 space-y-4">
+                      {lessonBlocks.map((block, index) => {
+                        const meta = lessonBlockMeta(block, index);
+                        const text = lessonBlockText(block);
+                        return (
+                          <article key={`${block.type}-${index}`} className={`rounded-[1.5rem] border p-4 shadow-sm ${meta.shellClass}`}>
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${meta.eyebrowClass}`}>{meta.eyebrow}</p>
+                                <h3 className="mt-2 text-lg font-black text-slate-900">{meta.title}</h3>
+                                <p className="mt-2 text-sm leading-6 text-slate-600">{meta.detail}</p>
+                              </div>
+                              <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                                Step {index + 1}
+                              </span>
+                            </div>
+                            <div className={`mt-4 rounded-[1.25rem] p-4 ${meta.bodyClass}`}>
+                              <div className="whitespace-pre-wrap text-[15px] leading-8 text-slate-700">{text}</div>
+                            </div>
+                          </article>
+                        );
+                      })}
                     </div>
                   )}
-                </div>
-                <form onSubmit={(event) => { event.preventDefault(); sendChat(); }} className="mt-4">
-                  <div className="rounded-[1.5rem] border border-slate-200 bg-white p-3 shadow-sm">
-                    <textarea value={chatInput} onChange={(event) => setChatInput(event.target.value)} rows={3} placeholder="Ask about this lesson, a prerequisite, or how this unlocks the next concept..." className="w-full resize-none border-none bg-transparent px-1 py-1 text-sm text-slate-700 outline-none" />
-                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
-                      <div className="flex flex-wrap gap-2 text-xs">
-                        <button type="button" onClick={() => sendChat('Explain this lesson with one real-life example.', { mode: 'teach' })} className="rounded-full bg-slate-100 px-3 py-1.5 font-semibold text-slate-600">Real-life example</button>
-                        <button type="button" onClick={() => sendChat('Show me the common mistake students make here.', { mode: 'diagnose' })} className="rounded-full bg-slate-100 px-3 py-1.5 font-semibold text-slate-600">Common mistake</button>
-                      </div>
-                      <button type="submit" disabled={isBusy || !chatInput.trim()} className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60">
-                        Send
-                        <Send size={15} />
-                      </button>
+
+                  <div className="mt-5 flex flex-wrap gap-3 border-t border-slate-100 pt-5">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/quiz/${topicId}`)}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white hover:bg-indigo-700"
+                    >
+                      Take mastery quiz
+                      <ArrowRight size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStudyPlan}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      <NotebookPen size={15} />
+                      7-day plan
+                    </button>
+                  </div>
+                </section>
+              </motion.section>
+
+              <motion.aside
+                initial={{ opacity: 0, x: 12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.28, delay: 0.04 }}
+                className="min-w-0 space-y-4 xl:sticky xl:top-20 xl:max-h-[calc(100vh-5.5rem)] xl:overflow-y-auto xl:pr-1"
+              >
+                <section className="rounded-[1.75rem] border border-indigo-200 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.16),_transparent_42%),linear-gradient(180deg,#ffffff_0%,#eef2ff_100%)] p-5 shadow-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-500">Graph rail pulse</p>
+                      <p className="mt-2 text-base font-bold text-slate-900">{graphPulse.currentLabel || lesson?.title || 'Current lesson'}</p>
+                    </div>
+                    <span className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-700">
+                      {graphPulse.readiness}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid gap-3">
+                    <div className="rounded-2xl border border-white bg-white/85 px-4 py-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Weak prerequisite</p>
+                      <p className="mt-2 text-sm font-semibold text-slate-800">{graphPulse.weakPrereqLabel || 'No blocking prerequisite detected'}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white bg-white/85 px-4 py-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Next unlock</p>
+                      <p className="mt-2 text-sm font-semibold text-slate-800">{graphPulse.nextUnlockLabel || 'Stay on this concept cluster'}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white bg-white/85 px-4 py-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Coverage</p>
+                      <p className="mt-2 text-sm font-semibold text-slate-800">
+                        {graphAvailable
+                          ? `${topicWarmSummary.currentCount} current / ${topicWarmSummary.prereqCount} prereq / ${topicWarmSummary.downstreamCount} unlock`
+                          : (graphUnavailableReason || 'Awaiting graph mapping')}
+                      </p>
                     </div>
                   </div>
-                </form>
-              </div>
-            </section>
-          </motion.aside>
+                </section>
+
+                <LessonKnowledgeGraph
+                  graphContext={graphContext}
+                  nextUnlock={bootstrap?.next_unlock}
+                  whyTopicDetail={whyTopicDetail}
+                  onOpenTopic={openRecommendedLesson}
+                  onExplainConcept={handleGraphExplain}
+                  onBridgeConcept={handleGraphBridge}
+                  onDrillConcept={handleGraphDrill}
+                  onSelectConcept={setSelectedGraphConcept}
+                />
+
+                <section className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <BrainCircuit className="text-indigo-600" size={16} />
+                    <h2 className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Mastery overlay</h2>
+                  </div>
+                  {selectedGraphConcept?.label && (
+                    <div className="mt-4 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+                      Focus node: <span className="font-semibold">{selectedGraphConcept.label}</span>
+                    </div>
+                  )}
+                  <div className="mt-4 grid gap-3">
+                    {safeArray(graphContext?.current_concepts).map((concept) => (
+                      <ConceptChip key={concept.concept_id} concept={concept} />
+                    ))}
+                    {!safeArray(graphContext?.current_concepts).length && (
+                      <p className={`rounded-2xl px-3 py-3 text-xs ${
+                        graphAvailable ? 'bg-slate-50 text-slate-500' : 'border border-amber-200 bg-amber-50 text-amber-700'
+                      }`}>
+                        {graphAvailable
+                          ? 'Graph context is still warming for this topic.'
+                          : (graphUnavailableReason || 'Graph context is unavailable for this topic yet.')}
+                      </p>
+                    )}
+                  </div>
+                </section>
+
+                {interventionTimeline.length > 0 && (
+                  <InterventionTimeline
+                    title="Intervention timeline"
+                    subtitle="Recent quiz and checkpoint evidence shaping this lesson path."
+                    timeline={interventionTimeline}
+                    compact
+                  />
+                )}
+              </motion.aside>
+            </div>
+          </main>
         </div>
       </div>
+
+      {tutorWorkbench}
     </div>
   );
 }

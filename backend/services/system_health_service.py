@@ -5,10 +5,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import httpx
+from sqlalchemy import inspect
 from sqlalchemy import text
 
 from backend.core.config import settings
 from backend.core.database import engine
+from backend.core.database import get_engine
 from backend.core.telemetry import telemetry_snapshot
 from backend.services.course_experience_service import CourseExperienceService
 from backend.services.dashboard_experience_service import DashboardExperienceService
@@ -23,6 +25,30 @@ class SystemHealthService:
         try:
             with engine.connect() as connection:
                 connection.execute(text("SELECT 1"))
+            return {"status": "ok"}
+        except Exception as exc:
+            return {"status": "error", "detail": str(exc)}
+
+    def _check_schema(self) -> dict:
+        required_tables = {
+            "topics",
+            "student_profiles",
+            "student_subjects",
+            "curriculum_topic_maps",
+            "diagnostic_attempts",
+            "mastery_update_events",
+            "personalized_lessons",
+        }
+        try:
+            inspector = inspect(get_engine())
+            existing_tables = set(inspector.get_table_names())
+            missing_tables = sorted(required_tables - existing_tables)
+            if missing_tables:
+                return {
+                    "status": "error",
+                    "missing_tables": missing_tables,
+                    "detail": "Critical graph-first tables are missing.",
+                }
             return {"status": "ok"}
         except Exception as exc:
             return {"status": "error", "detail": str(exc)}
@@ -93,6 +119,7 @@ class SystemHealthService:
     def snapshot(self) -> dict:
         checks = {
             "postgres": self._check_postgres(),
+            "schema": self._check_schema(),
             "redis": self._check_redis(),
             "neo4j": self._check_neo4j(),
             "vector_db": self._check_vector_db(),
@@ -104,6 +131,8 @@ class SystemHealthService:
         }
         overall_status = "ok"
         if checks["postgres"]["status"] != "ok":
+            overall_status = "degraded"
+        elif checks["schema"]["status"] != "ok":
             overall_status = "degraded"
         elif any(item["status"] == "error" for item in checks.values()):
             overall_status = "degraded"

@@ -23,7 +23,7 @@ const DashboardStats = () => {
   const studyTime = studentData?.study_time_minutes || 0;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
       <StatCard 
         icon={Flame} 
         iconBg="bg-orange-50" 

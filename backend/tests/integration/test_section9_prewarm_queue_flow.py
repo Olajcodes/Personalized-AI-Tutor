@@ -156,6 +156,7 @@ def setup_prewarm_scope(monkeypatch):
         lambda self, **kwargs: True,
     )
     monkeypatch.setattr(SystemHealthService, "_check_postgres", lambda self: {"status": "ok"})
+    monkeypatch.setattr(SystemHealthService, "_check_schema", lambda self: {"status": "ok"})
     monkeypatch.setattr(SystemHealthService, "_check_redis", lambda self: {"status": "not_configured"})
     monkeypatch.setattr(SystemHealthService, "_check_neo4j", lambda self: {"status": "not_configured"})
     monkeypatch.setattr(SystemHealthService, "_check_vector_db", lambda self: {"status": "ok"})

@@ -60,7 +60,7 @@ const PageLoader = () => (
 
 /* --- Layout Wrappers --- */
 const StudentLayout = () => (
-  <div className="min-h-screen bg-slate-50 flex flex-col">
+  <div className="min-h-screen overflow-x-hidden bg-slate-50 flex flex-col">
     <Navbar />
     <div className="flex-1"><Outlet /></div>
     <PresentationWalkthroughDock />
@@ -69,7 +69,7 @@ const StudentLayout = () => (
 );
 
 const TeacherLayout = () => (
-  <div className="flex min-h-screen bg-slate-50">
+  <div className="flex min-h-screen overflow-x-hidden bg-slate-50">
     <TeacherSidebar />
     <div className="flex-1 h-screen overflow-y-auto">
       <Outlet />

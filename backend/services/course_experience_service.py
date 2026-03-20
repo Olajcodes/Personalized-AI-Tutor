@@ -9,6 +9,7 @@ from uuid import UUID
 
 from sqlalchemy import desc
 from sqlalchemy import select
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from backend.core.database import SessionLocal
@@ -35,6 +36,7 @@ from backend.schemas.diagnostic_schema import (
     DiagnosticWeakConceptOut,
 )
 from backend.schemas.learning_path_schema import LearningMapNodeOut, PathNextIn
+from backend.repositories.lesson_repo import ensure_personalized_lessons_table
 from backend.services.learning_path_service import LearningPathValidationError, learning_path_service
 from backend.services.lesson_experience_service import LessonExperienceService
 from backend.services.prewarm_job_service import PrewarmJobService
@@ -74,6 +76,18 @@ class CourseExperienceError(ValueError):
 class CourseExperienceService:
     def __init__(self, db: Session):
         self.db = db
+
+    def _personalized_lessons_available(self) -> bool:
+        bind = self.db.get_bind()
+        inspector = inspect(bind)
+        if inspector.has_table("personalized_lessons"):
+            return True
+        try:
+            ensure_personalized_lessons_table(self.db)
+        except Exception as exc:
+            logger.warning("course.bootstrap.personalized_lessons_unavailable detail=%s", exc)
+            return False
+        return inspect(bind).has_table("personalized_lessons")
 
     @staticmethod
     def _readable_concept_label(concept_id: str | None) -> str | None:
@@ -601,25 +615,41 @@ class CourseExperienceService:
                 select(StudentSubject.subject_id).where(StudentSubject.student_profile_id == student_profile.id)
             ).all()
         ]
+        personalized_lessons_available = self._personalized_lessons_available()
 
-        query = (
-            select(Topic, PersonalizedLesson, Subject.slug)
-            .join(Subject, Subject.id == Topic.subject_id)
-            .outerjoin(
-                PersonalizedLesson,
-                (PersonalizedLesson.topic_id == Topic.id)
-                & (PersonalizedLesson.student_id == student_id),
+        if personalized_lessons_available:
+            query = (
+                select(Topic, PersonalizedLesson, Subject.slug)
+                .join(Subject, Subject.id == Topic.subject_id)
+                .outerjoin(
+                    PersonalizedLesson,
+                    (PersonalizedLesson.topic_id == Topic.id)
+                    & (PersonalizedLesson.student_id == student_id),
+                )
+                .where(
+                    Topic.is_approved.is_(True),
+                    Topic.sss_level == student_profile.sss_level,
+                    Topic.term == term,
+                    Topic.subject_id.in_(enrolled_subject_ids),
+                    Subject.slug == subject.lower(),
+                )
+                .order_by(Topic.created_at.asc(), Topic.title.asc())
             )
-            .where(
-                Topic.is_approved.is_(True),
-                Topic.sss_level == student_profile.sss_level,
-                Topic.term == term,
-                Topic.subject_id.in_(enrolled_subject_ids),
-                Subject.slug == subject.lower(),
+            rows = self.db.execute(query).all()
+        else:
+            query = (
+                select(Topic, Subject.slug)
+                .join(Subject, Subject.id == Topic.subject_id)
+                .where(
+                    Topic.is_approved.is_(True),
+                    Topic.sss_level == student_profile.sss_level,
+                    Topic.term == term,
+                    Topic.subject_id.in_(enrolled_subject_ids),
+                    Subject.slug == subject.lower(),
+                )
+                .order_by(Topic.created_at.asc(), Topic.title.asc())
             )
-            .order_by(Topic.created_at.asc(), Topic.title.asc())
-        )
-        rows = self.db.execute(query).all()
+            rows = [(topic, None, subject_slug) for topic, subject_slug in self.db.execute(query).all()]
 
         rag_service = RagRetrieveService()
         map_visual = None
@@ -700,6 +730,8 @@ class CourseExperienceService:
 
         if not topics and readiness_failures and map_error is None:
             map_error = "Lesson readiness checks failed for this scope."
+        if not personalized_lessons_available and map_error is None:
+            map_error = "Personalized lesson cache was missing and has been recreated. Scope topics are loading from approved curriculum."
 
         warmed_topic_ids: list[str] = []
         cache_hit_topic_ids: list[str] = []

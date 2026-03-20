@@ -115,7 +115,7 @@ const LoginPage = () => {
     } catch (err) {
       console.error('Login Error:', err);
       if (err.name === 'AbortError') {
-        setError('The server is taking too long to respond. Please check your connection and try again.');
+        setError('Your learning data is still syncing. Please refresh in a moment.');
       } else {
         setError(err.message);
       }

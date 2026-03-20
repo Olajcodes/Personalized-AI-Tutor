@@ -70,10 +70,8 @@ export const UserProvider = ({ children }) => {
 
     setIsLoading(true);
     try {
-      const [userResponse, profileStatus] = await Promise.all([
-        fetchUserProfile(token),
-        fetchStudentProfileStatus(token),
-      ]);
+      const userResponse = await fetchUserProfile(token);
+      const profileStatus = await fetchStudentProfileStatus(token);
 
       setUserData(userResponse);
 
@@ -117,7 +115,7 @@ export const UserProvider = ({ children }) => {
         }
       }
     } catch (error) {
-      console.error('UserContext Error:', error);
+      console.warn('UserContext refresh skipped:', error?.message || error);
     } finally {
       setIsLoading(false);
     }

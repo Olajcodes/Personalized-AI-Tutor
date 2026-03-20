@@ -101,27 +101,28 @@ class InternalPostgresRepository:
         return [dict(row) for row in rows]
 
     def get_lesson_context(self, *, student_id: UUID, topic_id: UUID) -> dict:
-        row = self.db.execute(
-            text(
-                """
-                SELECT
-                    student_id,
-                    topic_id,
-                    title,
-                    summary,
-                    'personalized' AS context_source,
-                    content_blocks,
-                    source_chunk_ids,
-                    generation_metadata
-                FROM personalized_lessons
-                WHERE student_id = :student_id
-                  AND topic_id = :topic_id
-                """
-            ),
-            {"student_id": student_id, "topic_id": topic_id},
-        ).mappings().first()
-        if row:
-            return dict(row)
+        if self._table_exists("personalized_lessons"):
+            row = self.db.execute(
+                text(
+                    """
+                    SELECT
+                        student_id,
+                        topic_id,
+                        title,
+                        summary,
+                        'personalized' AS context_source,
+                        content_blocks,
+                        source_chunk_ids,
+                        generation_metadata
+                    FROM personalized_lessons
+                    WHERE student_id = :student_id
+                      AND topic_id = :topic_id
+                    """
+                ),
+                {"student_id": student_id, "topic_id": topic_id},
+            ).mappings().first()
+            if row:
+                return dict(row)
 
         lesson_row = self.db.execute(
             text(

@@ -1,10 +1,12 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Brain, Loader2, AlertCircle, GitBranch, Lock } from 'lucide-react';
+import { AlertCircle, Brain, ChevronRight, GitBranch, Loader2, Lock, Sparkles } from 'lucide-react';
+
 import { useAuth } from '../context/AuthContext';
 import { useUser } from '../context/UserContext';
 import { API_URL } from '../config/runtime';
 import { resolveStudentId } from '../utils/sessionIdentity';
+import { apiFetchJson } from '../services/api';
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
 
@@ -36,32 +38,49 @@ export default function AIRecommendation({
   activeSubject: activeSubjectProp = null,
   recentEvidence: recentEvidenceOverride = null,
   recommendationStory: recommendationStoryOverride = null,
+  errorOverride = '',
+  disableAutoFetch = false,
 }) {
   const navigate = useNavigate();
   const { token } = useAuth();
   const { studentData, userData } = useUser();
   const activeId = resolveStudentId(studentData, userData);
 
-  // Derive scope from student profile
   const currentSubject = activeSubjectProp || localStorage.getItem('active_subject') || studentData?.subjects?.[0] || 'math';
   const currentLevel = studentData?.sss_level || 'SSS1';
   const currentTerm = studentData?.current_term || 1;
-
   const apiUrl = API_URL;
 
-  // State
   const [recommendation, setRecommendation] = useState(null);
   const [recentEvidence, setRecentEvidence] = useState(null);
   const [recommendationStory, setRecommendationStory] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (recommendationOverride) {
       setRecommendation(recommendationOverride);
       setRecentEvidence(recentEvidenceOverride || null);
       setRecommendationStory(recommendationStoryOverride || null);
-      setError("");
+      setError('');
+      setIsLoading(false);
+      return;
+    }
+
+    if (errorOverride) {
+      setRecommendation(null);
+      setRecentEvidence(null);
+      setRecommendationStory(null);
+      setError(errorOverride);
+      setIsLoading(false);
+      return;
+    }
+
+    if (disableAutoFetch) {
+      setRecommendation(null);
+      setRecentEvidence(null);
+      setRecommendationStory(null);
+      setError('');
       setIsLoading(false);
       return;
     }
@@ -70,7 +89,7 @@ export default function AIRecommendation({
 
     const fetchNextStep = async () => {
       setIsLoading(true);
-      setError("");
+      setError('');
 
       try {
         const queryParams = new URLSearchParams({
@@ -79,202 +98,169 @@ export default function AIRecommendation({
           term: currentTerm,
         });
 
-        const response = await fetch(`${apiUrl}/learning/course/bootstrap?${queryParams.toString()}`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+        const data = await apiFetchJson(`/learning/course/bootstrap?${queryParams.toString()}`, {
+          token,
+          timeoutMs: 40000,
         });
 
-        if (!response.ok) {
-          const errData = await response.json().catch(() => null);
-          throw new Error(errData?.detail || "Failed to calculate graph recommendation.");
+        if (!data?.next_step) {
+          throw new Error(data?.map_error || 'Graph recommendation unavailable.');
         }
 
-        const data = await response.json();
-        if (!data?.next_step) {
-          throw new Error(data?.map_error || "Graph recommendation unavailable.");
-        }
         setRecommendation(data.next_step);
         setRecentEvidence(data.recent_evidence || null);
         setRecommendationStory(data.recommendation_story || null);
       } catch (err) {
-        setError(err.message);
+        setError(err.message || 'Graph recommendation unavailable.');
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchNextStep();
-  }, [activeId, currentSubject, currentLevel, currentTerm, token, apiUrl, recommendationOverride, recentEvidenceOverride, recommendationStoryOverride]);
+    void fetchNextStep();
+  }, [
+    activeId,
+    currentSubject,
+    currentTerm,
+    token,
+    recommendationOverride,
+    recentEvidenceOverride,
+    recommendationStoryOverride,
+    errorOverride,
+    disableAutoFetch,
+  ]);
 
-  // Handle Loading State
   if (isLoading) {
     return (
-      <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 w-full lg:w-80 h-64 flex flex-col items-center justify-center">
-        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-4" />
-        <p className="text-sm font-semibold text-gray-500 animate-pulse">AI is calculating your path...</p>
+      <div className="flex min-h-[220px] w-full flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm lg:w-[320px]">
+        <Loader2 className="mb-3 h-7 w-7 animate-spin text-indigo-600" />
+        <p className="text-sm font-semibold text-slate-600">Preparing your next graph move...</p>
       </div>
     );
   }
 
-  // Handle Error State
   if (error) {
     return (
-      <div className="bg-rose-50 rounded-3xl p-6 border border-rose-100 w-full lg:w-80 h-64 flex flex-col items-center justify-center text-center">
-        <AlertCircle className="w-8 h-8 text-rose-500 mb-2" />
-        <p className="text-xs font-bold text-rose-700">{error}</p>
+      <div className="flex min-h-[220px] w-full flex-col items-center justify-center rounded-2xl border border-amber-200 bg-amber-50/60 p-5 text-center shadow-sm lg:w-[320px]">
+        <AlertCircle className="mb-3 h-7 w-7 text-amber-500" />
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Recommendation warming up</p>
+        <p className="mt-2 text-sm font-semibold text-amber-900">{error}</p>
       </div>
     );
   }
 
-  if (!recommendation) return null;
+  if (!recommendation) {
+    return (
+      <div className="flex min-h-[220px] w-full flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm lg:w-[320px]">
+        <Lock className="mb-3 h-7 w-7 text-slate-300" />
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Graph recommendation</p>
+        <p className="mt-2 text-sm font-semibold text-slate-600">No recommendation is ready for this subject yet.</p>
+      </div>
+    );
+  }
 
   const hasPrereqGap = safeArray(recommendation.prereq_gaps).length > 0;
   const blockingLabels = safeArray(recommendation.prereq_gap_labels);
-  const scopeWarning = recommendation.scope_warning || null;
-  const unmappedTopics = safeArray(recommendation.unmapped_topic_titles);
   const recommendedTopicId = recommendation.recommended_topic_id || null;
-
-  const title = recommendation.recommended_topic_title
-    || recommendation.recommended_concept_label
-    || recommendation.reason
-    || 'Graph recommendation unavailable';
-  const subtitle = hasPrereqGap && blockingLabels.length
-    ? `Rebuild ${blockingLabels[0]} before moving deeper.`
-    : recommendation.recommended_concept_label
-      ? `Current concept focus: ${recommendation.recommended_concept_label}`
-      : 'Graph sequencing is using your mastery evidence to choose the best next step.';
   const story = recommendationStory || null;
-  const primaryActionLabel = story?.action_label || (hasPrereqGap ? 'Repair prerequisite' : 'Open next unlock');
+
+  const title = story?.headline
+    || recommendation.recommended_topic_title
+    || recommendation.recommended_concept_label
+    || 'Recommended next lesson';
+
+  const subtitle = story?.supporting_reason
+    || recommendation.reason
+    || 'Use this next graph-backed move to keep progressing.';
+
+  const actionLabel = story?.action_label || (hasPrereqGap ? 'Repair first' : 'Open lesson');
 
   return (
-    <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 w-full lg:w-80 flex flex-col justify-between relative overflow-hidden">
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <span className="bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">
-            AI Recommended
-          </span>
-          <span className="text-xs text-gray-400">Just updated</span>
+    <aside className="w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:w-[320px]">
+      <div className="border-b border-slate-100 px-5 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-700">
+            <GitBranch className="h-3.5 w-3.5" />
+            Graph recommendation
+          </div>
+          <span className="text-[11px] font-semibold text-slate-400">Now</span>
         </div>
-        
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-          {hasPrereqGap ? "Prerequisite bridge" : "Why you should study this next"}
-        </p>
-        
-        <h3 className="text-lg font-bold text-gray-900 mb-2">{story?.headline || title}</h3>
-        <p className="text-sm font-medium text-gray-600 mb-3">{subtitle}</p>
-        
+        <h3 className="mt-3 text-lg font-black text-slate-900">{title}</h3>
+        <p className="mt-2 text-sm leading-6 text-slate-600">{subtitle}</p>
+      </div>
+
+      <div className="space-y-4 px-5 py-4">
         {hasPrereqGap && (
-          <div className="inline-flex items-center gap-1.5 bg-yellow-50 text-yellow-700 text-xs px-2.5 py-1 rounded-md mb-3 font-medium">
-            <div className="w-1.5 h-1.5 rounded-full bg-yellow-500"></div>
-            Prerequisite gap identified
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Repair blocker</div>
+            <p className="mt-2 text-sm font-semibold text-amber-900">{blockingLabels[0] || 'Prerequisite gap detected'}</p>
           </div>
         )}
 
         {!hasPrereqGap && recommendation.recommended_concept_label && (
-          <div className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 text-xs px-2.5 py-1 rounded-md mb-3 font-medium">
-            <GitBranch className="w-3.5 h-3.5" />
-            Focus concept: {recommendation.recommended_concept_label}
-          </div>
-        )}
-        
-        <p className="text-sm text-gray-500 leading-relaxed mb-4">
-          {story?.supporting_reason || recommendation.reason}
-        </p>
-
-        {blockingLabels.length > 0 && (
-          <div className="mb-4 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
-            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Blocking concepts</div>
-            <p className="mt-2 text-xs font-semibold leading-6 text-amber-900">{blockingLabels.join(', ')}</p>
-          </div>
-        )}
-
-        {story?.next_concept_label && !hasPrereqGap && (
-          <div className="mb-4 rounded-2xl border border-cyan-100 bg-cyan-50 px-4 py-3">
-            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-700">Best next concept</div>
-            <p className="mt-2 text-xs font-semibold leading-6 text-cyan-900">{story.next_concept_label}</p>
+          <div className="rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3">
+            <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-700">
+              <Brain className="h-3.5 w-3.5" />
+              Focus concept
+            </div>
+            <p className="mt-2 text-sm font-semibold text-indigo-900">{recommendation.recommended_concept_label}</p>
           </div>
         )}
 
         {recentEvidence && (
-          <div className="mb-4 rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3">
-            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600">Latest evidence</div>
-            <p className="mt-2 text-xs leading-6 text-indigo-900">{recentEvidence.summary}</p>
-            {(recentEvidence.strongest_gain_concept_label || recentEvidence.strongest_drop_concept_label) && (
-              <p className="mt-2 text-[11px] font-semibold leading-5 text-indigo-700">
-                {recentEvidence.strongest_gain_concept_label ? `Gain: ${recentEvidence.strongest_gain_concept_label}` : 'No recent gain'}
-                {recentEvidence.strongest_drop_concept_label ? ` · Gap: ${recentEvidence.strongest_drop_concept_label}` : ''}
-              </p>
-            )}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Latest evidence</div>
+            <p className="mt-2 text-sm leading-6 text-slate-700">{recentEvidence.summary}</p>
           </div>
         )}
 
-        {story?.evidence_summary && !recentEvidence && (
-          <div className="mb-4 rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3">
-            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600">Latest evidence</div>
-            <p className="mt-2 text-xs leading-6 text-indigo-900">{story.evidence_summary}</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Threshold</div>
+            <p className="mt-2 text-base font-black text-slate-900">70% mastery</p>
           </div>
-        )}
-
-        {scopeWarning && (
-          <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Scope warning</div>
-            <p className="mt-2 text-xs leading-6 text-slate-700">{scopeWarning}</p>
-            {unmappedTopics.length > 0 && (
-              <p className="mt-2 text-[11px] font-semibold leading-5 text-slate-600">
-                Pending mapping: {unmappedTopics.join(', ')}
-              </p>
-            )}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Subject</div>
+            <p className="mt-2 text-base font-black capitalize text-slate-900">{currentSubject}</p>
           </div>
-        )}
-      </div>
-
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-bold text-gray-900">Mastery Threshold Target</span>
-          <span className="text-xl font-bold text-indigo-600">70%</span>
         </div>
-        <div className="h-2 w-full bg-gray-100 rounded-full mb-4 overflow-hidden">
-          <div className="h-full bg-indigo-600 rounded-full" style={{ width: '70%' }}></div>
-        </div>
-        
-        <button 
+
+        <button
+          type="button"
           onClick={async () => {
-            if (recommendedTopicId) {
-              await prewarmTopics({
-                apiUrl,
-                token,
-                studentId: activeId,
-                subject: currentSubject,
-                sssLevel: currentLevel,
-                term: currentTerm,
-                topicIds: [recommendedTopicId],
-              });
-              navigate(`/lesson/${recommendedTopicId}`);
-            }
+            if (!recommendedTopicId) return;
+            await prewarmTopics({
+              apiUrl,
+              token,
+              studentId: activeId,
+              subject: currentSubject,
+              sssLevel: currentLevel,
+              term: currentTerm,
+              topicIds: [recommendedTopicId],
+            });
+            navigate(`/lesson/${recommendedTopicId}`);
           }}
           disabled={!recommendedTopicId}
-          className={`w-full py-2.5 rounded-xl font-semibold text-sm transition-colors flex items-center justify-center gap-2 ${
+          className={`inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-black transition ${
             recommendedTopicId
-              ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 cursor-pointer'
-              : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+              ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+              : 'cursor-not-allowed bg-slate-100 text-slate-400'
           }`}
         >
           {recommendedTopicId ? (
             <>
-              {primaryActionLabel} <ChevronRight className="w-4 h-4" />
+              <Sparkles className="h-4 w-4" />
+              {actionLabel}
+              <ChevronRight className="h-4 w-4" />
             </>
           ) : (
             <>
-              Graph recommendation unavailable <Lock className="w-4 h-4" />
+              <Lock className="h-4 w-4" />
+              No lesson ready
             </>
           )}
         </button>
       </div>
-      <Brain className="absolute -right-4 top-4 w-24 h-24 text-gray-50 opacity-[0.03] pointer-events-none" />
-    </div>
+    </aside>
   );
 }
-

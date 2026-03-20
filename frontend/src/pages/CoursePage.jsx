@@ -7,6 +7,7 @@ import InterventionTimeline from '../components/InterventionTimeline';
 import { PlayCircle, Clock, BookOpen, GitBranch, Lock, Sparkles } from 'lucide-react';
 import { API_URL } from '../config/runtime';
 import { resolveStudentId } from '../utils/sessionIdentity';
+import { apiFetchJson } from '../services/api';
 import {
   buildGraphInterventionScope,
   readGraphIntervention,
@@ -77,6 +78,7 @@ const CoursePage = () => {
   const [learningGapSummary, setLearningGapSummary] = useState(null);
   const [initialLessonPlan, setInitialLessonPlan] = useState(null);
   const [mapError, setMapError] = useState('');
+  const [bootstrapError, setBootstrapError] = useState('');
   const [graphIntervention, setGraphIntervention] = useState(null);
 
   const apiUrl = API_URL;
@@ -110,6 +112,7 @@ const CoursePage = () => {
     const fetchTopicsList = async () => {
       setIsLoading(true);
       setMapError('');
+      setBootstrapError('');
 
       try {
         const bootstrapParams = new URLSearchParams({
@@ -117,18 +120,9 @@ const CoursePage = () => {
           subject: subject,
           term: currentTerm,
         });
-        const response = await fetch(`${apiUrl}/learning/course/bootstrap?${bootstrapParams.toString()}`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+        const data = await apiFetchJson(`/learning/course/bootstrap?${bootstrapParams.toString()}`, {
+          token,
         });
-        if (!response.ok) {
-          throw new Error('Failed to fetch course bootstrap');
-        }
-
-        const data = await response.json();
         localStorage.setItem('active_subject', subject);
         setTopics(safeArray(data?.topics));
         setNextStep(data?.next_step || null);
@@ -143,6 +137,7 @@ const CoursePage = () => {
 
       } catch (err) {
         console.error("CoursePage Error:", err);
+        setBootstrapError(err.message || 'Course bootstrap failed.');
         setTopics([]);
         setNextStep(null);
         setRecentEvidence(null);
@@ -170,7 +165,7 @@ const CoursePage = () => {
   );
 
   return (
-    <div className="flex bg-slate-50 h-[calc(100vh-64px)] overflow-hidden">
+    <div className="flex min-h-[calc(100vh-64px)] flex-col bg-slate-50 lg:h-[calc(100vh-64px)] lg:flex-row lg:overflow-hidden">
       
       {/* Sidebar */}
       <CourseSidebar 
@@ -181,19 +176,20 @@ const CoursePage = () => {
       />
       
       {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto px-8 py-10 lg:px-12">
-        <div className="max-w-4xl mx-auto">
+      <div className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:overflow-y-auto lg:px-8">
+        <div className="mx-auto max-w-5xl">
           
-          <div className="mb-10">
-            <h1 className="text-4xl font-black text-slate-900 mb-3 capitalize">{subject} Learning Path</h1>
-            <p className="text-slate-500 text-lg">Follow this AI-curated syllabus to achieve mastery in {currentLevel} {subject}.</p>
+          <div className="mb-6">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Subject path</p>
+            <h1 className="mt-2 text-2xl font-black capitalize text-slate-900 sm:text-[2.5rem]">{subject} learning path</h1>
+            <p className="mt-2 text-sm leading-6 text-slate-500">Graph-backed lessons for {currentLevel} {subject}, ordered by readiness and prerequisite strength.</p>
           </div>
 
           {effectiveAnalytics && (
-            <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
                 <GitBranch className="h-3.5 w-3.5 text-indigo-500" />
-                Live intervention state
+                Current graph signal
                 {effectiveAnalytics.source_label && (
                   <span className="rounded-full bg-indigo-50 px-2 py-1 text-[10px] text-indigo-700">
                     {effectiveAnalytics.source_label}
@@ -218,14 +214,14 @@ const CoursePage = () => {
           )}
 
           {(initialLessonPlan || learningGapSummary) && (
-            <div className="mb-6 rounded-3xl border border-indigo-200 bg-gradient-to-r from-indigo-50 via-white to-sky-50 p-6 shadow-sm">
+            <div className="mb-5 rounded-2xl border border-indigo-200 bg-gradient-to-r from-indigo-50 via-white to-sky-50 p-4 shadow-sm">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="max-w-2xl">
                   <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-700">
                     <GitBranch className="h-3.5 w-3.5" />
                     Baseline lesson plan
                   </div>
-                  <h2 className="mt-3 text-2xl font-black text-slate-900">
+                  <h2 className="mt-3 text-lg font-black text-slate-900 sm:text-xl">
                     {initialLessonPlan?.recommended_topic_title
                       || learningGapSummary?.recommended_start_topic_title
                       || `Start rebuilding ${subject}`}
@@ -260,7 +256,7 @@ const CoursePage = () => {
           )}
 
           {evidenceSummary && (
-            <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
                 <GitBranch className="h-3.5 w-3.5 text-emerald-500" />
                 Mastery evidence snapshot
@@ -281,14 +277,14 @@ const CoursePage = () => {
           )}
 
           {effectiveNextStep && (
-            <div className="mb-6 rounded-3xl border border-indigo-200 bg-gradient-to-r from-indigo-50 via-white to-sky-50 p-6 shadow-sm">
+            <div className="mb-5 rounded-2xl border border-indigo-200 bg-gradient-to-r from-indigo-50 via-white to-sky-50 p-4 shadow-sm">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="max-w-2xl">
                   <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-700">
                     <GitBranch className="h-3.5 w-3.5" />
                     Next best move
                   </div>
-                  <h2 className="mt-3 text-2xl font-black text-slate-900">
+                  <h2 className="mt-3 text-lg font-black text-slate-900 sm:text-xl">
                     {effectiveRecommendationStory?.headline || effectiveNextStep.recommended_topic_title || effectiveNextStep.recommended_concept_label || effectiveNextStep.reason || 'Graph recommendation unavailable'}
                   </h2>
                   <p className="mt-2 text-sm leading-7 text-slate-600">{effectiveRecommendationStory?.supporting_reason || effectiveNextStep.reason}</p>
@@ -340,23 +336,23 @@ const CoursePage = () => {
           )}
 
           {effectiveRecentEvidence && (
-            <div className="mb-6 rounded-3xl border border-indigo-100 bg-white p-5 shadow-sm">
+            <div className="mb-5 rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm">
               <div className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600">Latest evidence</div>
               <p className="mt-2 text-sm leading-7 text-slate-700">{effectiveRecentEvidence.summary}</p>
               {(effectiveRecentEvidence.strongest_gain_concept_label || effectiveRecentEvidence.strongest_drop_concept_label) && (
                 <p className="mt-3 text-xs font-semibold text-slate-500">
                   {effectiveRecentEvidence.strongest_gain_concept_label ? `Gain: ${effectiveRecentEvidence.strongest_gain_concept_label}` : 'No recent gain'}
-                  {effectiveRecentEvidence.strongest_drop_concept_label ? ` · Gap: ${effectiveRecentEvidence.strongest_drop_concept_label}` : ''}
+                  {effectiveRecentEvidence.strongest_drop_concept_label ? ` - Gap: ${effectiveRecentEvidence.strongest_drop_concept_label}` : ''}
                 </p>
               )}
             </div>
           )}
 
           {effectiveTimeline.length > 0 && (
-            <div className="mb-6">
+            <div className="mb-5">
               <InterventionTimeline
                 title="Evidence Timeline"
-                subtitle="Recent mastery evidence for this subject scope, straight from the backend graph state."
+                subtitle="Recent quiz and checkpoint evidence guiding this subject path."
                 timeline={effectiveTimeline}
               />
             </div>
@@ -368,14 +364,25 @@ const CoursePage = () => {
             </div>
           )}
 
-          {isLoading ? (
-            <div className="space-y-4 animate-pulse">
+          {bootstrapError && !isLoading ? (
+            <div className="rounded-2xl border border-rose-200 bg-white px-6 py-8 text-center shadow-sm">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-rose-50 text-rose-400">
+                <BookOpen className="h-10 w-10" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-800">Course bootstrap failed</h3>
+              <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-500">{bootstrapError}</p>
+              <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-400">
+                The subject path could not load from the backend for this scope, so we are not treating it as an empty syllabus.
+              </p>
+            </div>
+          ) : isLoading ? (
+            <div className="space-y-3 animate-pulse">
                {[1,2,3,4].map(i => (
-                 <div key={i} className="h-28 bg-white border border-slate-200 rounded-2xl w-full"></div>
+                 <div key={i} className="h-24 w-full rounded-2xl border border-slate-200 bg-white"></div>
                ))}
             </div>
           ) : displayTopics.length > 0 ? (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {displayTopics.map((topic, index) => {
                 const targetId = topic.topic_id || topic.id;
                 const currentStatus = topic.status || 'pending';
@@ -400,10 +407,10 @@ const CoursePage = () => {
                   <div 
                     key={targetId || index} 
                     onClick={openTopic}
-                    className={`p-6 rounded-2xl border-2 bg-white transition-all group flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                    className={`group flex flex-col justify-between gap-4 rounded-2xl border bg-white p-4 transition-all md:flex-row md:items-center ${
                       isLocked ? 'opacity-75 cursor-not-allowed border-slate-200' : 'cursor-pointer hover:shadow-md'
                     } ${
-                      isRecommended ? 'border-indigo-400 shadow-[0_18px_50px_rgba(99,102,241,0.12)]' : cardStyle.includes('border-') ? cardStyle.split(' ')[0] : 'border-slate-200'
+                      isRecommended ? 'border-indigo-300 shadow-[0_18px_50px_rgba(99,102,241,0.10)]' : cardStyle.includes('border-') ? cardStyle.split(' ')[0] : 'border-slate-200'
                     }`}
                   >
                     <div className="flex items-start gap-5">
@@ -429,18 +436,12 @@ const CoursePage = () => {
                             </span>
                           )}
                         </div>
-                        <h3 className="text-lg font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                        <h3 className="text-[15px] font-bold text-slate-900 transition-colors group-hover:text-indigo-600 md:text-base">
                             {topic.title || 'Untitled Topic'}
                         </h3>
                         <p className="text-sm text-slate-500 mt-1 line-clamp-2 max-w-xl">
                             {topic.graph_details || topic.description || topic.lesson_unavailable_reason || 'Topic context unavailable.'}
                         </p>
-                        {topic.concept_label && (
-                          <p className="mt-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
-                            Concept focus: {topic.concept_label}
-                          </p>
-                        )}
-                        
                         <div className="flex items-center gap-4 mt-3">
                            {topic.estimated_duration_minutes && (
                               <span className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
@@ -461,7 +462,7 @@ const CoursePage = () => {
                       </div>
                     </div>
 
-                    <button className={`flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-colors md:w-auto w-full ${
+                    <button className={`flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-bold transition-colors md:w-auto ${
                       isLocked
                         ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                         : 'bg-slate-100 text-slate-600 group-hover:bg-indigo-600 group-hover:text-white'
@@ -473,12 +474,14 @@ const CoursePage = () => {
               })}
             </div>
           ) : (
-             <div className="text-center py-16 bg-white rounded-3xl border border-slate-200 shadow-sm">
-                 <div className="w-20 h-20 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mx-auto mb-4">
+             <div className="rounded-2xl border border-slate-200 bg-white py-10 text-center shadow-sm">
+                 <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-50 text-slate-300">
                     <BookOpen className="w-10 h-10" />
                  </div>
-                 <h3 className="text-xl font-bold text-slate-800 mb-2">No Topics Available</h3>
-                 <p className="text-slate-500 max-w-md mx-auto">Your AI Tutor is still finalizing the syllabus for {currentLevel} {subject} Term {currentTerm}. Please check back soon!</p>
+                 <h3 className="mb-2 text-lg font-bold text-slate-800">No topics available</h3>
+                 <p className="mx-auto max-w-md text-sm leading-6 text-slate-500">
+                   No approved mapped topics were returned for {currentLevel} {subject} Term {currentTerm}. This scope needs real backend data before a lesson can open.
+                 </p>
              </div>
           )}
         </div>
@@ -488,3 +491,4 @@ const CoursePage = () => {
 };
 
 export default CoursePage;
+
