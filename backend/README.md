@@ -19,10 +19,10 @@ Create `backend/.env` from `backend/.env.example`.
 Minimum required for local run:
 
 ```env
-DATABASE_URL=postgresql://postgres:password@localhost:5432/mastery_ai
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/mastery_ai
 JWT_SECRET=change_me
-AI_CORE_BASE_URL=http://127.0.0.1:10000
-CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000
+AI_CORE_BASE_URL=http://127.0.0.1:10001
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174
 INTERNAL_SERVICE_KEY=replace_with_shared_secret
 ```
 
@@ -96,7 +96,7 @@ Integration tests require PostgreSQL. Use a dedicated test DB whenever possible.
 
 ```powershell
 # Preferred: isolated test database
-$env:TEST_DATABASE_URL="postgresql://postgres:password@localhost:5432/mastery_ai_test"
+$env:TEST_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:55432/mastery_ai_test"
 python -m pytest -q backend/tests
 
 # Optional: reuse dev DATABASE_URL (explicit opt-in, modifies data)
@@ -141,16 +141,16 @@ Important:
 From repository root:
 
 ```bash
-python -m uvicorn backend.main:app --reload --port 8000
+python -m uvicorn backend.main:app --reload --port 8001
 ```
 
 Swagger:
 
-- `http://127.0.0.1:8000/docs`
+- `http://127.0.0.1:8001/docs`
 
 Health:
 
-- `http://127.0.0.1:8000/api/v1/system/health`
+- `http://127.0.0.1:8001/api/v1/system/health`
 
 The backend health payload now includes:
 

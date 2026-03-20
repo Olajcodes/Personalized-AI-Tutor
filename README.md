@@ -116,7 +116,7 @@ Set required secrets/URLs, especially:
 - `backend/.env`
   - `DATABASE_URL`
   - `JWT_SECRET`
-  - `AI_CORE_BASE_URL` (local default: `http://127.0.0.1:10000`)
+  - `AI_CORE_BASE_URL` (local default: `http://127.0.0.1:10001`)
   - `CORS_ORIGINS` (include local frontend + production frontend domain)
   - `INTERNAL_SERVICE_KEY` (must match ai-core)
 - `ai_core/.env`
@@ -126,8 +126,8 @@ Set required secrets/URLs, especially:
   - `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION`
   - `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`
 - `frontend/.env`
-  - `VITE_API_URL=http://127.0.0.1:8000/api/v1`
-  - `VITE_AI_CORE_URL=http://127.0.0.1:10000`
+  - `VITE_API_URL=http://127.0.0.1:8001/api/v1`
+  - `VITE_AI_CORE_URL=http://127.0.0.1:10001`
   - any auth-related frontend variables already used by your UI
 
 ### 5) Apply database migrations
@@ -169,13 +169,13 @@ Notes:
 Backend:
 
 ```bash
-python -m uvicorn backend.main:app --reload --port 8000
+python -m uvicorn backend.main:app --reload --port 8001
 ```
 
 AI Core:
 
 ```bash
-python -m uvicorn ai_core.main:app --reload --port 10000
+python -m uvicorn ai_core.main:app --reload --port 10001
 ```
 
 Frontend:
@@ -187,9 +187,9 @@ npm run dev
 
 ## Health Checks
 
-- Backend Swagger: `http://127.0.0.1:8000/docs`
-- Backend health: `http://127.0.0.1:8000/api/v1/system/health`
-- AI Core health: `http://127.0.0.1:10000/health`
+- Backend Swagger: `http://127.0.0.1:8001/docs`
+- Backend health: `http://127.0.0.1:8001/api/v1/system/health`
+- AI Core health: `http://127.0.0.1:10001/health`
 
 Health payloads now expose runtime visibility, not only dependency checks:
 
@@ -215,13 +215,13 @@ Student routes now include a collapsible runtime dock for presentation/debug use
 If ai-core runtime is not visible in the dock, set:
 
 ```env
-VITE_AI_CORE_URL=http://127.0.0.1:10000
+VITE_AI_CORE_URL=http://127.0.0.1:10001
 ```
 
 You can also override it temporarily in the browser:
 
 ```js
-localStorage.setItem('mastery_ai_core_url', 'http://127.0.0.1:10000')
+localStorage.setItem('mastery_ai_core_url', 'http://127.0.0.1:10001')
 ```
 
 ## Production Notes
