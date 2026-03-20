@@ -86,11 +86,11 @@ export default function GraphBriefingPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 p-4 print:bg-white print:p-0 sm:p-6">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <div className="flex flex-col gap-4 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm print:hidden">
+      <div className="mx-auto max-w-5xl space-y-5">
+        <div className="flex flex-col gap-4 rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm print:hidden">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-black text-slate-900">Learning path briefing</h1>
+              <h1 className="text-xl font-black text-slate-900 sm:text-2xl">Learning path briefing</h1>
               <p className="mt-1 text-sm text-slate-500">
                 Print-friendly graph-backed summary of what to learn next, what is blocking you, and what recent evidence changed.
               </p>
@@ -135,23 +135,23 @@ export default function GraphBriefingPage() {
         </div>
 
         {isLoading ? (
-          <div className="flex min-h-[320px] flex-col items-center justify-center rounded-[28px] border border-slate-200 bg-white text-slate-400 shadow-sm">
+          <div className="flex min-h-[280px] flex-col items-center justify-center rounded-[24px] border border-slate-200 bg-white text-slate-400 shadow-sm">
             <Loader2 className="mb-3 h-10 w-10 animate-spin text-indigo-500" />
             <p className="text-sm font-semibold">Preparing graph briefing...</p>
           </div>
         ) : error ? (
-          <div className="rounded-[28px] border border-rose-200 bg-rose-50 p-6 text-sm font-semibold text-rose-700">
+          <div className="rounded-[24px] border border-rose-200 bg-rose-50 p-5 text-sm font-semibold text-rose-700">
             {error}
           </div>
         ) : !briefing ? (
-          <div className="rounded-[28px] border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500 shadow-sm">
+          <div className="rounded-[24px] border border-slate-200 bg-white p-5 text-sm font-semibold text-slate-500 shadow-sm">
             No graph briefing is available yet.
           </div>
         ) : (
           <div className="space-y-6">
-            <section className="rounded-[28px] border border-slate-200 bg-white p-8 shadow-sm print:shadow-none">
+            <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm print:shadow-none sm:p-7">
               <p className="text-[11px] font-black uppercase tracking-[0.2em] text-indigo-500">Student graph briefing</p>
-              <h2 className="mt-3 text-3xl font-black text-slate-900">{briefing.title}</h2>
+              <h2 className="mt-3 text-2xl font-black text-slate-900 sm:text-3xl">{briefing.title}</h2>
               <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">{briefing.subtitle}</p>
               <div className="mt-6 grid gap-4 md:grid-cols-3">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -173,7 +173,7 @@ export default function GraphBriefingPage() {
 
             <section className="grid gap-5 lg:grid-cols-2">
               {(briefing.sections || []).map((section) => (
-                <div key={section.title} className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm print:break-inside-avoid print:shadow-none">
+                <div key={section.title} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm print:break-inside-avoid print:shadow-none">
                   <h3 className="text-sm font-black uppercase tracking-[0.18em] text-slate-500">{section.title}</h3>
                   <div className="mt-4 space-y-3">
                     {(section.items || []).length ? (
@@ -190,7 +190,7 @@ export default function GraphBriefingPage() {
               ))}
             </section>
 
-            <section className="rounded-[28px] border border-slate-200 bg-slate-950 p-6 shadow-sm print:hidden">
+            <section className="rounded-[24px] border border-slate-200 bg-slate-950 p-5 shadow-sm print:hidden">
               <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Markdown source</p>
               <pre className="mt-4 overflow-x-auto whitespace-pre-wrap text-xs leading-6 text-slate-200">
                 {briefing.markdown}

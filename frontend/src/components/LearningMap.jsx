@@ -73,6 +73,51 @@ function MapNode({ node, isLast, isRecommended, isSelected, onSelectNode }) {
   );
 }
 
+function MobileNodeCard({ node, isRecommended, isSelected, onSelectNode, isLast }) {
+  const Icon = statusIcon[node.status] || Brain;
+  const style = statusStyles[node.status] || statusStyles.locked;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelectNode(node)}
+      className={`relative w-full rounded-2xl border px-4 py-4 text-left shadow-sm transition ${style} ${
+        isRecommended ? 'ring-2 ring-indigo-200 ring-offset-2' : ''
+      } ${isSelected ? 'ring-2 ring-slate-900/10 ring-offset-2' : ''}`}
+    >
+      {!isLast && <div className="absolute left-[1.8rem] top-full h-5 w-px bg-slate-200" />}
+      <div className="flex items-start gap-3">
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border bg-white ${
+          node.status === 'current'
+            ? 'border-indigo-300 text-indigo-600'
+            : node.status === 'mastered'
+              ? 'border-emerald-300 text-emerald-600'
+              : node.status === 'ready'
+                ? 'border-sky-300 text-sky-600'
+                : node.status === 'unmapped'
+                  ? 'border-amber-300 text-amber-600'
+                  : 'border-slate-200 text-slate-400'
+        }`}>
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h4 className="text-sm font-black leading-tight">{node.title}</h4>
+            <span className="rounded-full bg-white/80 px-2 py-1 text-[10px] font-black uppercase tracking-[0.14em]">
+              {node.status}
+            </span>
+          </div>
+          <p className="mt-2 text-xs leading-6 opacity-90">{node.details || 'Graph state unavailable.'}</p>
+          <div className="mt-3 flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.12em]">
+            <span>{Math.round((node.mastery_score || 0) * 100)}% mastery</span>
+            <span>{isSelected ? 'Inspecting' : 'Inspect'}</span>
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
 export default function LearningMap({ classLevel = 'SSS 2', subject = 'Mathematics', mapData = {}, onSelectTopic = null }) {
   const nodes = safeArray(mapData?.nodes);
   const edges = safeArray(mapData?.edges);
@@ -123,7 +168,25 @@ export default function LearningMap({ classLevel = 'SSS 2', subject = 'Mathemati
         )}
       </div>
 
-      <div className="mb-5 flex snap-x gap-4 overflow-x-auto pb-4">
+      <div className="mb-5 space-y-3 lg:hidden">
+        {nodes.map((node, index) => (
+          <MobileNodeCard
+            key={node.topic_id || node.concept_id || index}
+            node={node}
+            isLast={index === nodes.length - 1}
+            isRecommended={Boolean(nextStep?.recommended_topic_id && nextStep.recommended_topic_id === node.topic_id)}
+            isSelected={Boolean(selectedNode && (selectedNode.topic_id || selectedNode.concept_id) === (node.topic_id || node.concept_id))}
+            onSelectNode={(nextNode) => setSelectedNodeId(nextNode.topic_id || nextNode.concept_id)}
+          />
+        ))}
+        {nodes.length === 0 && (
+          <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-400">
+            Learning map unavailable for this scope.
+          </div>
+        )}
+      </div>
+
+      <div className="mb-5 hidden snap-x gap-4 overflow-x-auto pb-4 lg:flex">
         {nodes.map((node, index) => (
           <MapNode
             key={node.topic_id || node.concept_id || index}
@@ -183,7 +246,7 @@ export default function LearningMap({ classLevel = 'SSS 2', subject = 'Mathemati
             <p className="mt-2 text-sm leading-6 text-slate-600">
               {selectedNode.details || 'This node is part of your graph-backed course path.'}
             </p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
                 <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Concept</div>
                 <p className="mt-2 text-sm font-semibold text-slate-800">{selectedNode.concept_label || 'Topic focus'}</p>

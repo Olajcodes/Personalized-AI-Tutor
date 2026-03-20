@@ -1567,10 +1567,11 @@ export default function LessonPage() {
       <button
         type="button"
         onClick={() => setIsTutorOpen((prev) => !prev)}
-        className="fixed bottom-4 right-4 z-[70] inline-flex items-center gap-3 rounded-full bg-slate-950 px-3.5 py-3 text-sm font-black text-white shadow-2xl shadow-slate-950/20 transition hover:bg-slate-900"
+        aria-label={isTutorOpen ? 'Close AI tutor' : 'Open AI tutor'}
+        className="fixed bottom-4 right-4 z-[70] inline-flex items-center gap-2 rounded-full bg-slate-950 px-3 py-3 text-sm font-black text-white shadow-2xl shadow-slate-950/20 transition hover:bg-slate-900 md:bottom-6 md:right-6 md:gap-3 md:px-3.5"
       >
-        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[radial-gradient(circle_at_top_left,_#8b5cf6,_#4f46e5)] text-white shadow-lg shadow-indigo-950/20">
-          <Bot size={20} />
+        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[radial-gradient(circle_at_top_left,_#8b5cf6,_#4f46e5)] text-white shadow-lg shadow-indigo-950/20">
+          <Bot size={19} />
         </span>
         <span className="hidden md:inline">AI Tutor</span>
       </button>
@@ -1583,15 +1584,15 @@ export default function LessonPage() {
             className="fixed inset-0 z-[74] bg-slate-950/35 backdrop-blur-[2px]"
             aria-label="Close tutor drawer"
           />
-          <section className="fixed bottom-3 right-3 z-[75] flex h-[min(78dvh,760px)] w-[min(96vw,390px)] flex-col overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-2xl shadow-slate-950/15 md:bottom-6 md:right-6">
-            <div className="border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.16),_transparent_42%),linear-gradient(135deg,#ffffff,_#f8fafc)] px-4 py-4">
+          <section className="fixed inset-x-3 bottom-3 z-[75] flex h-[min(78dvh,720px)] flex-col overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-2xl shadow-slate-950/15 md:inset-x-auto md:bottom-6 md:right-6 md:w-[min(92vw,390px)]">
+            <div className="border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.16),_transparent_42%),linear-gradient(135deg,#ffffff,_#f8fafc)] px-4 py-3.5">
               <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600 text-white">
                     <Bot size={18} />
                   </div>
-                  <div>
-                    <h2 className="text-sm font-black uppercase tracking-[0.2em] text-slate-700">AI Tutor</h2>
+                  <div className="min-w-0">
+                    <h2 className="text-sm font-black uppercase tracking-[0.18em] text-slate-700">AI Tutor</h2>
                     <p className="text-xs text-slate-500">{streamPhase || 'Lesson-aware, graph-grounded, and ready'}</p>
                   </div>
                 </div>
@@ -1606,8 +1607,8 @@ export default function LessonPage() {
               </div>
             </div>
 
-            <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
-              <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50 p-4">
+            <div className="flex-1 space-y-3 overflow-y-auto px-3.5 py-3.5">
+              <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50 p-3.5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Tutor mode</p>
@@ -1633,7 +1634,7 @@ export default function LessonPage() {
                     </button>
                   ))}
                 </div>
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={runModeAction}
@@ -1655,11 +1656,11 @@ export default function LessonPage() {
               </div>
 
               {quickActionSpotlight.primary && (
-                <div className={`rounded-[1.5rem] border p-4 ${spotlightToneStyles[quickActionSpotlight.tone] || spotlightToneStyles.indigo}`}>
+                <div className={`rounded-[1.5rem] border p-3.5 ${spotlightToneStyles[quickActionSpotlight.tone] || spotlightToneStyles.indigo}`}>
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-70">Best next move</p>
                   <h3 className="mt-2 text-base font-black">{quickActionSpotlight.headline}</h3>
                   <p className="mt-2 text-sm leading-6 opacity-90">{quickActionSpotlight.detail}</p>
-                  <div className="mt-4 flex flex-wrap gap-2">
+                  <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
                       disabled={isBusy}
@@ -1715,7 +1716,7 @@ export default function LessonPage() {
               </div>
 
               {pendingAssessment && (
-                <div className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50 p-4">
+                <div className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50 p-3.5">
                   <div className="mb-3 flex items-center gap-2 text-emerald-700">
                     <Target size={16} />
                     <p className="text-xs font-black uppercase tracking-[0.2em]">Checkpoint</p>
@@ -1737,7 +1738,7 @@ export default function LessonPage() {
               )}
 
               {lastAssessmentReview && (
-                <div className={`rounded-[1.5rem] border p-4 ${lastAssessmentReview.isCorrect ? 'border-indigo-200 bg-indigo-50' : 'border-amber-200 bg-amber-50'}`}>
+                <div className={`rounded-[1.5rem] border p-3.5 ${lastAssessmentReview.isCorrect ? 'border-indigo-200 bg-indigo-50' : 'border-amber-200 bg-amber-50'}`}>
                   <div className={`mb-3 flex items-center gap-2 ${lastAssessmentReview.isCorrect ? 'text-indigo-700' : 'text-amber-700'}`}>
                     {lastAssessmentReview.isCorrect ? <CheckCircle2 size={16} /> : <ShieldAlert size={16} />}
                     <p className="text-xs font-black uppercase tracking-[0.2em]">
@@ -1768,7 +1769,7 @@ export default function LessonPage() {
               )}
 
               {assessmentRecommendation && (
-                <div className={`rounded-[1.5rem] border p-4 ${
+                <div className={`rounded-[1.5rem] border p-3.5 ${
                   assessmentRecommendation.tone === 'amber'
                     ? 'border-amber-200 bg-amber-50'
                     : assessmentRecommendation.tone === 'rose'
@@ -1792,7 +1793,7 @@ export default function LessonPage() {
                 </div>
               )}
 
-              <div ref={scrollRef} className="space-y-4 rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
+              <div ref={scrollRef} className="space-y-3 rounded-[1.5rem] border border-slate-200 bg-slate-50 p-3.5">
                 {messages.map((item, index) => (
                   <MessageCard
                     key={item.id || `${item.role}-${index}`}
@@ -1817,7 +1818,7 @@ export default function LessonPage() {
               </div>
             </div>
 
-            <form onSubmit={(event) => { event.preventDefault(); sendChat(); }} className="border-t border-slate-100 px-4 py-4">
+            <form onSubmit={(event) => { event.preventDefault(); sendChat(); }} className="border-t border-slate-100 px-3.5 py-3.5">
               <div className="rounded-[1.5rem] border border-slate-200 bg-white p-3 shadow-sm">
                 <textarea value={chatInput} onChange={(event) => setChatInput(event.target.value)} rows={3} placeholder="Ask about this lesson, a prerequisite, or how this unlocks the next concept..." className="w-full resize-none border-none bg-transparent px-1 py-1 text-sm text-slate-700 outline-none" />
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
@@ -1915,25 +1916,26 @@ export default function LessonPage() {
                 <button
                   type="button"
                   onClick={() => navigate(`/graph-path?subject=${encodeURIComponent(currentSubject)}`)}
-                  className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   <GitBranch size={15} />
-                  Graph view
+                  <span className="hidden sm:inline">Graph view</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsTutorOpen(true)}
-                  className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   <Bot size={15} />
-                  Tutor
+                  <span className="hidden sm:inline">Tutor</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => navigate(`/quiz/${topicId}`)}
-                  className="inline-flex h-10 items-center gap-2 rounded-2xl bg-indigo-600 px-4 text-sm font-bold text-white hover:bg-indigo-700"
+                  className="inline-flex h-10 items-center gap-2 rounded-2xl bg-indigo-600 px-3.5 text-sm font-bold text-white hover:bg-indigo-700"
                 >
-                  Take quiz
+                  <span className="hidden sm:inline">Take quiz</span>
+                  <span className="sm:hidden">Quiz</span>
                   <ArrowRight size={15} />
                 </button>
               </div>
@@ -1948,8 +1950,8 @@ export default function LessonPage() {
                 transition={{ duration: 0.28 }}
                 className="min-w-0 space-y-5"
               >
-                <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
-                  <div className="border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.14),_transparent_34%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-5 py-5 sm:px-6">
+                <section className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-sm">
+                  <div className="border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.14),_transparent_34%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-4 sm:px-5">
                     <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
                       <button
                         type="button"
@@ -1967,7 +1969,7 @@ export default function LessonPage() {
 
                     <div className="mt-4 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0 flex-1">
-                        <h1 className="max-w-4xl text-[2rem] font-black tracking-tight text-slate-950 sm:text-[2.3rem]">
+                        <h1 className="max-w-4xl text-[1.75rem] font-black tracking-tight text-slate-950 sm:text-[2.15rem]">
                           {lesson?.title || 'Lesson unavailable'}
                         </h1>
                         <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
@@ -1975,8 +1977,8 @@ export default function LessonPage() {
                         </p>
                       </div>
 
-                      <div className="grid w-full gap-3 sm:grid-cols-3 lg:w-[330px] lg:grid-cols-1">
-                        <div className="rounded-[1.25rem] border border-indigo-200 bg-indigo-50 p-4">
+                      <div className="grid w-full gap-2 sm:grid-cols-3 lg:w-[320px] lg:grid-cols-1">
+                        <div className="rounded-[1.25rem] border border-indigo-200 bg-indigo-50 p-3.5">
                           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-500">Best next move</p>
                           <p className="mt-2 text-sm font-semibold text-slate-900">
                             {quickActionSpotlight.primary?.label || 'Open the tutor and keep this topic moving.'}
@@ -1986,7 +1988,7 @@ export default function LessonPage() {
                           </p>
                         </div>
 
-                        <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
+                        <div className="rounded-[1.25rem] border border-slate-200 bg-white p-3.5">
                           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Assessment</p>
                           <p className={`mt-2 text-sm font-semibold ${
                             assessmentStatus.tone === 'emerald'
@@ -2002,7 +2004,7 @@ export default function LessonPage() {
                           <p className="mt-2 text-xs leading-6 text-slate-500">{assessmentStatus.detail}</p>
                         </div>
 
-                        <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
+                        <div className="rounded-[1.25rem] border border-slate-200 bg-white p-3.5">
                           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Next unlock</p>
                           <p className="mt-2 text-sm font-semibold text-slate-900">
                             {bootstrap?.next_unlock?.topic_title || 'Stay on this concept cluster'}
@@ -2014,7 +2016,7 @@ export default function LessonPage() {
                       </div>
                     </div>
 
-                    <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
                       <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Current focus</p>
                         <p className="mt-2 text-sm font-semibold text-slate-900">{graphPulse.currentLabel || lesson?.title || 'Current lesson'}</p>
@@ -2047,7 +2049,7 @@ export default function LessonPage() {
 
                 {(whyStory || evidenceSummary || recentEvidence || lastAssessmentReview) && (
                   <section className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_300px]">
-                    <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm">
                       <div className="flex items-center gap-2 text-indigo-600">
                         <Route size={16} />
                         <p className="text-[10px] font-black uppercase tracking-[0.18em]">Why this matters</p>
@@ -2069,7 +2071,7 @@ export default function LessonPage() {
                       </div>
                     </div>
 
-                    <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm">
                       <div className="flex items-center gap-2 text-slate-700">
                         <BrainCircuit size={16} />
                         <p className="text-[10px] font-black uppercase tracking-[0.18em]">Evidence snapshot</p>
@@ -2101,7 +2103,7 @@ export default function LessonPage() {
                   </section>
                 )}
 
-                <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+                <section className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex flex-col gap-4 border-b border-slate-100 pb-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Lesson sequence</p>
@@ -2145,7 +2147,7 @@ export default function LessonPage() {
                         const meta = lessonBlockMeta(block, index);
                         const text = lessonBlockText(block);
                         return (
-                          <article key={`${block.type}-${index}`} className={`rounded-[1.5rem] border p-4 shadow-sm ${meta.shellClass}`}>
+                          <article key={`${block.type}-${index}`} className={`rounded-[1.5rem] border p-3.5 shadow-sm ${meta.shellClass}`}>
                             <div className="flex flex-wrap items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${meta.eyebrowClass}`}>{meta.eyebrow}</p>
@@ -2156,8 +2158,8 @@ export default function LessonPage() {
                                 Step {index + 1}
                               </span>
                             </div>
-                            <div className={`mt-4 rounded-[1.25rem] p-4 ${meta.bodyClass}`}>
-                              <div className="whitespace-pre-wrap text-[15px] leading-8 text-slate-700">{text}</div>
+                            <div className={`mt-4 rounded-[1.25rem] p-3.5 ${meta.bodyClass}`}>
+                              <div className="whitespace-pre-wrap text-[15px] leading-7 text-slate-700">{text}</div>
                             </div>
                           </article>
                         );
@@ -2190,9 +2192,9 @@ export default function LessonPage() {
                 initial={{ opacity: 0, x: 12 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.28, delay: 0.04 }}
-                className="min-w-0 space-y-4 xl:sticky xl:top-20 xl:max-h-[calc(100vh-5.5rem)] xl:overflow-y-auto xl:pr-1"
+                className="min-w-0 space-y-3 xl:sticky xl:top-20 xl:max-h-[calc(100vh-5.5rem)] xl:overflow-y-auto xl:pr-1"
               >
-                <section className="rounded-[1.75rem] border border-indigo-200 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.16),_transparent_42%),linear-gradient(180deg,#ffffff_0%,#eef2ff_100%)] p-5 shadow-sm">
+                <section className="rounded-[1.75rem] border border-indigo-200 bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.16),_transparent_42%),linear-gradient(180deg,#ffffff_0%,#eef2ff_100%)] p-4 shadow-sm">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-500">Graph rail pulse</p>
@@ -2234,7 +2236,7 @@ export default function LessonPage() {
                   onSelectConcept={setSelectedGraphConcept}
                 />
 
-                <section className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm">
+                <section className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center gap-2">
                     <BrainCircuit className="text-indigo-600" size={16} />
                     <h2 className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Mastery overlay</h2>

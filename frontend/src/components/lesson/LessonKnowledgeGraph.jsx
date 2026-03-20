@@ -165,78 +165,129 @@ export default function LessonKnowledgeGraph({
       </div>
 
       <div className="overflow-hidden rounded-[1.5rem] border border-slate-100 bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_100%)] px-3 py-4">
-        <div className="mb-3 grid grid-cols-3 gap-2 px-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-          {roleOrder.map((role) => (
-            <div key={role} className="text-center">{ROLE_LABEL[role]}</div>
-          ))}
-        </div>
-
-        <svg viewBox="0 0 720 360" className="h-[360px] w-full">
-          <defs>
-            <linearGradient id="graphEdge" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#94a3b8" stopOpacity="0.36" />
-              <stop offset="50%" stopColor="#6366f1" stopOpacity="0.7" />
-              <stop offset="100%" stopColor="#22c55e" stopOpacity="0.44" />
-            </linearGradient>
-          </defs>
-
-          {renderedEdges.map((edge, index) => (
-            <motion.path
-              key={`${edge.source_concept_id}-${edge.target_concept_id}`}
-              d={edge.d}
-              fill="none"
-              stroke="url(#graphEdge)"
-              strokeWidth="3"
-              strokeLinecap="round"
-              initial={{ pathLength: 0, opacity: 0 }}
-              animate={{ pathLength: 1, opacity: 1 }}
-              transition={{ duration: 0.65, delay: index * 0.06 }}
-            />
-          ))}
-
-          {nodes.map((node, index) => {
-            const tone = MASTERY_TONE[node.mastery_state] || MASTERY_TONE.unassessed;
-            const labelLines = wrapLabel(node.label);
-            const isSelected = selectedNode?.concept_id === node.concept_id;
+        <div className="space-y-3 lg:hidden">
+          {roleOrder.map((role) => {
+            const columnNodes = grouped[role];
             return (
-              <motion.g
-                key={node.concept_id}
-                initial={{ opacity: 0, scale: 0.92, y: 12 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ duration: 0.34, delay: index * 0.05 }}
-                onClick={() => setSelectedConceptId(node.concept_id)}
-                className="cursor-pointer"
-              >
-                <motion.circle
-                  cx={node.x}
-                  cy={node.y}
-                  r={node.role === 'current' ? 42 : 34}
-                  fill={tone.halo}
-                  animate={node.role === 'current' ? { scale: [1, 1.08, 1] } : { scale: 1 }}
-                  transition={node.role === 'current' ? { repeat: Infinity, duration: 2.4, ease: 'easeInOut' } : undefined}
-                  style={{ transformOrigin: `${node.x}px ${node.y}px` }}
-                />
-                <circle
-                  cx={node.x}
-                  cy={node.y}
-                  r={node.role === 'current' ? 34 : 28}
-                  fill={tone.fill}
-                  stroke={tone.node}
-                  strokeDasharray={!node.is_unlocked && node.role === 'downstream' ? "6 5" : undefined}
-                  strokeWidth={isSelected ? "3.5" : "2.4"}
-                />
-                <text x={node.x} y={node.y - 5} textAnchor="middle" fontSize="11" fontWeight="800" fill={tone.text}>
-                  {labelLines.map((line, lineIndex) => (
-                    <tspan key={`${node.concept_id}-${lineIndex}`} x={node.x} dy={lineIndex === 0 ? 0 : 13}>{line}</tspan>
-                  ))}
-                </text>
-                <text x={node.x} y={node.y + 34} textAnchor="middle" fontSize="10" fontWeight="700" fill="#475569">
-                  {Math.round((node.mastery_score || 0) * 100)}% mastery
-                </text>
-              </motion.g>
+              <div key={role} className="rounded-2xl border border-slate-200 bg-white p-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{ROLE_LABEL[role]}</p>
+                <div className="mt-3 space-y-2">
+                  {columnNodes.length ? columnNodes.map((node) => {
+                    const tone = MASTERY_TONE[node.mastery_state] || MASTERY_TONE.unassessed;
+                    const isSelected = selectedNode?.concept_id === node.concept_id;
+                    return (
+                      <button
+                        key={node.concept_id}
+                        type="button"
+                        onClick={() => setSelectedConceptId(node.concept_id)}
+                        className={`w-full rounded-2xl border px-3 py-3 text-left transition ${
+                          isSelected ? 'border-indigo-300 bg-indigo-50 shadow-sm' : 'border-slate-200 bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div
+                            className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border"
+                            style={{ borderColor: tone.node, color: tone.text, backgroundColor: tone.fill }}
+                          >
+                            <Brain size={16} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-bold text-slate-900">{node.label}</p>
+                              <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                                {node.is_unlocked ? 'Open' : 'Locked'}
+                              </span>
+                            </div>
+                            <p className="mt-2 text-xs text-slate-500">{Math.round((node.mastery_score || 0) * 100)}% mastery</p>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  }) : (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-500">
+                      No nodes in this slice yet.
+                    </div>
+                  )}
+                </div>
+              </div>
             );
           })}
-        </svg>
+        </div>
+
+        <div className="hidden lg:block">
+          <div className="mb-3 grid grid-cols-3 gap-2 px-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+            {roleOrder.map((role) => (
+              <div key={role} className="text-center">{ROLE_LABEL[role]}</div>
+            ))}
+          </div>
+
+          <svg viewBox="0 0 720 360" className="h-[360px] w-full">
+            <defs>
+              <linearGradient id="graphEdge" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#94a3b8" stopOpacity="0.36" />
+                <stop offset="50%" stopColor="#6366f1" stopOpacity="0.7" />
+                <stop offset="100%" stopColor="#22c55e" stopOpacity="0.44" />
+              </linearGradient>
+            </defs>
+
+            {renderedEdges.map((edge, index) => (
+              <motion.path
+                key={`${edge.source_concept_id}-${edge.target_concept_id}`}
+                d={edge.d}
+                fill="none"
+                stroke="url(#graphEdge)"
+                strokeWidth="3"
+                strokeLinecap="round"
+                initial={{ pathLength: 0, opacity: 0 }}
+                animate={{ pathLength: 1, opacity: 1 }}
+                transition={{ duration: 0.65, delay: index * 0.06 }}
+              />
+            ))}
+
+            {nodes.map((node, index) => {
+              const tone = MASTERY_TONE[node.mastery_state] || MASTERY_TONE.unassessed;
+              const labelLines = wrapLabel(node.label);
+              const isSelected = selectedNode?.concept_id === node.concept_id;
+              return (
+                <motion.g
+                  key={node.concept_id}
+                  initial={{ opacity: 0, scale: 0.92, y: 12 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ duration: 0.34, delay: index * 0.05 }}
+                  onClick={() => setSelectedConceptId(node.concept_id)}
+                  className="cursor-pointer"
+                >
+                  <motion.circle
+                    cx={node.x}
+                    cy={node.y}
+                    r={node.role === 'current' ? 42 : 34}
+                    fill={tone.halo}
+                    animate={node.role === 'current' ? { scale: [1, 1.08, 1] } : { scale: 1 }}
+                    transition={node.role === 'current' ? { repeat: Infinity, duration: 2.4, ease: 'easeInOut' } : undefined}
+                    style={{ transformOrigin: `${node.x}px ${node.y}px` }}
+                  />
+                  <circle
+                    cx={node.x}
+                    cy={node.y}
+                    r={node.role === 'current' ? 34 : 28}
+                    fill={tone.fill}
+                    stroke={tone.node}
+                    strokeDasharray={!node.is_unlocked && node.role === 'downstream' ? '6 5' : undefined}
+                    strokeWidth={isSelected ? '3.5' : '2.4'}
+                  />
+                  <text x={node.x} y={node.y - 5} textAnchor="middle" fontSize="11" fontWeight="800" fill={tone.text}>
+                    {labelLines.map((line, lineIndex) => (
+                      <tspan key={`${node.concept_id}-${lineIndex}`} x={node.x} dy={lineIndex === 0 ? 0 : 13}>{line}</tspan>
+                    ))}
+                  </text>
+                  <text x={node.x} y={node.y + 34} textAnchor="middle" fontSize="10" fontWeight="700" fill="#475569">
+                    {Math.round((node.mastery_score || 0) * 100)}% mastery
+                  </text>
+                </motion.g>
+              );
+            })}
+          </svg>
+        </div>
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto_1fr]">

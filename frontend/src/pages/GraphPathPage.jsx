@@ -202,7 +202,7 @@ export default function GraphPathPage() {
   };
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.08),_transparent_38%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)] px-4 py-6 sm:px-6">
+    <div className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.08),_transparent_38%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)] px-4 py-5 sm:px-6">
       <main className="mx-auto max-w-[1440px]">
         <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
@@ -218,9 +218,9 @@ export default function GraphPathPage() {
               <GitBranch className="h-3.5 w-3.5" />
               Path view
             </div>
-            <h1 className="mt-4 text-2xl font-black tracking-tight text-slate-900 sm:text-[2.7rem]">Your graph-backed learning path</h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-              Track what is ready now, what is still blocked, and which lesson the graph recommends next.
+            <h1 className="mt-4 max-w-4xl text-[1.9rem] font-black tracking-tight text-slate-900 sm:text-[2.45rem]">Your graph-backed learning path</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+              See what is open now, what is still blocked, and where the graph wants you to go next.
             </p>
             {mapData?.map_error && (
               <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
@@ -228,13 +228,13 @@ export default function GraphPathPage() {
               </div>
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 xl:max-w-[26rem] xl:justify-end">
             {(availableSubjects.length ? availableSubjects : enrolledSubjects).map((subject) => (
               <button
                 key={subject}
                 type="button"
                 onClick={() => setActiveSubject(subject)}
-                className={`rounded-2xl px-4 py-2.5 text-sm font-black capitalize transition ${
+                className={`rounded-2xl px-4 py-2 text-sm font-black capitalize transition ${
                   subject === activeSubject
                     ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200'
                     : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
@@ -259,7 +259,7 @@ export default function GraphPathPage() {
           </div>
         ) : (
           <>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <StatCard
                 icon={Sparkles}
                 label="Ready nodes"
@@ -325,9 +325,9 @@ export default function GraphPathPage() {
               </div>
 
               <div className="space-y-6">
-                <div className="rounded-[2rem] border border-indigo-200 bg-white p-5 shadow-sm">
+                <div className="rounded-[1.75rem] border border-indigo-200 bg-white p-4 shadow-sm">
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-500">Recommendation story</p>
-                  <h2 className="mt-3 text-xl font-black text-slate-900">
+                  <h2 className="mt-3 text-lg font-black text-slate-900 sm:text-xl">
                     {recommendationStory?.headline || recommendedTopic?.recommended_topic_title || 'Stay on the current graph path'}
                   </h2>
                   <p className="mt-3 text-sm leading-6 text-slate-600">
@@ -351,7 +351,7 @@ export default function GraphPathPage() {
                   )}
                 </div>
 
-                <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center gap-2">
                     <Target className="h-4 w-4 text-emerald-600" />
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">Ready to move</p>
@@ -373,7 +373,7 @@ export default function GraphPathPage() {
                   </div>
                 </div>
 
-                <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center gap-2">
                     <Lock className="h-4 w-4 text-amber-600" />
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-600">Still blocked</p>

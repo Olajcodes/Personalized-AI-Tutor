@@ -24,7 +24,6 @@ import { resolveStudentId } from '../utils/sessionIdentity';
 
 const REFRESH_INTERVAL_MS = 15000;
 const OPEN_STORAGE_KEY = 'mastery_runtime_dock_open';
-const ENABLED_STORAGE_KEY = 'mastery_show_runtime_dock';
 
 const STATUS_STYLES = {
   ok: 'border-emerald-200 bg-emerald-50 text-emerald-700',
@@ -72,22 +71,11 @@ const writeOpenState = (value) => {
   window.localStorage.setItem(OPEN_STORAGE_KEY, value ? 'true' : 'false');
 };
 
-const readEnabledState = (search = '') => {
+const shouldAutoEnable = (search = '', pathname = '') => {
   if (typeof window === 'undefined') return false;
   const params = new URLSearchParams(search || window.location.search || '');
-  if (params.get('runtime') === '1') {
-    window.sessionStorage.setItem(ENABLED_STORAGE_KEY, 'true');
-    return true;
-  }
-  return window.sessionStorage.getItem(ENABLED_STORAGE_KEY) === 'true';
-};
-
-const writeEnabledState = (value) => {
-  if (typeof window === 'undefined') return;
-  window.sessionStorage.setItem(ENABLED_STORAGE_KEY, value ? 'true' : 'false');
-  if (!value) {
-    window.localStorage.removeItem(ENABLED_STORAGE_KEY);
-  }
+  if (params.get('runtime') === '1') return true;
+  return /^\/(teacher|presentation|presentation-hub|teacher-briefing|teacher-student-report|concept-analytics|demo-mode|graph-briefing)/.test(pathname || window.location.pathname || '');
 };
 
 const fetchHealth = async (url, options = {}) => {
@@ -169,7 +157,8 @@ export default function RuntimeDebugDock() {
   const { studentData, userData } = useUser();
   const location = useLocation();
   const studentId = resolveStudentId(studentData, userData);
-  const isEnabled = readEnabledState(location.search);
+  const [isManuallyEnabled, setIsManuallyEnabled] = useState(false);
+  const isEnabled = shouldAutoEnable(location.search, location.pathname) || isManuallyEnabled;
   const [isOpen, setIsOpen] = useState(() => readOpenState());
   const [isLoading, setIsLoading] = useState(false);
   const [backendState, setBackendState] = useState({ status: 'not_configured', detail: '', payload: null });
@@ -187,7 +176,7 @@ export default function RuntimeDebugDock() {
   }, []);
 
   const hideDock = useCallback(() => {
-    writeEnabledState(false);
+    setIsManuallyEnabled(false);
     writeOpenState(false);
     setIsOpen(false);
   }, []);
@@ -224,7 +213,7 @@ export default function RuntimeDebugDock() {
       if (event.shiftKey && event.key.toLowerCase() === 'd') {
         event.preventDefault();
         if (!isEnabled) {
-          writeEnabledState(true);
+          setIsManuallyEnabled(true);
           writeOpenState(true);
           setIsOpen(true);
           return;
