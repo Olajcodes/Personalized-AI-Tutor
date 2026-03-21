@@ -107,6 +107,12 @@ python -m alembic -c backend/alembic.ini upgrade head
 python -m alembic -c backend/alembic.ini current
 ```
 
+If migration fails locally:
+
+- confirm Docker Postgres is running on `127.0.0.1:55432`
+- confirm `DATABASE_URL` in `backend/.env` points to the same DB
+- run the command from repository root, not from `frontend/` or `backend/`
+
 ## Tests
 
 Integration tests require PostgreSQL. Use a dedicated test DB whenever possible.
@@ -152,6 +158,14 @@ Important:
 - Add `--seed-demo-learners` only if you explicitly want demo learner rows.
 - Demo learner seed now creates identities/profile scope only. It does not fabricate concept mastery; mastery should come from diagnostics, quizzes, and tutor evidence.
 - Add `--full-db-reset` to wipe all public application tables (except `alembic_version`) before reseeding.
+
+Verified smooth local order:
+
+1. `docker compose up -d postgres redis neo4j qdrant`
+2. `python -m alembic -c backend/alembic.ini upgrade head`
+3. `python -m backend.scripts.validate_curriculum_json --source-root docs/Curriculum_in_json`
+4. run the reset/reseed command above
+5. `python -m uvicorn backend.main:app --reload --port 8001`
 
 ## Run Backend
 

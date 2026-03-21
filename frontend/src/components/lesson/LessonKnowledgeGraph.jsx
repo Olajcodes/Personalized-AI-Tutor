@@ -155,12 +155,12 @@ export default function LessonKnowledgeGraph({
         <div className="flex items-center gap-2">
           <GitBranch className="text-indigo-600" size={18} />
           <div>
-            <h2 className="text-sm font-black uppercase tracking-[0.2em] text-slate-600">Knowledge Graph Rail</h2>
-            <p className="text-xs text-slate-500">Live prerequisite flow around this lesson</p>
+            <h2 className="text-sm font-black uppercase tracking-[0.2em] text-slate-600">Lesson map</h2>
+            <p className="text-xs text-slate-500">See what supports this lesson and what it opens next.</p>
           </div>
         </div>
         <div className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-700">
-          Neo4j-backed
+          Live graph
         </div>
       </div>
 
@@ -492,3 +492,4 @@ export default function LessonKnowledgeGraph({
     </div>
   );
 }
+

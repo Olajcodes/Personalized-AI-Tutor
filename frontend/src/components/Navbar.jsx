@@ -43,7 +43,7 @@ const Navbar = () => {
   };
 
   return (
-    <nav className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white shadow-sm">
+    <nav className="fixed inset-x-0 top-0 z-50 w-full border-b border-slate-200 bg-white shadow-sm">
       <div className="mx-auto flex max-w-[1440px] items-center gap-3 px-3 py-3 sm:gap-4 sm:px-5">
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
           <NavLink to="/dashboard" className="flex min-w-0 flex-shrink items-center gap-2 transition-opacity hover:opacity-80">

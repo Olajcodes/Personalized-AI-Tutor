@@ -103,6 +103,12 @@ That matches the verified local ai-core layout:
 - Qdrant: `http://127.0.0.1:6333`
 - Backend internal adapters: `http://127.0.0.1:8001/api/v1/internal/*`
 
+Before starting ai-core locally, make sure:
+
+- backend is already running on `8001`
+- `INTERNAL_SERVICE_KEY` matches backend exactly
+- `POSTGRES_DSN` points to the same local/dev database the backend is using
+
 ## Run
 
 From repository root:
@@ -110,6 +116,14 @@ From repository root:
 ```bash
 python -m uvicorn ai_core.main:app --reload --port 10001
 ```
+
+Verified smooth local order:
+
+1. start Docker infra
+2. apply backend migrations
+3. run backend on `8001`
+4. run ai-core on `10001`
+5. run frontend last
 
 Health check:
 

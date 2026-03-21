@@ -60,9 +60,9 @@ const PageLoader = () => (
 
 /* --- Layout Wrappers --- */
 const StudentLayout = () => (
-  <div className="min-h-screen overflow-x-hidden bg-slate-50 flex flex-col">
+  <div className="flex h-screen flex-col overflow-hidden bg-slate-50">
     <Navbar />
-    <div className="flex-1"><Outlet /></div>
+    <div className="min-h-0 flex-1 overflow-y-auto pt-[73px]"><Outlet /></div>
     <PresentationWalkthroughDock />
     <RuntimeDebugDock />
   </div>

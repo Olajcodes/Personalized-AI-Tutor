@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const statusLabels = {
@@ -19,16 +19,60 @@ const badgeStyles = {
   pending: 'bg-slate-100 text-slate-500 border-slate-200',
 };
 
-export default function CourseSidebar({ activeStep, subject = 'Subject', topics = [], level = 'Level' }) {
+const sequenceValue = (topic) => {
+  const candidates = [
+    topic?.sequence_index,
+    topic?.topic_order,
+    topic?.order_index,
+    topic?.order,
+    topic?.unit_number,
+    topic?.position,
+  ];
+  const numeric = candidates
+    .map((value) => Number(value))
+    .find((value) => Number.isFinite(value) && value >= 0);
+  return numeric ?? null;
+};
+
+export default function CourseSidebar({
+  activeStep,
+  subject = 'Subject',
+  topics = [],
+  level = 'Level',
+  onTopicNavigate = null,
+}) {
   const navigate = useNavigate();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-  const completedCount = topics.filter((topic) => topic.status === 'mastered').length;
-  const totalCount = topics.length > 0 ? topics.length : 1;
+  const orderedTopics = useMemo(() => (
+    topics
+      .map((topic, index) => ({ ...topic, __index: index }))
+      .sort((left, right) => {
+        const leftSequence = sequenceValue(left);
+        const rightSequence = sequenceValue(right);
+        if (leftSequence !== null && rightSequence !== null && leftSequence !== rightSequence) {
+          return leftSequence - rightSequence;
+        }
+        if (leftSequence !== null && rightSequence === null) return -1;
+        if (leftSequence === null && rightSequence !== null) return 1;
+
+        return left.__index - right.__index;
+      })
+  ), [topics]);
+
+  const completedCount = orderedTopics.filter((topic) => topic.status === 'mastered').length;
+  const totalCount = orderedTopics.length > 0 ? orderedTopics.length : 1;
   const progressPercent = Math.round((completedCount / totalCount) * 100);
 
+  const openTopic = (targetId, isLocked) => {
+    if (isLocked || !targetId) return;
+    navigate(`/lesson/${targetId}`);
+    onTopicNavigate?.();
+    setIsMobileOpen(false);
+  };
+
   return (
-    <aside className="flex w-full flex-col border-b border-slate-200 bg-white/95 backdrop-blur lg:h-[calc(100vh-64px)] lg:w-[16.5rem] lg:shrink-0 lg:border-b-0 lg:border-r xl:w-[17.5rem]">
+    <aside className="flex h-full w-full flex-col border-b border-slate-200 bg-white/95 backdrop-blur lg:w-[16.5rem] lg:shrink-0 lg:border-b-0 lg:border-r xl:w-[17.5rem]">
       <div className="p-4 pb-0 lg:hidden">
         <button
           onClick={() => navigate('/dashboard')}
@@ -43,7 +87,7 @@ export default function CourseSidebar({ activeStep, subject = 'Subject', topics 
               <p className="mb-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Current syllabus</p>
               <h2 className="text-base font-black capitalize text-slate-900">{level} {subject}</h2>
               <p className="mt-2 text-xs text-slate-500">
-                {completedCount}/{topics.length || 0} lessons completed
+                {completedCount}/{orderedTopics.length || 0} lessons completed
               </p>
             </div>
             <button
@@ -89,8 +133,8 @@ export default function CourseSidebar({ activeStep, subject = 'Subject', topics 
         <div>
           <p className="mb-3 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Lesson list</p>
           <div className="space-y-2">
-            {topics.length > 0 ? (
-              topics.map((topic, index) => {
+            {orderedTopics.length > 0 ? (
+              orderedTopics.map((topic, index) => {
                 const targetId = topic.topic_id || topic.id;
                 const currentStatus = topic.status || 'pending';
                 const isLocked = currentStatus === 'locked';
@@ -102,9 +146,7 @@ export default function CourseSidebar({ activeStep, subject = 'Subject', topics 
                   <button
                     key={targetId || index}
                     type="button"
-                    onClick={() => {
-                      if (!isLocked && targetId) navigate(`/lesson/${targetId}`);
-                    }}
+                    onClick={() => openTopic(targetId, isLocked)}
                     disabled={isLocked || !targetId}
                     className={`flex w-full items-start gap-3 rounded-2xl border p-3 text-left transition ${
                       isLocked ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
@@ -123,7 +165,7 @@ export default function CourseSidebar({ activeStep, subject = 'Subject', topics 
                             ? 'bg-slate-200 text-slate-500'
                             : 'bg-slate-100 text-slate-500'
                     }`}>
-                      {isMastered ? 'OK' : isLocked ? 'L' : index + 1}
+                      {String(index + 1).padStart(2, '0')}
                     </div>
 
                     <div className="min-w-0 flex-1">
@@ -154,8 +196,8 @@ export default function CourseSidebar({ activeStep, subject = 'Subject', topics 
       <div className={`border-t border-slate-100 px-4 pb-4 pt-3 lg:hidden ${isMobileOpen ? 'block' : 'hidden'}`}>
         <p className="mb-3 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Lesson list</p>
         <div className="space-y-2">
-          {topics.length > 0 ? (
-            topics.map((topic, index) => {
+            {orderedTopics.length > 0 ? (
+            orderedTopics.map((topic, index) => {
               const targetId = topic.topic_id || topic.id;
               const currentStatus = topic.status || 'pending';
               const isLocked = currentStatus === 'locked';
@@ -167,9 +209,7 @@ export default function CourseSidebar({ activeStep, subject = 'Subject', topics 
                 <button
                   key={targetId || index}
                   type="button"
-                  onClick={() => {
-                    if (!isLocked && targetId) navigate(`/lesson/${targetId}`);
-                  }}
+                  onClick={() => openTopic(targetId, isLocked)}
                   disabled={isLocked || !targetId}
                   className={`flex w-full items-start gap-3 rounded-2xl border p-3 text-left transition ${
                     isLocked ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
@@ -188,7 +228,7 @@ export default function CourseSidebar({ activeStep, subject = 'Subject', topics 
                           ? 'bg-slate-200 text-slate-500'
                           : 'bg-slate-100 text-slate-500'
                   }`}>
-                    {isMastered ? 'OK' : isLocked ? 'L' : index + 1}
+                    {String(index + 1).padStart(2, '0')}
                   </div>
 
                   <div className="min-w-0 flex-1">

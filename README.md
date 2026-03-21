@@ -45,9 +45,24 @@ Personalized-AI-Tutor/
 - Node.js 18+
 - Docker Desktop
 
-## Fresh Start (Local Installation)
+## Fresh Start (Verified Local Setup)
 
-Run from repository root unless stated otherwise.
+Run every command from repository root unless stated otherwise.
+Recommended local mode:
+
+- Docker for infrastructure only: PostgreSQL, Redis, Neo4j, Qdrant
+- Backend, AI Core, and Frontend run on the host machine
+
+Verified local ports:
+
+- Frontend: `5173` or `5174`
+- Backend: `8001`
+- AI Core: `10001`
+- Postgres: `55432`
+- Redis: `6379`
+- Neo4j HTTP: `7474`
+- Neo4j Bolt: `7687`
+- Qdrant: `6333`
 
 ### 1) Clone
 
@@ -127,6 +142,14 @@ Set required secrets/URLs, especially:
   - `VITE_AI_CORE_URL=http://127.0.0.1:10001`
   - any auth-related frontend variables already used by your UI
 
+Important:
+
+- `backend/.env` and `ai_core/.env` must use the same `INTERNAL_SERVICE_KEY`
+- for the verified Docker-backed local DB, use:
+  - `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/mastery_ai`
+  - `POSTGRES_DSN=postgresql://postgres:postgres@127.0.0.1:55432/mastery_ai`
+- if Vite starts on `5174`, make sure `CORS_ORIGINS` includes both `5173` and `5174`
+
 ### 5) Start local infrastructure with Docker
 
 Recommended local flow:
@@ -138,6 +161,12 @@ Start infra:
 
 ```powershell
 docker compose up -d postgres redis neo4j qdrant
+```
+
+Confirm containers are healthy:
+
+```powershell
+docker compose ps
 ```
 
 Services exposed locally:
@@ -160,29 +189,40 @@ docker compose --profile fullstack up --build
 python -m alembic -c backend/alembic.ini upgrade head
 ```
 
-### 7) One-time reset + ingest + auto-approve curriculum
+Optional but recommended:
 
-This is the recommended clean baseline command.
-It reseeds baseline curriculum entities, ingests all detected scopes from `docs/Curriculum_in_json` when available (otherwise `docs/SSS_NOTES_2026`),
-auto-approves versions, and (optionally) reseeds Neo4j.
+```bash
+python -m alembic -c backend/alembic.ini current
+```
+
+### 7) Validate and seed curriculum
+
+Validate the canonical JSON tree first:
+
+```powershell
+python -m backend.scripts.validate_curriculum_json --source-root docs/Curriculum_in_json
+```
+
+Then run the full local reset/reseed:
+
+This is the recommended clean baseline command. It reseeds baseline curriculum entities, ingests all detected scopes from `docs/Curriculum_in_json`, auto-approves versions, and reseeds Neo4j.
 
 ```powershell
 python -m backend.scripts.reset_and_reseed_curriculum `
+  --source-root "docs/Curriculum_in_json" `
   --seed-reset `
   --no-seed-demo-learners `
   --no-disable-neo4j-sync `
   --seed-neo4j `
   --qdrant-batch-size 24 `
-  --qdrant-timeout-seconds 240`
+  --qdrant-timeout-seconds 240 `
   --full-db-reset
-  
 ```
 
 Notes:
 
 - LLM extraction/inference is enabled by default in this flow.
-- The reset script now prefers canonical JSON curriculum under `docs/Curriculum_in_json` automatically when present.
-- Use `--source-root <path>` to force a different corpus.
+- The verified corpus for local setup is `docs/Curriculum_in_json`.
 - If LLM is unavailable or output is invalid, ingestion falls back safely and logs fallback mode.
 - Use `--disable-llm` only for deterministic fallback-only runs.
 - Add `--full-db-reset` if you want to truncate all public application tables before reseeding.
@@ -190,19 +230,21 @@ Notes:
 
 ### 8) Run services
 
-Backend:
+Use three terminals after the seed finishes.
+
+Terminal 1: Backend
 
 ```bash
 python -m uvicorn backend.main:app --reload --port 8001
 ```
 
-AI Core:
+Terminal 2: AI Core
 
 ```bash
 python -m uvicorn ai_core.main:app --reload --port 10001
 ```
 
-Frontend:
+Terminal 3: Frontend
 
 ```bash
 cd frontend
@@ -215,6 +257,8 @@ Recommended local URLs:
 - Backend: `http://127.0.0.1:8001`
 - AI Core: `http://127.0.0.1:10001`
 
+If Vite starts on `5174`, use `http://localhost:5174`.
+
 ## Health Checks
 
 - Backend Swagger: `http://127.0.0.1:8001/docs`
@@ -222,7 +266,45 @@ Recommended local URLs:
 - AI Core health: `http://127.0.0.1:10001/health`
 - Neo4j browser: `http://127.0.0.1:7474`
 
+Neo4j local browser credentials, if you keep the default local Docker auth:
+
+- username: `neo4j`
+- password: `olayiwola`
+
 If Vite moves to `5174`, add that origin to `backend/.env` `CORS_ORIGINS` and restart the backend.
+
+## First Run Checklist
+
+After the app is up:
+
+1. Open the frontend
+2. Register or log in
+3. Complete onboarding
+4. Finish the diagnostic for all selected subjects
+5. Open dashboard
+6. Open a course
+7. Open a lesson
+8. Open AI Tutor
+9. Run a quiz
+
+If the lesson pages load but graph data or tutoring feels empty, the most common cause is that the curriculum reset/reseed step was skipped or failed partway through.
+
+## Common Local Issues
+
+- `The server is taking too long`
+  - backend is not running, or is blocked during startup
+  - check backend terminal and `http://127.0.0.1:8001/api/v1/system/health`
+- `Origin is not allowed` for Google auth
+  - your Google client does not allow the local frontend origin
+  - either add `http://localhost:5173` / `5174` to Google OAuth origins or disable Google locally
+- `No topics available`
+  - confirm the reseed completed successfully
+  - confirm migrations are applied
+  - confirm curriculum JSON validation passed
+- Neo4j graph looks empty
+  - confirm Docker Neo4j is running
+  - confirm `USE_NEO4J_GRAPH=true`
+  - confirm the reset/reseed command included `--seed-neo4j`
 
 Health payloads now expose runtime visibility, not only dependency checks:
 
