@@ -43,10 +43,7 @@ Personalized-AI-Tutor/
 
 - Python 3.10+
 - Node.js 18+
-- PostgreSQL
-- Qdrant
-- Neo4j
-- Redis (optional)
+- Docker Desktop
 
 ## Fresh Start (Local Installation)
 
@@ -101,15 +98,15 @@ Create env files from examples:
 ```powershell
 copy backend\.env.example backend\.env
 copy ai_core\.env.example ai_core\.env
+copy frontend\.env.example frontend\.env
 ```
 
 - bash/zsh:
 ```bash
 cp backend/.env.example backend/.env
 cp ai_core/.env.example ai_core/.env
+cp frontend/.env.example frontend/.env
 ```
-
-For frontend, create `frontend/.env` manually with your API base URL and auth keys required by the UI.
 
 Set required secrets/URLs, especially:
 
@@ -130,13 +127,40 @@ Set required secrets/URLs, especially:
   - `VITE_AI_CORE_URL=http://127.0.0.1:10001`
   - any auth-related frontend variables already used by your UI
 
-### 5) Apply database migrations
+### 5) Start local infrastructure with Docker
+
+Recommended local flow:
+
+- run infrastructure in Docker
+- run backend, ai-core, and frontend on the host machine
+
+Start infra:
+
+```powershell
+docker compose up -d postgres redis neo4j qdrant
+```
+
+Services exposed locally:
+
+- Postgres: `127.0.0.1:55432`
+- Redis: `127.0.0.1:6379`
+- Neo4j HTTP: `127.0.0.1:7474`
+- Neo4j Bolt: `127.0.0.1:7687`
+- Qdrant: `127.0.0.1:6333`
+
+Optional: run the full stack in Docker instead of host-run backend/ai-core:
+
+```powershell
+docker compose --profile fullstack up --build
+```
+
+### 6) Apply database migrations
 
 ```bash
 python -m alembic -c backend/alembic.ini upgrade head
 ```
 
-### 6) One-time reset + ingest + auto-approve curriculum
+### 7) One-time reset + ingest + auto-approve curriculum
 
 This is the recommended clean baseline command.
 It reseeds baseline curriculum entities, ingests all detected scopes from `docs/Curriculum_in_json` when available (otherwise `docs/SSS_NOTES_2026`),
@@ -164,7 +188,7 @@ Notes:
 - Add `--full-db-reset` if you want to truncate all public application tables before reseeding.
 - If you include demo learners, the seed flow now creates identity/profile scope only. It does not fabricate concept mastery.
 
-### 7) Run services
+### 8) Run services
 
 Backend:
 
@@ -185,11 +209,20 @@ cd frontend
 npm run dev
 ```
 
+Recommended local URLs:
+
+- Frontend: `http://localhost:5173`
+- Backend: `http://127.0.0.1:8001`
+- AI Core: `http://127.0.0.1:10001`
+
 ## Health Checks
 
 - Backend Swagger: `http://127.0.0.1:8001/docs`
 - Backend health: `http://127.0.0.1:8001/api/v1/system/health`
 - AI Core health: `http://127.0.0.1:10001/health`
+- Neo4j browser: `http://127.0.0.1:7474`
+
+If Vite moves to `5174`, add that origin to `backend/.env` `CORS_ORIGINS` and restart the backend.
 
 Health payloads now expose runtime visibility, not only dependency checks:
 

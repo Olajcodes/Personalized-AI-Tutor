@@ -38,26 +38,28 @@ Create `ai_core/.env` from `ai_core/.env.example`.
 Minimum local configuration:
 
 ```env
-PORT=10000
-CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+PORT=10001
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174
 
 LLM_PROVIDER=groq
 LLM_MODEL=openai/gpt-oss-20b
 GROQ_API_KEY=<your-groq-key>
 
-POSTGRES_DSN=postgresql://postgres:password@localhost:5432/mastery_ai
-QDRANT_URL=<your-qdrant-url>
-QDRANT_API_KEY=<your-qdrant-api-key>
+POSTGRES_DSN=postgresql://postgres:postgres@127.0.0.1:55432/mastery_ai
+QDRANT_URL=http://127.0.0.1:6333
+QDRANT_API_KEY=
 QDRANT_COLLECTION=MasteryAI
 
-NEO4J_URI=bolt://localhost:7687
+NEO4J_URI=bolt://127.0.0.1:7687
 NEO4J_USER=neo4j
-NEO4J_PASSWORD=<your-neo4j-password>
+NEO4J_PASSWORD=olayiwola
+
+REDIS_URL=redis://127.0.0.1:6379/0
 
 INTERNAL_SERVICE_KEY=replace_with_shared_secret
-BACKEND_INTERNAL_POSTGRES_URL=http://127.0.0.1:8000/api/v1/internal/postgres
-BACKEND_INTERNAL_GRAPH_CONTEXT_URL=http://127.0.0.1:8000/api/v1/internal/graph/context
-BACKEND_INTERNAL_RAG_URL=http://127.0.0.1:8000/api/v1/internal/rag/retrieve
+BACKEND_INTERNAL_POSTGRES_URL=http://127.0.0.1:8001/api/v1/internal/postgres
+BACKEND_INTERNAL_GRAPH_CONTEXT_URL=http://127.0.0.1:8001/api/v1/internal/graph/context
+BACKEND_INTERNAL_RAG_URL=http://127.0.0.1:8001/api/v1/internal/rag/retrieve
 ```
 
 Notes:
@@ -85,17 +87,33 @@ python -m pip install --upgrade pip
 python -m pip install -r ai_core/requirements.txt
 ```
 
+## Local Docker Infra
+
+From repository root:
+
+```powershell
+docker compose up -d postgres redis neo4j qdrant
+```
+
+That matches the verified local ai-core layout:
+
+- Postgres: `127.0.0.1:55432`
+- Redis: `127.0.0.1:6379`
+- Neo4j: `127.0.0.1:7687`
+- Qdrant: `http://127.0.0.1:6333`
+- Backend internal adapters: `http://127.0.0.1:8001/api/v1/internal/*`
+
 ## Run
 
 From repository root:
 
 ```bash
-python -m uvicorn ai_core.main:app --reload --port 10000
+python -m uvicorn ai_core.main:app --reload --port 10001
 ```
 
 Health check:
 
-- `http://127.0.0.1:10000/health`
+- `http://127.0.0.1:10001/health`
 
 The ai-core health payload now includes:
 
@@ -114,16 +132,16 @@ The ai-core health payload now includes:
 Backend should point to ai-core with:
 
 ```env
-AI_CORE_BASE_URL=http://127.0.0.1:10000
+AI_CORE_BASE_URL=http://127.0.0.1:10001
 ```
 
 AI-core must point back to backend internal adapters with the shared internal service key:
 
 ```env
 INTERNAL_SERVICE_KEY=replace_with_shared_secret
-BACKEND_INTERNAL_POSTGRES_URL=http://127.0.0.1:8000/api/v1/internal/postgres
-BACKEND_INTERNAL_GRAPH_CONTEXT_URL=http://127.0.0.1:8000/api/v1/internal/graph/context
-BACKEND_INTERNAL_RAG_URL=http://127.0.0.1:8000/api/v1/internal/rag/retrieve
+BACKEND_INTERNAL_POSTGRES_URL=http://127.0.0.1:8001/api/v1/internal/postgres
+BACKEND_INTERNAL_GRAPH_CONTEXT_URL=http://127.0.0.1:8001/api/v1/internal/graph/context
+BACKEND_INTERNAL_RAG_URL=http://127.0.0.1:8001/api/v1/internal/rag/retrieve
 ```
 
 ## Production Guidance

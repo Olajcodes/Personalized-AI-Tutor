@@ -29,14 +29,16 @@ INTERNAL_SERVICE_KEY=replace_with_shared_secret
 Recommended graph/vector/LLM ingestion settings:
 
 ```env
-QDRANT_URL=<your-qdrant-url>
-QDRANT_API_KEY=<your-qdrant-api-key>
+REDIS_URL=redis://127.0.0.1:6379/0
+
+QDRANT_URL=http://127.0.0.1:6333
+QDRANT_API_KEY=
 QDRANT_COLLECTION=MasteryAI
 QDRANT_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 
-NEO4J_URI=bolt://localhost:7687
+NEO4J_URI=bolt://127.0.0.1:7687
 NEO4J_USER=neo4j
-NEO4J_PASSWORD=<your-neo4j-password>
+NEO4J_PASSWORD=olayiwola
 USE_NEO4J_GRAPH=true
 
 LLM_PROVIDER=groq
@@ -82,6 +84,21 @@ Install dependencies:
 python -m pip install --upgrade pip
 python -m pip install -r backend/requirements.txt
 ```
+
+## Local Docker Infra
+
+From repository root:
+
+```powershell
+docker compose up -d postgres redis neo4j qdrant
+```
+
+That matches the verified backend development layout:
+
+- Postgres: `127.0.0.1:55432`
+- Redis: `127.0.0.1:6379`
+- Neo4j: `127.0.0.1:7687`
+- Qdrant: `http://127.0.0.1:6333`
 
 ## Database Migration
 
@@ -142,6 +159,12 @@ From repository root:
 
 ```bash
 python -m uvicorn backend.main:app --reload --port 8001
+```
+
+If you want the backend containerized too, use:
+
+```powershell
+docker compose --profile fullstack up --build backend
 ```
 
 Swagger:
