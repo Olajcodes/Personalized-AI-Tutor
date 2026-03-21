@@ -858,6 +858,115 @@ def _message_anchor_label(
     return None
 
 
+def _lesson_block_texts(lesson_context: dict | None, *, max_blocks: int = 5) -> list[str]:
+    if not lesson_context:
+        return []
+
+    rendered: list[str] = []
+    for block in list(lesson_context.get("content_blocks") or [])[:max_blocks]:
+        if not isinstance(block, dict):
+            continue
+        value = block.get("value")
+        if isinstance(value, str):
+            text = " ".join(value.split()).strip()
+        elif isinstance(value, dict):
+            parts = [
+                " ".join(str(value.get(key) or "").split()).strip()
+                for key in ("prompt", "note", "solution", "question", "expected_answer")
+            ]
+            text = " ".join(part for part in parts if part).strip()
+        else:
+            text = ""
+        if text:
+            rendered.append(text)
+    return rendered
+
+
+def _lesson_recap_key_points(lesson_context: dict | None, *, limit: int = 3) -> list[str]:
+    candidates: list[str] = []
+    summary = str((lesson_context or {}).get("summary") or "").strip()
+    if summary:
+        candidates.extend(re.split(r"[;\n]+", summary))
+
+    for block_text in _lesson_block_texts(lesson_context):
+        candidates.extend(re.split(r"(?<=[.!?])\s+", block_text))
+
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for item in candidates:
+        text = " ".join(str(item or "").split()).strip(" -•\t\r\n")
+        text = re.sub(r"^[0-9]+[.)]\s*", "", text)
+        if not text:
+            continue
+        if text.isupper() and len(text.split()) <= 8:
+            continue
+        if len(text) < 12:
+            continue
+        if len(text) > 180:
+            text = text[:177].rstrip(" ,;:") + "..."
+        key = text.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(text)
+        if len(cleaned) >= limit:
+            break
+    return cleaned
+
+
+def _recap_memory_hook(anchor_label: str | None) -> str:
+    if anchor_label:
+        return f"Memory hook: think {anchor_label} as core idea -> key feature -> one real example."
+    return "Memory hook: keep the core idea, key feature, and one real example together."
+
+
+def _lesson_visible_title(lesson_context: dict | None) -> str | None:
+    lesson_title = " ".join(str((lesson_context or {}).get("title") or "").split()).strip()
+    if not lesson_title:
+        return None
+    if lesson_title.lower().startswith("lesson:"):
+        lesson_title = lesson_title.split(":", 1)[1].strip()
+    return lesson_title or None
+
+
+def _fast_recap_response(
+    *,
+    request: TutorChatRequest,
+    lesson_context: dict | None,
+    graph_context: dict | None,
+    actions: list[str],
+) -> TutorChatResponse:
+    anchor_label = _lesson_visible_title(lesson_context) or _message_anchor_label(request, lesson_context, graph_context) or "This lesson"
+    key_points = _lesson_recap_key_points(lesson_context, limit=3)
+    weak_labels = _weak_concept_labels(graph_context, lesson_context, limit=2)
+    concept_focus = list(dict.fromkeys([anchor_label] + weak_labels))[:4]
+    prerequisite_warning = None
+    if weak_labels:
+        prerequisite_warning = f"Watch {weak_labels[0]} closely because it still needs reinforcement."
+
+    recap_parts = [f"{anchor_label} is the main focus of this lesson."]
+    if key_points:
+        recap_parts.append("Quick recap: " + "; ".join(point.rstrip(".") for point in key_points) + ".")
+    recap_parts.append(_recap_memory_hook(anchor_label))
+    assistant_message = " ".join(part for part in recap_parts if part).strip()
+
+    return TutorChatResponse(
+        assistant_message=assistant_message,
+        citations=[],
+        actions=actions + ["MODE:RECAP", "FAST_RECAP_PATH", "SKIPPED_HISTORY_RECAP", "SKIPPED_RAG_RECAP", "SKIPPED_LLM_RECAP"],
+        recommendations=_recommendations_from_graph(request=request, graph_context=graph_context),
+        mode="recap",
+        key_points=key_points,
+        concept_focus=concept_focus,
+        prerequisite_warning=prerequisite_warning,
+        next_action="Run the 1-minute checkpoint or take the lesson quiz next.",
+        recommended_assessment="Ask one checkpoint question on this lesson.",
+        recommended_topic_title=(
+            str(dict((graph_context or {}).get("next_unlock") or {}).get("topic_title") or "").strip() or None
+        ),
+    )
+
+
 def _tighten_tutor_message(
     message: str,
     *,
@@ -1351,6 +1460,42 @@ def run_tutor_recap(request: TutorRecapRequest) -> TutorChatResponse:
         topic_id=request.topic_id,
         message="Recap this lesson in three sharp points and one memory hook.",
     )
+    actions: list[str] = ["ENFORCED_SCOPE_POLICY", "NO_MASTERY_WRITE_NO_EVIDENCE", "FAST_RECAP_ONLY"]
+    lesson_context: dict | None = None
+    graph_context: dict | None = None
+
+    try:
+        lesson_context = _internal_lesson_context(chat_request)
+    except Exception as exc:
+        logger.warning("tutor.recap lesson-context fetch failed: %s", exc)
+        actions.append("LESSON_CONTEXT_FAILED")
+    else:
+        if _lesson_context_available(lesson_context):
+            actions.append("USED_LESSON_CONTEXT")
+            source = _lesson_context_source(lesson_context)
+            if source == "structured":
+                actions.append("USED_STRUCTURED_LESSON_CONTEXT")
+            elif source == "personalized":
+                actions.append("USED_PERSONALIZED_LESSON_CONTEXT")
+        else:
+            actions.append("LESSON_CONTEXT_EMPTY")
+
+    try:
+        graph_context = _internal_graph_context(chat_request)
+    except Exception as exc:
+        logger.warning("tutor.recap graph-context fetch failed: %s", exc)
+        actions.append("GRAPH_CONTEXT_FAILED")
+    else:
+        actions.append("USED_GRAPH_CONTEXT")
+
+    if _lesson_context_available(lesson_context):
+        return _fast_recap_response(
+            request=chat_request,
+            lesson_context=lesson_context,
+            graph_context=graph_context,
+            actions=actions,
+        )
+
     return _run_structured_tutor_mode(
         request=chat_request,
         mode="recap",

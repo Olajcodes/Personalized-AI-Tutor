@@ -218,7 +218,18 @@ class PrewarmJobService:
                 remaining -= 1
             except Exception as exc:  # pragma: no cover - worker safety
                 if "repo" in locals() and "job" in locals() and job is not None:
-                    repo.mark_failed(job, error_message=str(exc))
+                    try:
+                        db.rollback()
+                    except Exception:  # pragma: no cover - best-effort cleanup
+                        logger.warning("prewarm.job.rollback_failed", exc_info=True)
+                    try:
+                        repo.mark_failed(job, error_message=str(exc))
+                    except Exception:  # pragma: no cover - best-effort cleanup
+                        try:
+                            db.rollback()
+                        except Exception:
+                            logger.warning("prewarm.job.secondary_rollback_failed", exc_info=True)
+                        logger.warning("prewarm.job.mark_failed_failed", exc_info=True)
                 logger.warning("prewarm.job.process_failed detail=%s", exc)
                 remaining -= 1
             finally:

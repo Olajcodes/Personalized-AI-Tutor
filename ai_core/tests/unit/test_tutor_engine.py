@@ -6,6 +6,7 @@ from ai_core.core_engine.api_contracts.schemas import (
     TutorChatRequest,
     TutorExplainMistakeRequest,
     TutorHintRequest,
+    TutorRecapRequest,
 )
 from ai_core.core_engine.orchestration.tutor_engine import (
     _internal_rag_retrieve,
@@ -14,6 +15,7 @@ from ai_core.core_engine.orchestration.tutor_engine import (
     run_tutor_chat,
     run_tutor_explain_mistake,
     run_tutor_hint,
+    run_tutor_recap,
 )
 
 
@@ -124,6 +126,51 @@ def test_run_tutor_chat_aborts_when_no_lesson_or_rag_context(monkeypatch):
     assert "no lesson-aware context found" in out.assistant_message.lower()
     assert "NO_CONTEXT_ABORTED" in out.actions
     assert "NO_MASTERY_WRITE_NO_EVIDENCE" in out.actions
+
+
+def test_run_tutor_recap_uses_fast_lesson_grounded_path(monkeypatch):
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._internal_lesson_context",
+        lambda request: {
+            "student_id": request.student_id,
+            "topic_id": request.topic_id,
+            "title": "Lesson: Capitalist Democracy",
+            "summary": "Define democracy; Mention six characteristics of democracy.",
+            "context_source": "structured",
+            "content_blocks": [
+                {"type": "text", "value": "Capitalist democracy combines private ownership with representative government."},
+                {"type": "text", "value": "The constitution is supreme and elections allow citizens to choose leaders periodically."},
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._internal_graph_context",
+        lambda request: {
+            "mastery": [{"concept_id": "civic:sss2:t1:capitalist-democracy", "score": 0.15}],
+            "next_unlock": {"topic_title": "Political party", "reason": "This lesson unlocks later civic structures."},
+        },
+    )
+    monkeypatch.setattr(
+        "ai_core.core_engine.orchestration.tutor_engine._llm_generate",
+        lambda prompt: (_ for _ in ()).throw(AssertionError("recap should not call llm")),
+    )
+
+    out = run_tutor_recap(
+        TutorRecapRequest(
+            student_id="user-1",
+            session_id="session-1",
+            subject="civic",
+            sss_level="SSS2",
+            term=1,
+            topic_id="topic-1",
+        )
+    )
+
+    assert "Capitalist Democracy" in out.assistant_message
+    assert out.mode == "recap"
+    assert "FAST_RECAP_PATH" in out.actions
+    assert "SKIPPED_LLM_RECAP" in out.actions
+    assert out.key_points
 
 
 def test_run_tutor_hint_contract(monkeypatch):

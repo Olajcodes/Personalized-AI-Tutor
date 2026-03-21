@@ -25,14 +25,10 @@ def test_dashboard_bootstrap_uses_cache_and_invalidation(monkeypatch):
         "latest_intervention_bootstrap",
         lambda **kwargs: None,
     )
-    prewarm_calls = []
-    monkeypatch.setattr(
-        "backend.services.dashboard_experience_service.CourseExperienceService.prewarm_scope",
-        lambda **kwargs: prewarm_calls.append(kwargs["subject"]) or True,
-    )
+    queued_subjects = []
     monkeypatch.setattr(
         "backend.services.dashboard_experience_service.PrewarmJobService.enqueue_course_scope",
-        lambda self, **kwargs: None,
+        lambda self, **kwargs: queued_subjects.append(kwargs["subject"]) or uuid4(),
     )
 
     def _bootstrap(**kwargs):
@@ -64,7 +60,7 @@ def test_dashboard_bootstrap_uses_cache_and_invalidation(monkeypatch):
     assert first.active_subject == "english"
     assert first.warmed_subjects == ["math"]
     assert second.active_subject == "english"
-    assert prewarm_calls == ["math"]
+    assert queued_subjects == ["math"]
 
     DashboardExperienceService.invalidate_student_cache(student_id=student_id)
     third = service.bootstrap(student_id=student_id, subject="english")
@@ -72,6 +68,7 @@ def test_dashboard_bootstrap_uses_cache_and_invalidation(monkeypatch):
     assert calls["course"] == 2
     assert third.active_subject == "english"
     assert third.warmed_subjects == ["math"]
+    assert queued_subjects == ["math", "math"]
 
 
 def test_dashboard_path_briefing_export_uses_live_course_bootstrap(monkeypatch):

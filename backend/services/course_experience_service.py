@@ -738,32 +738,20 @@ class CourseExperienceService:
         failed_topic_ids: list[str] = []
         prewarm_topic_ids = self._candidate_prewarm_topic_ids(topics=topics, next_step=next_step)
         if prewarm_topic_ids:
-            prewarm = LessonExperienceService.prewarm_related_topics(
+            queued_job_id = PrewarmJobService(self.db).enqueue_lesson_related(
                 student_id=student_id,
                 subject=subject,
                 sss_level=str(student_profile.sss_level),
                 term=term,
                 topic_ids=prewarm_topic_ids,
             )
-            PrewarmJobService(self.db).enqueue_lesson_related(
-                student_id=student_id,
-                subject=subject,
-                sss_level=str(student_profile.sss_level),
-                term=term,
-                topic_ids=prewarm_topic_ids,
-            )
-            warmed_topic_ids = list(prewarm.get("warmed_topic_ids", []))
-            cache_hit_topic_ids = list(prewarm.get("cache_hit_topic_ids", []))
-            failed_topic_ids = list(prewarm.get("failed_topic_ids", []))
             logger.info(
-                "course.bootstrap.prewarm student_id=%s subject=%s term=%s candidate_topic_ids=%s warmed=%s cache_hits=%s failed=%s",
+                "course.bootstrap.prewarm_queued student_id=%s subject=%s term=%s candidate_topic_ids=%s queued_job_id=%s",
                 student_id,
                 subject,
                 term,
                 [str(topic_id) for topic_id in prewarm_topic_ids],
-                warmed_topic_ids,
-                cache_hit_topic_ids,
-                failed_topic_ids,
+                str(queued_job_id) if queued_job_id else "deduped_or_disabled",
             )
 
         recent_evidence = self._latest_scope_evidence(

@@ -223,22 +223,16 @@ class DashboardExperienceService:
 
         warmed_subjects: list[Literal["math", "english", "civic"]] = []
         failed_subjects: list[Literal["math", "english", "civic"]] = []
+        prewarm_service = PrewarmJobService(self.db)
         for candidate_subject in available_subjects:
             if candidate_subject == active_subject:
                 continue
-            if CourseExperienceService.prewarm_scope(
+            if prewarm_service.enqueue_course_scope(
                 student_id=student_id,
                 subject=candidate_subject,
                 term=int(profile.active_term),
             ):
                 warmed_subjects.append(candidate_subject)
-            else:
-                failed_subjects.append(candidate_subject)
-            PrewarmJobService(self.db).enqueue_course_scope(
-                student_id=student_id,
-                subject=candidate_subject,
-                term=int(profile.active_term),
-            )
 
         payload = DashboardBootstrapOut(
             student_id=student_id,
